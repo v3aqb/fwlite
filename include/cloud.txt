@@ -1,0 +1,16 @@
+@@||renren.com
+@@||xnimg.cn
+@@||sinaimg.cn
+@@||weibo.com
+||web.tweetdeck.com
+||huluim.com
+||hulu.com
+||ytimg.com
+||google.com
+||google.com.hk
+||google-analytics.com
+||googleapis.com
+||googlecode.com
+||googleusercontent.com
+||gstatic.com
+|https://*.dropbox.com
