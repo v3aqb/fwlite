@@ -51,7 +51,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         self.requestpath = '/'.join(urisplit[3:])
 
         if ':' in urisplit[2]:
-            self.requestport = urisplit[2].split(':')[1]
+            self.requestport = int(urisplit[2].split(':')[1])
         elif uri.startswith('http://'):
             self.requestport = 80
         elif uri.startswith('https://'):
@@ -158,51 +158,62 @@ class ProxyHandler(tornado.web.RequestHandler):
                     upstream.write(b"\x01" +
                                    chr(len(self.ppusername)) + self.ppusername +
                                    chr(len(self.pppassword)) + self.pppassword)
-                    upstream.read_bytes(1024, socks5_auth_finish)
+                    upstream.read_bytes(2, socks5_auth_finish)
                 else:  # bad day, no auth supported
-                    upstream.close()
-                    client.close()
+                    fail()
 
             def socks5_auth_finish(data=None):
                 if data.startswith(b'\x01\x00'):  # auth pass
                     conn_upstream()
                 else:
-                    upstream.close()
-                    client.close()
+                    fail()
 
             def conn_upstream(data=None):
-                try:
-                    ip = socket.inet_pton(socket.AF_INET, self.request.host)  # guess ipv4
-                except socket.error:
-                    try:  # guess ipv6
-                        ip = socket.inet_pton(socket.AF_INET6, self.request.host)
-                    except socket.error:  # got to be domain name
-                        req = b"\x05\x01\x00\x03" + chr(len(self.request.host)) + self.request.host
-                    else:
-                        req = b"\x05\x01\x00\x04" + ip
-                else:
-                    req = b"\x05\x01\x00\x01" + ip
-
+                # try:
+                #     ip = socket.aton(self.request.host)  # guess ipv4
+                # except socket.error:
+                #     try:  # guess ipv6
+                #         ip = socket.inet_pton(socket.AF_INET6, self.request.host)
+                #     except Exception:  # got to be domain name
+                #         req = b"\x05\x01\x00\x03" + chr(len(self.request.host)) + self.request.host
+                #     else:
+                #         req = b"\x05\x01\x00\x04" + ip
+                # else:
+                #     req = b"\x05\x01\x00\x01" + ip
+                req = b"\x05\x01\x00\x03" + chr(len(self.request.host)) + self.request.host
                 req += struct.pack(">H", self.requestport)
                 upstream.write(req)
-                upstream.read_bytes(1024, upstream_verify)
+                upstream.read_bytes(4, upstream_verify)
 
             def upstream_verify(data=None):
                 if data.startswith(b'\x05\x00'):
-                    if self.request.method == 'CONNECT':
-                        start_ssltunnel()
-                    else:
-                        http_conntgt()
+                    if data[3] == '\x01':
+                        upstream.read_bytes(6, conn)
+                    elif data[3] == '\x03':
+                        upstream.read_bytes(3, readaddr)
                 else:
-                    upstream.close()
-                    client.close()
+                    fail()
+
+            def readaddr(data=None):
+                upstream.read_bytes(data[0], conn)
+
+            def conn(data=None):
+                if self.request.method == 'CONNECT':
+                    start_ssltunnel()
+                else:
+                    http_conntgt_d()
+
+            def fail():
+                client.write(b'HTTP/1.1 501 socks5 proxy Connection Failed.\r\n\r\n')
+                upstream.close()
+                client.close()
 
             if self.ppusername:
                 authmethod = b"\x05\x02\x00\x02"
             else:
                 authmethod = b"\x05\x01\x00"
             upstream.write(authmethod)
-            upstream.read_bytes(1024, socks5_auth)
+            upstream.read_bytes(2, socks5_auth)
 
         if self.pphost is None:
             upstreamip = socket.gethostbyname(self.request.host)
@@ -696,6 +707,8 @@ class fgfwproxy(FGFWProxyAbs):
             # 'gsnova-c4': ('http', '127.0.0.1', 48102, None, None),
             # 'shadowsocks': ('socks5', '127.0.0.1', 1080, None, None)
         }
+        # return cls.parentdict.get('shadowsocks')
+
         if not domain:
             domain = uri.split('/')[2].split(':')[0]
 
@@ -951,6 +964,7 @@ def function():
 def main():
     goagentabs()
     gsnovaabs()
+    shadowsocksabs()
     fgfwproxy()
     updatedaemon = Thread(target=updateNbackup)
     updatedaemon.daemon = True
