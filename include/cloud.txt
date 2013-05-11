@@ -13,4 +13,3 @@
 ||googlecode.com
 ||googleusercontent.com
 ||gstatic.com
-|https://*.dropbox.com

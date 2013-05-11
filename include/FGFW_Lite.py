@@ -952,6 +952,9 @@ def main():
 if __name__ == "__main__":
     conf = Config()
     consoleLock = RLock()
+    if ' ' in WORKINGDIR:
+        print('路径中不能有空格！')
+        sys.exit()
     try:
         main()
     except Exception as e:
