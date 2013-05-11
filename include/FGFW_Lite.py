@@ -14,7 +14,7 @@ import os
 from subprocess import Popen
 import shlex
 import time
-import urllib2
+import requests
 from ConfigParser import SafeConfigParser
 from threading import Thread, RLock, Timer
 import atexit
@@ -52,8 +52,12 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         if ':' in urisplit[2]:
             self.requestport = urisplit[2].split(':')[1]
-        else:
+        elif uri.startswith('http://'):
             self.requestport = 80
+        elif uri.startswith('https://'):
+            self.requestport = 443
+        elif uri.startswith('ftp://'):
+            self.requestport = 21
 
         self.pptype, self.pphost, self.ppport, self.ppusername,\
             self.pppassword = fgfwproxy.parentproxy(uri, self.request.host)
@@ -488,20 +492,25 @@ class FGFWProxyAbs(object):
     def updateViaHTTP(self, url, etag, path):
         with consoleLock:
             print('updating ' + path)
+            proxy = {'http': 'http://127.0.0.1:8118',
+                     'https': 'http://127.0.0.1:8118'
+                     }
+            headers = {'If-None-Match': etag,
+                       }
         try:
-            request = urllib2.Request(url)
-            if etag:
-                request.add_header('If-None-Match', etag)
-            remotefile = urllib2.urlopen(request)
+            r = requests.get(url, proxies=proxy, headers=headers)
         except Exception as e:
             print(path + ' Not modified ' + str(e))
         else:
-            with open(path, 'w') as localfile:
-                localfile.write(remotefile.read())
-            with conf.iolock:
-                conf.presets.set('Update', path.split('/')[-1] + '.ver', remotefile.info()['etag'])
-            with consoleLock:
-                print(path + ' Updated.')
+            if r.status_code == 200:
+                with open(path, 'w') as localfile:
+                    localfile.write(r.content)
+                with conf.iolock:
+                    conf.presets.set('Update', path.split('/')[-1] + '.ver', str(r.headers.get('etag')))
+                with consoleLock:
+                    print(path + ' Updated.')
+            else:
+                print(path + ' Not modified ' + str(r.status_code))
 
 
 class goagentabs(FGFWProxyAbs):
@@ -669,7 +678,7 @@ class fgfwproxy(FGFWProxyAbs):
             'goagent': ('http', '127.0.0.1', 8087, None, None),
             # 'gsnova-gae': ('http', '127.0.0.1', 48101, None, None),
             # 'gsnova-c4': ('http', '127.0.0.1', 48102, None, None),
-            #'shadowsocks': ('socks5', '127.0.0.1', 1080, None, None)
+            # 'shadowsocks': ('socks5', '127.0.0.1', 1080, None, None)
         }
         if not domain:
             domain = uri.split('/')[2].split(':')[0]
@@ -916,7 +925,6 @@ class Config(object):
 @atexit.register
 def function():
     for item in FGFWProxyAbs.ITEMS:
-        item.updating += 1
         try:
             item.subpobj.terminate()
         except Exception:
@@ -944,9 +952,6 @@ def main():
 if __name__ == "__main__":
     conf = Config()
     consoleLock = RLock()
-    if ' ' in WORKINGDIR:
-        print('squid：路径中不能有空格！')
-        sys.exit()
     try:
         main()
     except Exception as e:

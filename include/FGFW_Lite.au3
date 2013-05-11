@@ -19,10 +19,6 @@ daemon()
 Exit
 
 Func setEnv()
-	If StringInStr(@ScriptDir, " ") Then
-		MsgBox(16, "FGFW_Lite", "路径中不允许有空格，FGFW_Lite将退出！", 5)
-		Exit (1)
-	EndIf
 	If Not FileExists("userconf.ini") Then
 		FileWrite("userconf.ini", "[FGFW_Lite]" & @CRLF & "[goagent]" & @CRLF & "goagentGAEAppid =" & @CRLF & "password =" & @CRLF & "[gfwlistUserconf]" & @CRLF & "[gfwlistUserOverride]" & @CRLF & "[AutoBackup]" & @CRLF & ";filename = C:/Users/DummyAccount/AppData" & @CRLF & "[AutoBackupConf]" & @CRLF & "BackupPath = e:/backup")
 	EndIf
