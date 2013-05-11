@@ -354,8 +354,13 @@ def run_proxy(port, start_ioloop=True):
 def updateNbackup():
     while True:
         time.sleep(120)
+        chkproxy()
         ifupdate()
         ifbackup()
+
+
+def chkproxy():
+    pass
 
 
 def ifupdate():
@@ -368,7 +373,7 @@ def ifupdate():
 def ifbackup():
     lastbackup = conf.userconf.dgetfloat('AutoBackupConf', 'LastBackup', 0)
     if time.time() - lastbackup > conf.BACKUP_INTV * 60 * 60:
-        backup()
+        Thread(target=backup).start()
 
 
 def fgfw2Liteupdate(m=False):
@@ -377,7 +382,7 @@ def fgfw2Liteupdate(m=False):
         if item.enableupdate:
             item.update()
     conf.presets.set('Update', 'LastUpdate', str(time.time()))
-    Timer(90, fgfw2Literestart).start()
+    Timer(60, fgfw2Literestart).start()
 
 
 def fgfw2Literestart():
@@ -387,11 +392,7 @@ def fgfw2Literestart():
         item.restart()
 
 
-def backup(m=False):
-    Thread(target=_backup).start()
-
-
-def _backup():
+def backup():
     import tarfile
     with conf.iolock:
         conf.userconf.set('AutoBackupConf', 'LastBackup', str(time.time()))
@@ -501,69 +502,6 @@ class FGFWProxyAbs(object):
                 conf.presets.set('Update', path.split('/')[-1] + '.ver', remotefile.info()['etag'])
             with consoleLock:
                 print(path + ' Updated.')
-
-
-class squidabs(FGFWProxyAbs):
-    def __init__(self):
-        FGFWProxyAbs.__init__(self)
-
-    def _config(self):
-        self.workingdir()
-        self.filelist = [['https://autoproxy4privoxy.googlecode.com/svn/trunk/BlacklistMode/gfwlist.squid', './squid/etc/gfwlist.squid'],
-                        ['https://autoproxy4privoxy.googlecode.com/svn/trunk/BlacklistMode/gfwlistOverride.squid', './squid/etc/gfwlistOverride.squid'],
-                        ['https://autoproxy4privoxy.googlecode.com/svn/trunk/BlacklistMode/chinaroute.squid', './squid/etc/chinaroute.squid']
-                         ]
-        self.cmd = 'd:/FGFW_Lite/squid/sbin/squid.exe -d1 -D -f d:/FGFW_Lite/squid/etc/squid.conf'
-        self.enable = conf.getconfbool('squid', 'enable', True)
-        self.enableupdate = conf.getconfbool('squid', 'update', True)
-        try:
-            if os.path.getsize("./squid/var/logs/access.log") > 50 * 1024 * 1024:
-                open("./squid/var/logs/access.log", 'w').close()
-            open("./squid/var/logs/cache.log", 'w').close()
-        except Exception:
-            pass
-        if not os.path.isfile("./squid/etc/chinaroute.squid"):
-            open("./squid/etc/chinaroute.squid", "w").close()
-        if not os.path.isfile("./squid/etc/gfwlistUserOverride.squid"):
-            open("./squid/etc/gfwlistUserOverride.squid", 'w').close()
-        if not os.path.isfile("./squid/etc/gfwlistUserconf.squid"):
-            open("./squid/etc/gfwlistUserconf.squid", 'w').close()
-        if not os.path.isfile("./squid/etc/gfwlistOverride.squid"):
-            open("./squid/etc/gfwlistOverride.squid", "w").close()
-        if not os.path.isfile("./squid/etc/gfwlist.squid"):
-            open("./squid/etc/gfwlist.squid", "w").close()
-        self.gfwlistUserOverride()
-        self.gfwlistUserconf()
-
-    def workingdir(self):
-        lastRunDir = conf.presets.dget("FGFW_Lite", "lastRunDir", "d:/FGFW_Lite")
-        if lastRunDir != WORKINGDIR:
-            self.ReplaceStringInFile('./squid/etc/squid.conf', lastRunDir, WORKINGDIR)
-            conf.presets.set('FGFW_Lite', 'lastRunDir', WORKINGDIR)
-            conf.confsave()
-
-    def gfwlistUserOverride(self):
-        f = open("./squid/etc/gfwlistUserOverride.squid", 'w')
-        append = conf.getconf("gfwlistUserOverride")
-        for i in range(len(append)):
-            if append[i][1]:
-                f.write("acl gfwlistUserOverride url_regex " + append[i][1] + '\n')
-        f.close()
-
-    def gfwlistUserconf(self):
-        f = open("./squid/etc/gfwlistUserconf.squid", 'w')
-        append = conf.getconf("gfwlistUserconf")
-        for i in range(len(append)):
-            if append[i][1]:
-                f.write("acl gfwlistUserconf url_regex " + append[i][1] + '\n')
-        f.close()
-
-    def ReplaceStringInFile(self, filename, test, replace):
-        with open(filename) as f:
-            lines = f.readlines()
-        with open(filename, 'w') as f:
-            for line in lines:
-                f.write(line.replace(test, replace))
 
 
 class goagentabs(FGFWProxyAbs):
@@ -989,7 +927,6 @@ def function():
 def main():
     goagentabs()
     gsnovaabs()
-    squidabs()
     fgfwproxy()
     updatedaemon = Thread(target=updateNbackup)
     updatedaemon.daemon = True
