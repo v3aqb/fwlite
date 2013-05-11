@@ -463,11 +463,11 @@ class FGFWProxyAbs(object):
         self.enableupdate = True
 
     def start(self):
-        if self.enable:
-            while True:
+        while True:
+            if self.enable:
                 self.subpobj = Popen(shlex.split(self.cmd.replace('d:/FGFW_Lite', WORKINGDIR)))
                 self.subpobj .wait()
-                time.sleep(3)
+            time.sleep(3)
 
     def restart(self):
         try:
@@ -546,6 +546,22 @@ class goagentabs(FGFWProxyAbs):
 
         with open('./goagent/proxy.ini', 'w') as configfile:
             proxy.write(configfile)
+
+
+class shadowsocksabs(FGFWProxyAbs):
+    """docstring for ClassName"""
+    def __init__(self):
+        FGFWProxyAbs.__init__(self)
+
+    def _config(self):
+        self.cmd = 'd:/FGFW_Lite/include/Python27/python27.exe d:/FGFW_Lite/shadowsocks/local.py'
+        self.enable = conf.getconfbool('shadowsocks', 'enable', False)
+        self.enableupdate = conf.getconfbool('shadowsocks', 'update', False)
+        server = conf.getconf('shadowsocks', 'server', '')
+        server_port = conf.getconf('shadowsocks', 'server_port', '')
+        password = conf.getconf('shadowsocks', 'password', 'barfoo!')
+        with open('./shadowsocks/config.json', 'w') as f:
+            f.write('{\n    "server":"%s",\n    "server_port":%s,\n    "local_port":1080,\n    "password":"%s",\n    "timeout":600\n}' % (server, server_port, password))
 
 
 class gsnovaabs(FGFWProxyAbs):  # Need more work on this
