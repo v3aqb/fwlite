@@ -1,4 +1,5 @@
-﻿#-*- coding: UTF-8 -*-
+﻿#!/usr/bin/env python
+#-*- coding: UTF-8 -*-
 #-------------------------------------------------------------------------------
 # Name:        FGFW_Lite.py
 # Purpose:     Fuck the Great Firewall of China
@@ -43,6 +44,10 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.redirect(new_url)
             return
 
+        if self.request.uri.startswith('ftp://'):
+            self.send_error(status_code=501)
+            return
+
         uri = self.request.uri
         if not ('//' in uri):
             uri = 'https://' + uri
@@ -56,8 +61,6 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.requestport = 80
         elif uri.startswith('https://'):
             self.requestport = 443
-        elif uri.startswith('ftp://'):
-            self.requestport = 21
 
         self.pptype, self.pphost, self.ppport, self.ppusername,\
             self.pppassword = fgfwproxy.parentproxy(uri, self.request.host)
@@ -204,7 +207,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                     http_conntgt_d()
 
             def fail():
-                client.write(b'HTTP/1.1 501 socks5 proxy Connection Failed.\r\n\r\n')
+                client.write(b'HTTP/1.1 500 socks5 proxy Connection Failed.\r\n\r\n')
                 upstream.close()
                 client.close()
 
@@ -754,9 +757,11 @@ class fgfwproxy(FGFWProxyAbs):
             parentlist.remove('direct')
             if uri.startswith('ftp://'):
                 parentlist.remove('goagent')
+                parentlist.remove('gsnova-gae')
             if 'twitter.com' in uri:
                 parentlist.remove('gsnova-gae')
-            return cls.parentdict.get(random.choice(parentlist))
+            if parentlist:
+                return cls.parentdict.get(random.choice(parentlist))
         return cls.parentdict.get('direct')
 
     def chinaroute(self):
