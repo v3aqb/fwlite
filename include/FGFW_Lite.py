@@ -1,4 +1,4 @@
-Ôªø#!/usr/bin/env python
+#!/usr/bin/env python
 #-*- coding: UTF-8 -*-
 #-------------------------------------------------------------------------------
 # Name:        FGFW_Lite.py
@@ -367,14 +367,25 @@ def run_proxy(port, start_ioloop=True):
 
 def updateNbackup():
     while True:
-        time.sleep(120)
+        time.sleep(90)
         chkproxy()
         ifupdate()
         ifbackup()
 
 
 def chkproxy():
-    pass
+    dit = fgfwproxy.parentdict.copy()
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+    for k, v in dit.items():
+        if v[1] is None:
+            continue
+        try:
+            s.connect((v[1], v[2]))
+        except Exception:
+            del dit[k]
+        else:
+            s.close()
+    fgfwproxy.parentdictalive = dit
 
 
 def ifupdate():
@@ -396,7 +407,7 @@ def fgfw2Liteupdate(m=False):
         if item.enableupdate:
             item.update()
     conf.presets.set('Update', 'LastUpdate', str(time.time()))
-    Timer(60, fgfw2Literestart).start()
+    Timer(40, fgfw2Literestart).start()
 
 
 def fgfw2Literestart():
@@ -535,6 +546,10 @@ class goagentabs(FGFWProxyAbs):
                          ]
         self.cmd = 'd:/FGFW_Lite/include/Python27/python27.exe d:/FGFW_Lite/goagent/proxy.py'
         self.enable = conf.getconfbool('goagent', 'enable', True)
+
+        if self.enable:
+            fgfwproxy.addparentproxy('goagnet', ('http', '127.0.0.1', 8087, None, None))
+
         self.enableupdate = conf.getconfbool('goagent', 'update', False)
         proxy = SSafeConfigParser()
         proxy.read('./goagent/proxy.ini')
@@ -547,6 +562,8 @@ class goagentabs(FGFWProxyAbs):
         proxy.set('paas', 'fetchserver', conf.getconf('goagent', 'paasfetchserver', ''))
         if conf.getconf('goagent', 'paasfetchserver'):
             proxy.set('paas', 'enable', '1')
+            if self.enable:
+                fgfwproxy.addparentproxy('goagnet-paas', ('http', '127.0.0.1', 8088, None, None))
 
         if os.path.isfile("./include/dummy"):
             proxy.set('listen', 'visible', '0')
@@ -566,12 +583,21 @@ class shadowsocksabs(FGFWProxyAbs):
     def _config(self):
         self.cmd = 'd:/FGFW_Lite/include/Python27/python27.exe d:/FGFW_Lite/shadowsocks/local.py'
         self.enable = conf.getconfbool('shadowsocks', 'enable', False)
+        if self.enable:
+            fgfwproxy.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
         self.enableupdate = conf.getconfbool('shadowsocks', 'update', False)
         server = conf.getconf('shadowsocks', 'server', '')
         server_port = conf.getconf('shadowsocks', 'server_port', '')
         password = conf.getconf('shadowsocks', 'password', 'barfoo!')
         with open('./shadowsocks/config.json', 'w') as f:
-            f.write('{\n    "server":"%s",\n    "server_port":%s,\n    "local_port":1080,\n    "password":"%s",\n    "timeout":600\n}' % (server, server_port, password))
+            f.write('''{
+    "server":"%s",
+    "server_port":%s,
+    "local_port":1080,
+    "password":"%s",
+    "timeout":600
+}
+''' % (server, server_port, password))
 
 
 class gsnovaabs(FGFWProxyAbs):  # Need more work on this
@@ -583,7 +609,9 @@ class gsnovaabs(FGFWProxyAbs):  # Need more work on this
     def _config(self):
         self.cmd = 'd:/FGFW_Lite/gsnova/gsnova.exe'
         self.filelist = []
-        self.enable = conf.getconfbool('gsnova', 'enable', True)
+        self.enable = conf.getconfbool('gsnova', 'enable', False)
+        if self.enable:
+            fgfwproxy.addparentproxy('gsnova-gae', ('http', '127.0.0.1', 48101, None, None))
         self.enableupdate = conf.getconfbool('gsnova', 'update', False)
         proxy = SSafeConfigParser()
         proxy.optionxform = str
@@ -602,6 +630,8 @@ class gsnovaabs(FGFWProxyAbs):  # Need more work on this
             for i in range(len(worknodes)):
                 proxy.set('C4', 'WorkerNode[' + str(i) + ']', worknodes[i])
             proxy.set('C4', 'Enable', '1')
+            if self.enable:
+                fgfwproxy.addparentproxy('gsnova-c4', ('http', '127.0.0.1', 48102, None, None))
         else:
             proxy.set('C4', 'Enable', '0')
 
@@ -640,6 +670,8 @@ class fgfwproxy(FGFWProxyAbs):
 
     @classmethod
     def conf(cls):
+        cls.parentdict = {}
+        cls.addparentproxy('direct', (None, None, None, None, None))
         cls.chinanet = []
         cls.chinanet.append(ipaddr.IPNetwork('192.168.0.0/16'))
         cls.chinanet.append(ipaddr.IPNetwork('172.16.0.0/12'))
@@ -695,21 +727,22 @@ class fgfwproxy(FGFWProxyAbs):
                 return uri.replace('http://', 'https://', 1)
 
     @classmethod
-    def addparentproxy(cls, name, path):
-        pass
+    def addparentproxy(cls, name, proxy):
+        '''
+        {
+            'direct': (None, None, None, None, None),
+            'goagent': ('http', '127.0.0.1', 8087, None, None)
+        }  # type, host, port, username, password
+        '''
+        cls.parentdict[name] = proxy
 
     @classmethod
-    def parentproxy(cls, uri, domain=None):
+    def parentproxy(cls, uri, domain=''):
         '''
             decide which parentproxy to use.
+            url:  'https://www.google.com'
+            domain: 'www.google.com'
         '''
-        cls.parentdict = {
-            'direct': (None, None, None, None, None),
-            'goagent': ('http', '127.0.0.1', 8087, None, None),
-            # 'gsnova-gae': ('http', '127.0.0.1', 48101, None, None),
-            # 'gsnova-c4': ('http', '127.0.0.1', 48102, None, None),
-            # 'shadowsocks': ('socks5', '127.0.0.1', 1080, None, None)
-        }
         # return cls.parentdict.get('shadowsocks')
 
         if not domain:
@@ -746,19 +779,25 @@ class fgfwproxy(FGFWProxyAbs):
             return False
 
         # select parent via uri
-        parentlist = cls.parentdict.keys()
+        parentlist = cls.parentdictalive.keys()
         if ifhost_in_china():
-            return cls.parentdict.get('direct')
+            return cls.parentdictalive.get('direct')
         if ifgfwlist():
             parentlist.remove('direct')
             if uri.startswith('ftp://'):
-                parentlist.remove('goagent')
-                parentlist.remove('gsnova-gae')
+                try:
+                    parentlist.remove('goagent')
+                    parentlist.remove('gsnova-gae')
+                except Exception:
+                    pass
             if 'twitter.com' in uri:
-                parentlist.remove('gsnova-gae')
+                try:
+                    parentlist.remove('gsnova-gae')
+                except Exception:
+                    pass
             if parentlist:
-                return cls.parentdict.get(random.choice(parentlist))
-        return cls.parentdict.get('direct')
+                return cls.parentdictalive.get(random.choice(parentlist))
+        return cls.parentdictalive.get('direct')
 
     def chinaroute(self):
         # ripped from https://github.com/fivesheep/chnroutes
@@ -830,13 +869,13 @@ class Config(object):
         self.userconf.read('userconf.ini')
 
     def cert(self):
-        '''Á°Æ‰øùgoagentÊúâ‰∏Ä‰ªΩËØÅ‰π¶'''
-        # goagentÂçáÁ∫ßÂÖºÂÆπ
+        '''»∑±£goagent”–“ª∑›÷§ È'''
+        # goagent…˝º∂ºÊ»›
         if os.path.isfile('./goagent/CA.key'):
             if not ('-----BEGIN RSA PRIVATE KEY-----' in open('./goagent/CA.crt').read()):
                 with open('./goagent/CA.crt', 'ab') as crtf:
                     crtf.write(open('./goagent/CA.key').read())
-        elif not os.path.isfile('./goagent/CA.crt'):  # Â¶ÇÊûúgoagentËØÅ‰π¶‰∏çÂ≠òÂú®
+        elif not os.path.isfile('./goagent/CA.crt'):  # »Áπ˚goagent÷§ È≤ª¥Ê‘⁄
             self.createCert()
 
     def createCert(self):
@@ -968,10 +1007,11 @@ def function():
 
 
 def main():
+    fgfwproxy()
     goagentabs()
     gsnovaabs()
     shadowsocksabs()
-    fgfwproxy()
+    fgfwproxy.parentdictalive = fgfwproxy.parentdict.copy()
     updatedaemon = Thread(target=updateNbackup)
     updatedaemon.daemon = True
     updatedaemon.start()
@@ -989,7 +1029,7 @@ if __name__ == "__main__":
     conf = Config()
     consoleLock = RLock()
     if ' ' in WORKINGDIR:
-        print('Ë∑ØÂæÑ‰∏≠‰∏çËÉΩÊúâÁ©∫Ê†ºÔºÅ')
+        print('no spacebar allowed in path')
         sys.exit()
     try:
         main()
