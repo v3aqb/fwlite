@@ -44,10 +44,6 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.redirect(new_url)
             return
 
-        if self.request.uri.startswith('ftp://'):
-            self.send_error(status_code=501)
-            return
-
         uri = self.request.uri
         if not ('//' in uri):
             uri = 'https://' + uri
@@ -57,10 +53,10 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         if ':' in urisplit[2]:
             self.requestport = int(urisplit[2].split(':')[1])
-        elif uri.startswith('http://'):
-            self.requestport = 80
         elif uri.startswith('https://'):
             self.requestport = 443
+        else:
+            self.requestport = 80
 
         self.pptype, self.pphost, self.ppport, self.ppusername,\
             self.pppassword = fgfwproxy.parentproxy(uri, self.request.host)
@@ -710,7 +706,7 @@ class fgfwproxy(FGFWProxyAbs):
         cls.parentdict = {
             'direct': (None, None, None, None, None),
             'goagent': ('http', '127.0.0.1', 8087, None, None),
-            'gsnova-gae': ('http', '127.0.0.1', 48101, None, None),
+            # 'gsnova-gae': ('http', '127.0.0.1', 48101, None, None),
             # 'gsnova-c4': ('http', '127.0.0.1', 48102, None, None),
             # 'shadowsocks': ('socks5', '127.0.0.1', 1080, None, None)
         }
@@ -963,6 +959,7 @@ class Config(object):
 @atexit.register
 def function():
     for item in FGFWProxyAbs.ITEMS:
+        item.enable = False
         try:
             item.subpobj.terminate()
         except Exception:
