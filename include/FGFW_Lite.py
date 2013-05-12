@@ -696,6 +696,10 @@ class fgfwproxy(FGFWProxyAbs):
                 return uri.replace('http://', 'https://', 1)
 
     @classmethod
+    def addparentproxy(cls, name, path):
+        pass
+
+    @classmethod
     def parentproxy(cls, uri, domain=None):
         '''
             decide which parentproxy to use.
@@ -703,7 +707,7 @@ class fgfwproxy(FGFWProxyAbs):
         cls.parentdict = {
             'direct': (None, None, None, None, None),
             'goagent': ('http', '127.0.0.1', 8087, None, None),
-            # 'gsnova-gae': ('http', '127.0.0.1', 48101, None, None),
+            'gsnova-gae': ('http', '127.0.0.1', 48101, None, None),
             # 'gsnova-c4': ('http', '127.0.0.1', 48102, None, None),
             # 'shadowsocks': ('socks5', '127.0.0.1', 1080, None, None)
         }
@@ -743,15 +747,15 @@ class fgfwproxy(FGFWProxyAbs):
             return False
 
         # select parent via uri
+        parentlist = cls.parentdict.keys()
         if ifhost_in_china():
             return cls.parentdict.get('direct')
         if ifgfwlist():
-            parentlist = cls.parentdict.keys()
             parentlist.remove('direct')
             if uri.startswith('ftp://'):
                 parentlist.remove('goagent')
-            # if uri.startswith('https://'):
-            #     return parentdict.get('gsnova-c4')
+            if 'twitter.com' in uri:
+                parentlist.remove('gsnova-gae')
             return cls.parentdict.get(random.choice(parentlist))
         return cls.parentdict.get('direct')
 
