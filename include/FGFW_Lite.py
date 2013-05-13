@@ -573,6 +573,97 @@ class goagentabs(FGFWProxyAbs):
 
         with open('./goagent/proxy.ini', 'w') as configfile:
             proxy.write(configfile)
+        self.cert()
+
+    def cert(self):
+        if os.path.isfile('./goagent/CA.key'):
+            if not ('-----BEGIN RSA PRIVATE KEY-----' in open('./goagent/CA.crt').read()):
+                with open('./goagent/CA.crt', 'ab') as crtf:
+                    crtf.write(open('./goagent/CA.key').read())
+        elif not os.path.isfile('./goagent/CA.crt'):
+            self.createCert()
+
+    def createCert(self):
+        '''
+        ripped from goagent 2.1.14
+        '''
+        import OpenSSL
+        ca_vendor = 'FGFW_Lite'
+        keyfile = './goagent/CA.crt'
+        key = OpenSSL.crypto.PKey()
+        key.generate_key(OpenSSL.crypto.TYPE_RSA, 2048)
+        ca = OpenSSL.crypto.X509()
+        ca.set_serial_number(0)
+        ca.set_version(2)
+        subj = ca.get_subject()
+        subj.countryName = 'CN'
+        subj.stateOrProvinceName = 'Internet'
+        subj.localityName = 'Cernet'
+        subj.organizationName = ca_vendor
+        subj.organizationalUnitName = '%s Root' % ca_vendor
+        subj.commonName = '%s CA' % ca_vendor
+        ca.gmtime_adj_notBefore(0)
+        ca.gmtime_adj_notAfter(24 * 60 * 60 * 3652)
+        ca.set_issuer(ca.get_subject())
+        ca.set_pubkey(key)
+        ca.add_extensions([
+            OpenSSL.crypto.X509Extension(b'basicConstraints', True, b'CA:TRUE'),
+            OpenSSL.crypto.X509Extension(b'keyUsage', False, b'keyCertSign, cRLSign'),
+            OpenSSL.crypto.X509Extension(b'subjectKeyIdentifier', False, b'hash', subject=ca), ])
+        ca.sign(key, 'sha1')
+        with open(keyfile, 'wb') as fp:
+            fp.write(OpenSSL.crypto.dump_certificate(OpenSSL.crypto.FILETYPE_PEM, ca))
+            fp.write(OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, key))
+        with open('./goagent/CA.key', 'wb') as fp:
+            fp.write(OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, key))
+        import shutil
+        if os.path.isdir('./goagent/certs'):
+            shutil.rmtree('./goagent/certs')
+        self.import_ca()
+
+    def import_ca(self):
+        '''
+        ripped from goagent 2.1.15
+        '''
+        try:
+            import ctypes
+        except ImportError:
+            ctypes = None
+        certfile = os.path.abspath('./goagent/CA.key')
+        dirname, basename = os.path.split(certfile)
+        commonname = 'FGFW_Lite CA'
+        if sys.platform.startswith('win'):
+            with open(certfile, 'rb') as fp:
+                certdata = fp.read()
+                if certdata.startswith('-----'):
+                    begin = '-----BEGIN CERTIFICATE-----'
+                    end = '-----END CERTIFICATE-----'
+                    certdata = base64.b64decode(''.join(certdata[certdata.find(begin)+len(begin):certdata.find(end)].strip().splitlines()))
+                crypt32_handle = ctypes.windll.kernel32.LoadLibraryW(u'crypt32.dll')
+                crypt32 = ctypes.WinDLL(None, handle=crypt32_handle)
+                store_handle = crypt32.CertOpenStore(10, 0, 0, 0x4000 | 0x10000, u'ROOT')
+                if not store_handle:
+                    return -1
+                ret = crypt32.CertAddEncodedCertificateToStore(store_handle, 0x1, certdata, len(certdata), 4, None)
+                crypt32.CertCloseStore(store_handle, 0)
+                del crypt32
+                ctypes.windll.kernel32.FreeLibrary(crypt32_handle)
+                return 0 if ret else -1
+        elif sys.platform == 'darwin':
+            return os.system('security find-certificate -a -c "%s" | grep "%s" >/dev/null || security add-trusted-cert -d -r trustRoot -k "/Library/Keychains/System.keychain" "%s"' % (commonname, commonname, certfile))
+        elif sys.platform.startswith('linux'):
+            import platform
+            platform_distname = platform.dist()[0]
+            if platform_distname == 'Ubuntu':
+                pemfile = "/etc/ssl/certs/%s.pem" % commonname
+                new_certfile = "/usr/local/share/ca-certificates/%s.crt" % commonname
+                if not os.path.exists(pemfile):
+                    return os.system('cp "%s" "%s" && update-ca-certificates' % (certfile, new_certfile))
+            elif any(os.path.isfile('%s/certutil' % x) for x in os.environ['PATH'].split(os.pathsep)):
+                return os.system('certutil -L -d sql:$HOME/.pki/nssdb | grep "%s" || certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "%s" -i "%s"' % (commonname, commonname, certfile))
+            else:
+                print('please install *libnss3-tools* package to import GoAgent root ca')
+        return 0
 
 
 class shadowsocksabs(FGFWProxyAbs):
@@ -646,6 +737,9 @@ class gsnovaabs(FGFWProxyAbs):  # Need more work on this
             certfile.write(cert[:cert.find('-----BEGIN RSA PRIVATE KEY-----')])
         with open('./gsnova/cert/Fake-ACRoot-Key.pem', 'wb') as certfile:
             certfile.write(cert[cert.find('-----BEGIN RSA PRIVATE KEY-----'):])
+        import shutil
+        if os.path.isdir('./gsnova/cert/host'):
+            shutil.rmtree('./gsnova/cert/host')
 
 
 class fgfwproxy(FGFWProxyAbs):
@@ -862,106 +956,10 @@ class Config(object):
         self.reload()
         self.UPDATE_INTV = 24
         self.BACKUP_INTV = 24
-        self.cert()
 
     def reload(self):
         self.presets.read('presets.ini')
         self.userconf.read('userconf.ini')
-
-    def cert(self):
-        '''确保goagent有一份证书'''
-        # goagent升级兼容
-        if os.path.isfile('./goagent/CA.key'):
-            if not ('-----BEGIN RSA PRIVATE KEY-----' in open('./goagent/CA.crt').read()):
-                with open('./goagent/CA.crt', 'ab') as crtf:
-                    crtf.write(open('./goagent/CA.key').read())
-        elif not os.path.isfile('./goagent/CA.crt'):  # 如果goagent证书不存在
-            self.createCert()
-
-    def createCert(self):
-        '''
-        ripped from goagent 2.1.14
-        '''
-        import OpenSSL
-        ca_vendor = 'FGFW_Lite'
-        keyfile = './goagent/CA.crt'
-        key = OpenSSL.crypto.PKey()
-        key.generate_key(OpenSSL.crypto.TYPE_RSA, 2048)
-        ca = OpenSSL.crypto.X509()
-        ca.set_serial_number(0)
-        ca.set_version(2)
-        subj = ca.get_subject()
-        subj.countryName = 'CN'
-        subj.stateOrProvinceName = 'Internet'
-        subj.localityName = 'Cernet'
-        subj.organizationName = ca_vendor
-        subj.organizationalUnitName = '%s Root' % ca_vendor
-        subj.commonName = '%s CA' % ca_vendor
-        ca.gmtime_adj_notBefore(0)
-        ca.gmtime_adj_notAfter(24 * 60 * 60 * 3652)
-        ca.set_issuer(ca.get_subject())
-        ca.set_pubkey(key)
-        ca.add_extensions([
-            OpenSSL.crypto.X509Extension(b'basicConstraints', True, b'CA:TRUE'),
-            OpenSSL.crypto.X509Extension(b'keyUsage', False, b'keyCertSign, cRLSign'),
-            OpenSSL.crypto.X509Extension(b'subjectKeyIdentifier', False, b'hash', subject=ca), ])
-        ca.sign(key, 'sha1')
-        with open(keyfile, 'wb') as fp:
-            fp.write(OpenSSL.crypto.dump_certificate(OpenSSL.crypto.FILETYPE_PEM, ca))
-            fp.write(OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, key))
-        with open('./goagent/CA.key', 'wb') as fp:
-            fp.write(OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, key))
-        import shutil
-        if os.path.isdir('./goagent/certs'):
-            shutil.rmtree('./goagent/certs')
-        if os.path.isdir('./gsnova/cert/host'):
-            shutil.rmtree('./gsnova/cert/host')
-        self.import_ca()
-
-    def import_ca(self):
-        '''
-        ripped from goagent 2.1.15
-        '''
-        try:
-            import ctypes
-        except ImportError:
-            ctypes = None
-        import base64
-        certfile = os.path.abspath('./goagent/CA.key')
-        dirname, basename = os.path.split(certfile)
-        commonname = 'FGFW_Lite CA'
-        if sys.platform.startswith('win'):
-            with open(certfile, 'rb') as fp:
-                certdata = fp.read()
-                if certdata.startswith('-----'):
-                    begin = '-----BEGIN CERTIFICATE-----'
-                    end = '-----END CERTIFICATE-----'
-                    certdata = base64.b64decode(''.join(certdata[certdata.find(begin)+len(begin):certdata.find(end)].strip().splitlines()))
-                crypt32_handle = ctypes.windll.kernel32.LoadLibraryW(u'crypt32.dll')
-                crypt32 = ctypes.WinDLL(None, handle=crypt32_handle)
-                store_handle = crypt32.CertOpenStore(10, 0, 0, 0x4000 | 0x10000, u'ROOT')
-                if not store_handle:
-                    return -1
-                ret = crypt32.CertAddEncodedCertificateToStore(store_handle, 0x1, certdata, len(certdata), 4, None)
-                crypt32.CertCloseStore(store_handle, 0)
-                del crypt32
-                ctypes.windll.kernel32.FreeLibrary(crypt32_handle)
-                return 0 if ret else -1
-        elif sys.platform == 'darwin':
-            return os.system('security find-certificate -a -c "%s" | grep "%s" >/dev/null || security add-trusted-cert -d -r trustRoot -k "/Library/Keychains/System.keychain" "%s"' % (commonname, commonname, certfile))
-        elif sys.platform.startswith('linux'):
-            import platform
-            platform_distname = platform.dist()[0]
-            if platform_distname == 'Ubuntu':
-                pemfile = "/etc/ssl/certs/%s.pem" % commonname
-                new_certfile = "/usr/local/share/ca-certificates/%s.crt" % commonname
-                if not os.path.exists(pemfile):
-                    return os.system('cp "%s" "%s" && update-ca-certificates' % (certfile, new_certfile))
-            elif any(os.path.isfile('%s/certutil' % x) for x in os.environ['PATH'].split(os.pathsep)):
-                return os.system('certutil -L -d sql:$HOME/.pki/nssdb | grep "%s" || certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "%s" -i "%s"' % (commonname, commonname, certfile))
-            else:
-                print('please install *libnss3-tools* package to import GoAgent root ca')
-        return 0
 
     def getconf(self, section, option=None, default=None):
         if option is None:
