@@ -10,6 +10,9 @@
 # Copyright:   (c) 2013 Jiang Chao <sgzz.cj@gmail.com>
 # License:     The MIT License
 #-------------------------------------------------------------------------------
+
+__version__ = '0.3.0.0'
+
 import sys
 import os
 from subprocess import Popen
@@ -997,18 +1000,19 @@ class Config(object):
 def function():
     for item in FGFWProxyAbs.ITEMS:
         item.enable = False
-        try:
-            item.subpobj.terminate()
-        except Exception:
-            pass
+        item.restart()
     conf.confsave()
 
 
 def main():
-    fgfwproxy()
-    goagentabs()
-    gsnovaabs()
-    shadowsocksabs()
+    if conf.getconfbool('fgfwproxy', 'enable', True):
+        fgfwproxy()
+    if conf.getconfbool('goagent', 'enable', True):
+        goagentabs()
+    if conf.getconfbool('gsnova', 'enable', False):
+        gsnovaabs()
+    if conf.getconfbool('shadowsocks', 'enable', False):
+        shadowsocksabs()
     fgfwproxy.parentdictalive = fgfwproxy.parentdict.copy()
     updatedaemon = Thread(target=updateNbackup)
     updatedaemon.daemon = True
