@@ -63,8 +63,8 @@ Func setTray()
 	TrayCreateItem("设置开机启动", $trayMenuAdvanced)
 	TrayItemSetOnEvent(-1, "setAutorun")
 
-	TrayCreateItem("查看日志", $trayMenuAdvanced)
-	TrayItemSetOnEvent(-1, "viewLog")
+	TrayCreateItem("Edit Local Config")
+	TrayItemSetOnEvent(-1, "editLocal")
 
 	TrayCreateItem("")
 
@@ -99,9 +99,8 @@ Func setProxyDirect()
 	_setIEProxy(0)
 EndFunc   ;==>setProxyDirect
 
-Func viewLog()
-	ShellExecute(@ScriptDir & "\squid\var\logs\access.log")
-	ShellExecute(".\squid\var\logs\cache.log")
+Func editLocal()
+	ShellExecute(@ScriptDir & "\include\local.txt")
 EndFunc   ;==>viewLog
 
 Func flushDNS()

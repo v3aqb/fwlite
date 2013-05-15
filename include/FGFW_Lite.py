@@ -781,6 +781,25 @@ class fgfwproxy(FGFWProxyAbs):
 
         cls.gfwlist = []
 
+        if os.path.isfile('./include/local.txt'):
+            with open('./include/local.txt') as f:
+                for line in f:
+                    try:
+                        o = autoproxy_rule(line.strip())
+                    except Exception:
+                        pass
+                    else:
+                        if o.override:
+                            cls.gfwlist.insert(0, o)
+                        else:
+                            cls.gfwlist.append(o)
+        else:
+            with open('./include/local.txt', 'w') as f:
+                f.write('''
+! local gfwlist config
+! rules: http://t.cn/zTeBinu
+''')
+
         with open('./include/cloud.txt') as f:
             for line in f:
                 try:
