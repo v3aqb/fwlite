@@ -754,6 +754,7 @@ class fgfwproxy(FGFWProxyAbs):
     def _config(self):
         self.filelist = [['https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './include/gfwlist.txt'],
                          ['http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './include/delegated-apnic-latest'],
+                         ['https://fgfw-lite.googlecode.com/git/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
                          ]
         #self.cmd = 'd:/FGFW_Lite/include/Python27/python27.exe d:/FGFW_Lite/include/fgfwproxy.py'
         self.enable = conf.getconfbool('fgfwproxy', 'enable', True)
