@@ -795,10 +795,7 @@ class fgfwproxy(FGFWProxyAbs):
                             cls.gfwlist.append(o)
         else:
             with open('./include/local.txt', 'w') as f:
-                f.write('''
-! local gfwlist config
-! rules: http://t.cn/zTeBinu
-''')
+                f.write('! local gfwlist config\n! rules: http://t.cn/zTeBinu\n')
 
         with open('./include/cloud.txt') as f:
             for line in f:
