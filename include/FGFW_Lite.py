@@ -8,8 +8,10 @@
 #
 # Created:     08/03/2013
 # Copyright:   (c) 2013 Jiang Chao <sgzz.cj@gmail.com>
-# License:     The MIT License
+# License:     The GPLv2 License
 #-------------------------------------------------------------------------------
+from __future__ import print_function
+from __future__ import unicode_literals
 
 __version__ = '0.3.0.0'
 
@@ -19,23 +21,31 @@ from subprocess import Popen
 import shlex
 import time
 import requests
-from ConfigParser import SafeConfigParser
+if sys.version[0] == '2':
+    from ConfigParser import SafeConfigParser
+    import ipaddr
+    ip_address = ipaddr.IPAddress
+    ip_network = ipaddr.IPNetwork
+else:
+    from configparser import SafeConfigParser
+    import ipaddress
+    ip_address = ipaddress.ip_address
+    ip_network = ipaddress.ip_network
 from threading import Thread, RLock, Timer
 import atexit
-WORKINGDIR = os.getcwd().replace('\\', '/')
-if ' ' in WORKINGDIR:
-    print('no spacebar allowed in path')
-    sys.exit()
 import base64
 import socket
 import struct
 import random
 import re
-import ipaddr
 import tornado.ioloop
 import tornado.iostream
 import tornado.httpserver
 import tornado.web
+WORKINGDIR = os.getcwd().replace('\\', '/')
+if ' ' in WORKINGDIR:
+    print('no spacebar allowed in path')
+    sys.exit()
 
 
 class ProxyHandler(tornado.web.RequestHandler):
@@ -71,7 +81,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             s += ' via %s://%s:%s' % (self.pptype, self.pphost, self.ppport)
         else:
             s += ' via direct'
-        print s
+        print(s)
 
     @tornado.web.asynchronous
     def get(self):
@@ -192,9 +202,9 @@ class ProxyHandler(tornado.web.RequestHandler):
 
             def upstream_verify(data=None):
                 if data.startswith(b'\x05\x00'):
-                    if data[3] == '\x01':
+                    if data[3] == b'\x01':
                         upstream.read_bytes(6, conn)
-                    elif data[3] == '\x03':
+                    elif data[3] == b'\x03':
                         upstream.read_bytes(3, readaddr)
                 else:
                     fail()
@@ -365,9 +375,7 @@ def run_proxy(port, start_ioloop=True):
     the tornado IOLoop will be started immediately.
     """
     print ("Starting HTTP proxy on port %d" % port)
-    app = tornado.web.Application([
-        (r'.*', ProxyHandler),
-    ])
+    app = tornado.web.Application([(r'.*', ProxyHandler), ])
     app.listen(port)
     ioloop = tornado.ioloop.IOLoop.instance()
     if start_ioloop:
@@ -777,14 +785,14 @@ class fgfwproxy(FGFWProxyAbs):
         cls.parentdict = {}
         cls.addparentproxy('direct', (None, None, None, None, None))
         cls.chinanet = []
-        cls.chinanet.append(ipaddr.IPNetwork('192.168.0.0/16'))
-        cls.chinanet.append(ipaddr.IPNetwork('172.16.0.0/12'))
-        cls.chinanet.append(ipaddr.IPNetwork('10.0.0.0/8'))
-        cls.chinanet.append(ipaddr.IPNetwork('127.0.0.0/8'))
+        cls.chinanet.append(ip_network('192.168.0.0/16'))
+        cls.chinanet.append(ip_network('172.16.0.0/12'))
+        cls.chinanet.append(ip_network('10.0.0.0/8'))
+        cls.chinanet.append(ip_network('127.0.0.0/8'))
         with open('./include/chinaroutes') as f:
             for line in f:
                 if line:
-                    cls.chinanet.append(ipaddr.IPNetwork(line.strip()))
+                    cls.chinanet.append(ip_network(line.strip()))
 
         cls.gfwlist = []
 
@@ -877,7 +885,7 @@ class fgfwproxy(FGFWProxyAbs):
                     ip = socket.gethostbyname(domain)
                 except Exception:
                     return False
-                ipo = ipaddr.IPAddress(ip)
+                ipo = ip_address(ip)
                 result = False
                 for net in cls.chinanet:
                     if ipo in net:
@@ -1056,7 +1064,7 @@ def main():
         elif 'backup'in line:
             backup(True)
         else:
-            print line
+            print(line)
 
 
 if __name__ == "__main__":
