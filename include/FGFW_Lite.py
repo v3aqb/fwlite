@@ -66,7 +66,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         self.pptype, self.pphost, self.ppport, self.ppusername,\
             self.pppassword = fgfwproxy.parentproxy(uri, self.request.host)
-        s = '%s %s' % (self.request.method, self.request.uri)
+        s = '%s %s' % (self.request.method, self.request.uri.split('?')[0])
         if self.pphost:
             s += ' via %s://%s:%s' % (self.pptype, self.pphost, self.ppport)
         else:
@@ -232,6 +232,10 @@ class ProxyHandler(tornado.web.RequestHandler):
         elif self.pptype == 'http':
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             upstream = tornado.iostream.IOStream(s)
+            upstream.connect((self.pphost, int(self.ppport)), http_conntgt)
+        elif self.pptype == 'https':
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+            upstream = tornado.iostream.SSLIOStream(s)
             upstream.connect((self.pphost, int(self.ppport)), http_conntgt)
         elif self.pptype == 'socks5':
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
@@ -859,7 +863,7 @@ class fgfwproxy(FGFWProxyAbs):
             url:  'https://www.google.com'
             domain: 'www.google.com'
         '''
-        # return cls.parentdict.get('shadowsocks')
+        return cls.parentdict.get('https')
 
         if not domain:
             domain = uri.split('/')[2].split(':')[0]
@@ -1035,6 +1039,12 @@ def main():
         gsnovaabs()
     if conf.getconfbool('shadowsocks', 'enable', False):
         shadowsocksabs()
+    if conf.getconfbool('https', 'enable', False):
+        host = conf.getconf('https', 'host', '')
+        port = conf.getconf('https', 'port', '443')
+        user = conf.getconf('https', 'user', None)
+        passwd = conf.getconf('https', 'passwd', None)
+        fgfwproxy.addparentproxy('https', ('https', host, int(port), user, passwd))
     fgfwproxy.parentdictalive = fgfwproxy.parentdict.copy()
     updatedaemon = Thread(target=updateNbackup)
     updatedaemon.daemon = True
