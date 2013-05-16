@@ -863,7 +863,7 @@ class fgfwproxy(FGFWProxyAbs):
             url:  'https://www.google.com'
             domain: 'www.google.com'
         '''
-        return cls.parentdict.get('https')
+        # return cls.parentdict.get('https')
 
         if not domain:
             domain = uri.split('/')[2].split(':')[0]
