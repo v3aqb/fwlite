@@ -23,6 +23,9 @@ from ConfigParser import SafeConfigParser
 from threading import Thread, RLock, Timer
 import atexit
 WORKINGDIR = os.getcwd().replace('\\', '/')
+if ' ' in WORKINGDIR:
+    print('no spacebar allowed in path')
+    sys.exit()
 import base64
 import socket
 import struct
@@ -218,15 +221,14 @@ class ProxyHandler(tornado.web.RequestHandler):
             upstream.read_bytes(2, socks5_auth)
 
         if self.pphost is None:
-            upstreamip = socket.gethostbyname(self.request.host)
             if self.request.method == 'CONNECT':
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
                 upstream = tornado.iostream.IOStream(s)
-                upstream.connect((upstreamip, int(self.requestport)), start_ssltunnel)
+                upstream.connect((self.request.host, int(self.requestport)), start_ssltunnel)
             else:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
                 upstream = tornado.iostream.IOStream(s)
-                upstream.connect((upstreamip, int(self.requestport)), http_conntgt_d)
+                upstream.connect((self.request.host, int(self.requestport)), http_conntgt_d)
         elif self.pptype == 'http':
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             upstream = tornado.iostream.IOStream(s)
@@ -1012,6 +1014,9 @@ class Config(object):
         self.presets.write(open('presets.ini', 'w'))
         self.userconf.write(open('userconf.ini', 'w'))
 
+conf = Config()
+consoleLock = RLock()
+
 
 @atexit.register
 def function():
@@ -1045,11 +1050,6 @@ def main():
 
 
 if __name__ == "__main__":
-    conf = Config()
-    consoleLock = RLock()
-    if ' ' in WORKINGDIR:
-        print('no spacebar allowed in path')
-        sys.exit()
     try:
         main()
     except Exception as e:
