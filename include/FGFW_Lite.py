@@ -148,27 +148,27 @@ class ProxyHandler(tornado.web.RequestHandler):
             client.write(b'HTTP/1.1 200 Connection established\r\n\r\n')
 
         def http_conntgt(data=None):
-            s = b'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
+            s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
             if self.ppusername:
-                a = b'%s:%s' % (self.ppusername, self.pppassword)
-                self.request.headers[b'Authorization'] = b'Basic %s\r\n' % base64.b64encode(a)
-            self.request.headers[b'Connection'] = b'close'
+                a = '%s:%s' % (self.ppusername, self.pppassword)
+                self.request.headers['Authorization'] = 'Basic %s\r\n' % base64.b64encode(a)
+            self.request.headers['Connection'] = 'close'
             for key, value in self.request.headers.items():
-                s += b'%s: %s\r\n' % (key, value)
-            s += b'\r\n'
+                s += '%s: %s\r\n' % (key, value)
+            s += '\r\n'
             if self.request.body:
-                s += b'%s\r\n\r\n' % self.request.body
-            start_tunnel(s)
+                s += '%s\r\n\r\n' % self.request.body
+            start_tunnel(s.encode())
 
         def http_conntgt_d(data=None):
-            s = b'%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
-            self.request.headers[b'Connection'] = b'close'
+            s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
+            self.request.headers['Connection'] = 'close'
             for key, value in self.request.headers.items():
-                s += b'%s: %s\r\n' % (key, value)
-            s += b'\r\n'
+                s += '%s: %s\r\n' % (key, value)
+            s += '\r\n'
             if self.request.body:
-                s += b'%s\r\n\r\n' % self.request.body
-            start_tunnel(s)
+                s += '%s\r\n\r\n' % self.request.body
+            start_tunnel(s.encode())
 
         def socks5_handshake(data=None):
             def socks5_auth(data=None):
@@ -239,11 +239,11 @@ class ProxyHandler(tornado.web.RequestHandler):
             if self.request.method == 'CONNECT':
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
                 upstream = tornado.iostream.IOStream(s)
-                upstream.connect((self.request.host, int(self.requestport)), start_ssltunnel)
+                upstream.connect((self.request.host.split(':')[0], int(self.requestport)), start_ssltunnel)
             else:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
                 upstream = tornado.iostream.IOStream(s)
-                upstream.connect((self.request.host, int(self.requestport)), http_conntgt_d)
+                upstream.connect((self.request.host.split(':')[0], int(self.requestport)), http_conntgt_d)
         elif self.pptype == 'http':
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             upstream = tornado.iostream.IOStream(s)
