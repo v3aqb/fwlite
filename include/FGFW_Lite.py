@@ -13,7 +13,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
-__version__ = '0.3.0.0'
+__version__ = '0.3.1.0'
 
 import sys
 import os
@@ -26,11 +26,13 @@ if sys.version[0] == '2':
     import ipaddr
     ip_address = ipaddr.IPAddress
     ip_network = ipaddr.IPNetwork
+    PYTHON = 'd:/FGFW_Lite/include/Python27/python27.exe'
 else:
     from configparser import SafeConfigParser
     import ipaddress
     ip_address = ipaddress.ip_address
     ip_network = ipaddress.ip_network
+    PYTHON = 'd:/FGFW_Lite/include/Python33/python33.exe'
 from threading import Thread, RLock, Timer
 import atexit
 import base64
@@ -148,27 +150,27 @@ class ProxyHandler(tornado.web.RequestHandler):
             client.write(b'HTTP/1.1 200 Connection established\r\n\r\n')
 
         def http_conntgt(data=None):
-            s = b'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
+            s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
             if self.ppusername:
-                a = b'%s:%s' % (self.ppusername, self.pppassword)
-                self.request.headers[b'Authorization'] = b'Basic %s\r\n' % base64.b64encode(a)
-            self.request.headers[b'Connection'] = b'close'
+                a = '%s:%s' % (self.ppusername, self.pppassword)
+                self.request.headers['Authorization'] = 'Basic %s\r\n' % base64.b64encode(a)
+            self.request.headers['Connection'] = 'close'
             for key, value in self.request.headers.items():
-                s += b'%s: %s\r\n' % (key, value)
-            s += b'\r\n'
+                s += '%s: %s\r\n' % (key, value)
+            s += '\r\n'
             if self.request.body:
-                s += b'%s\r\n\r\n' % self.request.body
-            start_tunnel(s)
+                s += '%s\r\n\r\n' % self.request.body
+            start_tunnel(s.encode())
 
         def http_conntgt_d(data=None):
-            s = b'%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
-            self.request.headers[b'Connection'] = b'close'
+            s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
+            self.request.headers['Connection'] = 'close'
             for key, value in self.request.headers.items():
-                s += b'%s: %s\r\n' % (key, value)
-            s += b'\r\n'
+                s += '%s: %s\r\n' % (key, value)
+            s += '\r\n'
             if self.request.body:
-                s += b'%s\r\n\r\n' % self.request.body
-            start_tunnel(s)
+                s += '%s\r\n\r\n' % self.request.body
+            start_tunnel(s.encode())
 
         def socks5_handshake(data=None):
             def socks5_auth(data=None):
@@ -176,8 +178,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                     conn_upstream()
                 elif data == b'\x05\02':  # basic auth
                     upstream.write(b"\x01" +
-                                   chr(len(self.ppusername)) + self.ppusername +
-                                   chr(len(self.pppassword)) + self.pppassword)
+                                   chr(len(self.ppusername)).encode() + self.ppusername.encode() +
+                                   chr(len(self.pppassword)).encode() + self.pppassword).encode()
                     upstream.read_bytes(2, socks5_auth_finish)
                 else:  # bad day, no auth supported
                     fail()
@@ -202,7 +204,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 #     req = b"\x05\x01\x00\x01" + ip
                 req = b"\x05\x01\x00\x03" + chr(len(self.request.host)) + self.request.host
                 req += struct.pack(">H", self.requestport)
-                upstream.write(req)
+                upstream.write(req.encode())
                 upstream.read_bytes(4, upstream_verify)
 
             def upstream_verify(data=None):
@@ -562,11 +564,11 @@ class goagentabs(FGFWProxyAbs):
         FGFWProxyAbs.__init__(self)
 
     def _config(self):
-        self.filelist = [['https://raw.github.com/goagent/goagent/2.0/local/proxy.py', './goagent/proxy.py'],
-                        ['https://raw.github.com/goagent/goagent/2.0/local/proxy.ini', './goagent/proxy.ini'],
-                        ['https://raw.github.com/goagent/goagent/2.0/local/proxy.py', './goagent/cacert.pem']
+        self.filelist = [['https://raw.github.com/goagent/goagent/3.0/local/proxy.py', './goagent/proxy.py'],
+                        ['https://raw.github.com/goagent/goagent/3.0/local/proxy.ini', './goagent/proxy.ini'],
+                        ['https://raw.github.com/goagent/goagent/3.0/local/proxy.py', './goagent/cacert.pem']
                          ]
-        self.cmd = 'd:/FGFW_Lite/include/Python27/python27.exe d:/FGFW_Lite/goagent/proxy.py'
+        self.cmd = PYTHON + ' d:/FGFW_Lite/goagent/proxy.py'
         self.enable = conf.getconfbool('goagent', 'enable', True)
 
         if self.enable:
@@ -598,11 +600,7 @@ class goagentabs(FGFWProxyAbs):
         self.cert()
 
     def cert(self):
-        if os.path.isfile('./goagent/CA.key'):
-            if not ('-----BEGIN RSA PRIVATE KEY-----' in open('./goagent/CA.crt').read()):
-                with open('./goagent/CA.crt', 'ab') as crtf:
-                    crtf.write(open('./goagent/CA.key').read())
-        elif not os.path.isfile('./goagent/CA.crt'):
+        if not os.path.isfile('./goagent/CA.crt'):
             self.createCert()
 
     def createCert(self):
@@ -636,8 +634,6 @@ class goagentabs(FGFWProxyAbs):
         with open(keyfile, 'wb') as fp:
             fp.write(OpenSSL.crypto.dump_certificate(OpenSSL.crypto.FILETYPE_PEM, ca))
             fp.write(OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, key))
-        with open('./goagent/CA.key', 'wb') as fp:
-            fp.write(OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, key))
         import shutil
         if os.path.isdir('./goagent/certs'):
             shutil.rmtree('./goagent/certs')
@@ -645,32 +641,13 @@ class goagentabs(FGFWProxyAbs):
 
     def import_ca(self):
         '''
-        ripped from goagent 2.1.15
+        ripped from goagent 2.1.14
         '''
-        try:
-            import ctypes
-        except ImportError:
-            ctypes = None
         certfile = os.path.abspath('./goagent/CA.key')
         dirname, basename = os.path.split(certfile)
         commonname = 'FGFW_Lite CA'
         if sys.platform.startswith('win'):
-            with open(certfile, 'rb') as fp:
-                certdata = fp.read()
-                if certdata.startswith('-----'):
-                    begin = '-----BEGIN CERTIFICATE-----'
-                    end = '-----END CERTIFICATE-----'
-                    certdata = base64.b64decode(''.join(certdata[certdata.find(begin)+len(begin):certdata.find(end)].strip().splitlines()))
-                crypt32_handle = ctypes.windll.kernel32.LoadLibraryW(u'crypt32.dll')
-                crypt32 = ctypes.WinDLL(None, handle=crypt32_handle)
-                store_handle = crypt32.CertOpenStore(10, 0, 0, 0x4000 | 0x10000, u'ROOT')
-                if not store_handle:
-                    return -1
-                ret = crypt32.CertAddEncodedCertificateToStore(store_handle, 0x1, certdata, len(certdata), 4, None)
-                crypt32.CertCloseStore(store_handle, 0)
-                del crypt32
-                ctypes.windll.kernel32.FreeLibrary(crypt32_handle)
-                return 0 if ret else -1
+            return os.system('%s\include\certmgr.exe -add %s\goagent\CA.crt -c -s Root' % (WORKINGDIR, WORKINGDIR))
         elif sys.platform == 'darwin':
             return os.system('security find-certificate -a -c "%s" | grep "%s" >/dev/null || security add-trusted-cert -d -r trustRoot -k "/Library/Keychains/System.keychain" "%s"' % (commonname, commonname, certfile))
         elif sys.platform.startswith('linux'):
@@ -694,7 +671,7 @@ class shadowsocksabs(FGFWProxyAbs):
         FGFWProxyAbs.__init__(self)
 
     def _config(self):
-        self.cmd = 'd:/FGFW_Lite/include/Python27/python27.exe d:/FGFW_Lite/shadowsocks/local.py'
+        self.cmd = PYTHON + ' d:/FGFW_Lite/shadowsocks/local.py'
         self.enable = conf.getconfbool('shadowsocks', 'enable', False)
         if self.enable:
             fgfwproxy.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
@@ -775,7 +752,7 @@ class fgfwproxy(FGFWProxyAbs):
                          ['http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './include/delegated-apnic-latest'],
                          ['https://fgfw-lite.googlecode.com/git/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
                          ]
-        #self.cmd = 'd:/FGFW_Lite/include/Python27/python27.exe d:/FGFW_Lite/include/fgfwproxy.py'
+        #self.cmd = 'd:/FGFW_Lite/include/Python33/python33.exe d:/FGFW_Lite/include/fgfwproxy.py'
         self.enable = conf.getconfbool('fgfwproxy', 'enable', True)
         self.enableupdate = conf.getconfbool('fgfwproxy', 'update', True)
         self.chinaroute()
@@ -912,7 +889,7 @@ class fgfwproxy(FGFWProxyAbs):
             return False
 
         # select parent via uri
-        parentlist = cls.parentdictalive.keys()
+        parentlist = list(cls.parentdictalive.keys())
         if ifhost_in_china():
             return cls.parentdictalive.get('direct')
         if ifgfwlist():
