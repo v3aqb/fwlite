@@ -176,8 +176,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                     conn_upstream()
                 elif data == b'\x05\02':  # basic auth
                     upstream.write(b"\x01" +
-                                   chr(len(self.ppusername)) + self.ppusername +
-                                   chr(len(self.pppassword)) + self.pppassword)
+                                   chr(len(self.ppusername)).encode() + self.ppusername.encode() +
+                                   chr(len(self.pppassword)).encode() + self.pppassword).encode()
                     upstream.read_bytes(2, socks5_auth_finish)
                 else:  # bad day, no auth supported
                     fail()
@@ -202,7 +202,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 #     req = b"\x05\x01\x00\x01" + ip
                 req = b"\x05\x01\x00\x03" + chr(len(self.request.host)) + self.request.host
                 req += struct.pack(">H", self.requestport)
-                upstream.write(req)
+                upstream.write(req.encode())
                 upstream.read_bytes(4, upstream_verify)
 
             def upstream_verify(data=None):
@@ -912,7 +912,7 @@ class fgfwproxy(FGFWProxyAbs):
             return False
 
         # select parent via uri
-        parentlist = cls.parentdictalive.keys()
+        parentlist = list(cls.parentdictalive.keys())
         if ifhost_in_china():
             return cls.parentdictalive.get('direct')
         if ifgfwlist():
