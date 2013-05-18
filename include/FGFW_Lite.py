@@ -598,11 +598,7 @@ class goagentabs(FGFWProxyAbs):
         self.cert()
 
     def cert(self):
-        if os.path.isfile('./goagent/CA.key'):
-            if not ('-----BEGIN RSA PRIVATE KEY-----' in open('./goagent/CA.crt').read()):
-                with open('./goagent/CA.crt', 'ab') as crtf:
-                    crtf.write(open('./goagent/CA.key').read())
-        elif not os.path.isfile('./goagent/CA.crt'):
+        if not os.path.isfile('./goagent/CA.crt'):
             self.createCert()
 
     def createCert(self):
@@ -635,8 +631,6 @@ class goagentabs(FGFWProxyAbs):
         ca.sign(key, 'sha1')
         with open(keyfile, 'wb') as fp:
             fp.write(OpenSSL.crypto.dump_certificate(OpenSSL.crypto.FILETYPE_PEM, ca))
-            fp.write(OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, key))
-        with open('./goagent/CA.key', 'wb') as fp:
             fp.write(OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, key))
         import shutil
         if os.path.isdir('./goagent/certs'):
