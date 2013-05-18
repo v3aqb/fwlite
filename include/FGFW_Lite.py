@@ -46,6 +46,11 @@ WORKINGDIR = os.getcwd().replace('\\', '/')
 if ' ' in WORKINGDIR:
     print('no spacebar allowed in path')
     sys.exit()
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
+logger = logging.getLogger(__name__)
 
 
 class ProxyHandler(tornado.web.RequestHandler):
@@ -81,7 +86,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             s += ' via %s://%s:%s' % (self.pptype, self.pphost, self.ppport)
         else:
             s += ' via direct'
-        print(s)
+        logger.info(s)
 
     @tornado.web.asynchronous
     def get(self):
@@ -443,23 +448,23 @@ def backup():
         backuplist = conf.userconf.items('AutoBackup', raw=True)
         backupPath = conf.userconf.get('AutoBackupConf', 'BackupPath', raw=True)
     except:
-        print("read userconf.ini failed!")
+        logger.error("read userconf.ini failed!")
     else:
         if not os.path.isdir(backupPath):
             try:
                 os.makedirs(backupPath)
             except:
-                print('create dir ' + backupPath + ' failed!')
+                logger.error('create dir ' + backupPath + ' failed!')
         if len(backuplist) > 0:
-            print("start packing")
+            logger.info("start packing")
             for i in range(len(backuplist)):
                 if os.path.exists(backuplist[i][1]):
                     filepath = '%s/%s-%s.tar.bz2' % (backupPath, backuplist[i][0], time.strftime('%Y%m%d%H%M%S'))
-                    print('packing %s to %s' % (backuplist[i][1], filepath))
+                    logger.info('packing %s to %s' % (backuplist[i][1], filepath))
                     pack = tarfile.open(filepath, "w:bz2")
                     pack.add(backuplist[i][1])
                     pack.close()
-                    print('Done.')
+                    logger.info('Done.')
         #remove old backup file
         rotation = conf.userconf.dgetint('AutoBackupConf', 'rotation', 10)
         filelist = os.listdir(backupPath)
@@ -529,7 +534,7 @@ class FGFWProxyAbs(object):
 
     def updateViaHTTP(self, url, etag, path):
         with consoleLock:
-            print('updating ' + path)
+            logger.info('updating ' + path)
             proxy = {'http': 'http://127.0.0.1:8118',
                      'https': 'http://127.0.0.1:8118'
                      }
@@ -538,7 +543,7 @@ class FGFWProxyAbs(object):
         try:
             r = requests.get(url, proxies=proxy, headers=headers)
         except Exception as e:
-            print(path + ' Not modified ' + str(e))
+            logger.info(path + ' Not modified ' + str(e))
         else:
             if r.status_code == 200:
                 with open(path, 'w') as localfile:
@@ -546,9 +551,9 @@ class FGFWProxyAbs(object):
                 with conf.iolock:
                     conf.presets.set('Update', path.split('/')[-1] + '.ver', str(r.headers.get('etag')))
                 with consoleLock:
-                    print(path + ' Updated.')
+                    logger.info(path + ' Updated.')
             else:
-                print(path + ' Not modified ' + str(r.status_code))
+                logger.info(path + ' Not modified ' + str(r.status_code))
 
 
 class goagentabs(FGFWProxyAbs):
@@ -1070,5 +1075,7 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except KeyboardInterrupt:
+        sys.exit(0)
     except Exception as e:
-        raise e
+        logger.error(str(e))
