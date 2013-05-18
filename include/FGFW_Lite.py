@@ -562,11 +562,11 @@ class goagentabs(FGFWProxyAbs):
         FGFWProxyAbs.__init__(self)
 
     def _config(self):
-        self.filelist = [['https://raw.github.com/goagent/goagent/2.0/local/proxy.py', './goagent/proxy.py'],
-                        ['https://raw.github.com/goagent/goagent/2.0/local/proxy.ini', './goagent/proxy.ini'],
-                        ['https://raw.github.com/goagent/goagent/2.0/local/proxy.py', './goagent/cacert.pem']
+        self.filelist = [['https://raw.github.com/goagent/goagent/3.0/local/proxy.py', './goagent/proxy.py'],
+                        ['https://raw.github.com/goagent/goagent/3.0/local/proxy.ini', './goagent/proxy.ini'],
+                        ['https://raw.github.com/goagent/goagent/3.0/local/proxy.py', './goagent/cacert.pem']
                          ]
-        self.cmd = 'd:/FGFW_Lite/include/Python27/python27.exe d:/FGFW_Lite/goagent/proxy.py'
+        self.cmd = 'd:/FGFW_Lite/include/Python33/python33.exe d:/FGFW_Lite/goagent/proxy.py'
         self.enable = conf.getconfbool('goagent', 'enable', True)
 
         if self.enable:
@@ -694,7 +694,7 @@ class shadowsocksabs(FGFWProxyAbs):
         FGFWProxyAbs.__init__(self)
 
     def _config(self):
-        self.cmd = 'd:/FGFW_Lite/include/Python27/python27.exe d:/FGFW_Lite/shadowsocks/local.py'
+        self.cmd = 'd:/FGFW_Lite/include/Python33/python33.exe d:/FGFW_Lite/shadowsocks/local.py'
         self.enable = conf.getconfbool('shadowsocks', 'enable', False)
         if self.enable:
             fgfwproxy.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
@@ -775,7 +775,7 @@ class fgfwproxy(FGFWProxyAbs):
                          ['http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './include/delegated-apnic-latest'],
                          ['https://fgfw-lite.googlecode.com/git/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
                          ]
-        #self.cmd = 'd:/FGFW_Lite/include/Python27/python27.exe d:/FGFW_Lite/include/fgfwproxy.py'
+        #self.cmd = 'd:/FGFW_Lite/include/Python33/python33.exe d:/FGFW_Lite/include/fgfwproxy.py'
         self.enable = conf.getconfbool('fgfwproxy', 'enable', True)
         self.enableupdate = conf.getconfbool('fgfwproxy', 'update', True)
         self.chinaroute()
