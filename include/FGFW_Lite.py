@@ -239,11 +239,11 @@ class ProxyHandler(tornado.web.RequestHandler):
             if self.request.method == 'CONNECT':
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
                 upstream = tornado.iostream.IOStream(s)
-                upstream.connect((self.request.host, int(self.requestport)), start_ssltunnel)
+                upstream.connect((self.request.host.split(':')[0], int(self.requestport)), start_ssltunnel)
             else:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
                 upstream = tornado.iostream.IOStream(s)
-                upstream.connect((self.request.host, int(self.requestport)), http_conntgt_d)
+                upstream.connect((self.request.host.split(':')[0], int(self.requestport)), http_conntgt_d)
         elif self.pptype == 'http':
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             upstream = tornado.iostream.IOStream(s)
