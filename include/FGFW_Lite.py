@@ -564,9 +564,9 @@ class goagentabs(FGFWProxyAbs):
         FGFWProxyAbs.__init__(self)
 
     def _config(self):
-        self.filelist = [['https://raw.github.com/goagent/goagent/3.0/local/proxy.py', './goagent/proxy.py'],
-                        ['https://raw.github.com/goagent/goagent/3.0/local/proxy.ini', './goagent/proxy.ini'],
-                        ['https://raw.github.com/goagent/goagent/3.0/local/proxy.py', './goagent/cacert.pem']
+        self.filelist = [['https://fgfw-lite.googlecode.com/git/goagent/proxy.py', './goagent/proxy.py'],
+                        ['https://fgfw-lite.googlecode.com/git/goagent/proxy.ini', './goagent/proxy.ini'],
+                        ['https://fgfw-lite.googlecode.com/git/goagent/cacert.pem', './goagent/cacert.pem']
                          ]
         self.cmd = PYTHON + ' d:/FGFW_Lite/goagent/proxy.py'
         self.enable = conf.getconfbool('goagent', 'enable', True)
@@ -574,7 +574,7 @@ class goagentabs(FGFWProxyAbs):
         if self.enable:
             fgfwproxy.addparentproxy('goagnet', ('http', '127.0.0.1', 8087, None, None))
 
-        self.enableupdate = conf.getconfbool('goagent', 'update', False)
+        self.enableupdate = conf.getconfbool('goagent', 'update', True)
         proxy = SSafeConfigParser()
         proxy.read('./goagent/proxy.ini')
 
@@ -680,7 +680,8 @@ class shadowsocksabs(FGFWProxyAbs):
         server_port = conf.getconf('shadowsocks', 'server_port', '')
         password = conf.getconf('shadowsocks', 'password', 'barfoo!')
         with open('./shadowsocks/config.json', 'w') as f:
-            f.write('''{
+            f.write('''\
+{
     "server":"%s",
     "server_port":%s,
     "local_port":1080,
