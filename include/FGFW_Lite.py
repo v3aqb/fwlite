@@ -80,7 +80,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.requestport = 443
         else:
             self.requestport = 80
-
+        #self.request.host = self.request.host.split(':')[0]
         self.pptype, self.pphost, self.ppport, self.ppusername,\
             self.pppassword = fgfwproxy.parentproxy(uri, self.request.host)
         s = '%s %s' % (self.request.method, self.request.uri.split('?')[0])
@@ -288,8 +288,10 @@ class autoproxy_rule(object):
 
     def __init__(self, arg):
         super(autoproxy_rule, self).__init__()
-        if not isinstance(arg, str):
-            raise TypeError("invalid type: must be a string")
+        if isinstance(arg, bytes):
+            arg = arg.decode()
+        elif not isinstance(arg, str):
+            raise TypeError("invalid type: must be a string(or bytes)")
         self.rule = arg.strip()
         if self.rule == '' or\
                 self.rule.startswith('!') or\
@@ -783,7 +785,7 @@ class fgfwproxy(FGFWProxyAbs):
             with open('./include/local.txt') as f:
                 for line in f:
                     try:
-                        o = autoproxy_rule(line.strip())
+                        o = autoproxy_rule(line)
                     except Exception:
                         pass
                     else:
@@ -798,7 +800,7 @@ class fgfwproxy(FGFWProxyAbs):
         with open('./include/cloud.txt') as f:
             for line in f:
                 try:
-                    o = autoproxy_rule(line.strip())
+                    o = autoproxy_rule(line)
                 except Exception:
                     pass
                 else:
@@ -812,7 +814,7 @@ class fgfwproxy(FGFWProxyAbs):
         data = base64.b64decode(data).split()
         for line in data:
             try:
-                o = autoproxy_rule(line.strip())
+                o = autoproxy_rule(line)
             except Exception:
                 pass
             else:
