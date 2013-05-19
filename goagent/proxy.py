@@ -42,11 +42,11 @@ import functools
 import re
 import io
 import copy
+import fnmatch
 import traceback
 import random
 import base64
 import hashlib
-import fnmatch
 import queue
 import threading
 import socket
@@ -506,9 +506,11 @@ class HTTPUtil(object):
         iplist = self.dns.get(host)
         if not iplist:
             if not dnsserver:
-                iplist = socket.gethostbyname_ex(host)[-1]
+                iplist = list(set(socket.gethostbyname_ex(host)[-1]) - DNSUtil.blacklist)
             else:
                 iplist = DNSUtil.remote_resolve(dnsserver, host, timeout=2)
+            if not iplist:
+                iplist = DNSUtil.remote_resolve('8.8.8.8', host, timeout=2)
             if ipv4_only:
                 iplist = [ip for ip in iplist if re.match(r'\d+\.\d+\.\d+\.\d+', ip)]
             self.dns[host] = iplist = list(set(iplist))
@@ -842,7 +844,7 @@ class HTTPUtil(object):
             response = None
         return response
 
-    def request(self, method, url, payload=None, headers={}, fullurl=False, bufsize=8192, crlf=None, return_sock=None):
+    def request(self, method, url, payload=None, headers={}, realhost='', fullurl=False, bufsize=8192, crlf=None, return_sock=None):
         scheme, netloc, path, params, query, fragment = urllib.parse.urlparse(url)
         if netloc.rfind(':') <= netloc.rfind(']'):
             # no port number
@@ -862,16 +864,16 @@ class HTTPUtil(object):
             try:
                 if not self.proxy:
                     if scheme == 'https':
-                        ssl_sock = self.create_ssl_connection((host, port), self.max_timeout)
+                        ssl_sock = self.create_ssl_connection((realhost or host, port), self.max_timeout)
                         if ssl_sock:
                             sock = ssl_sock.sock
                             del ssl_sock.sock
                         else:
-                            raise socket.error('timed out', 'create_ssl_connection(%r,%r)' % (host, port))
+                            raise socket.error('timed out', 'create_ssl_connection(%r,%r)' % (realhost or host, port))
                     else:
-                        sock = self.create_connection((host, port), self.max_timeout)
+                        sock = self.create_connection((realhost or host, port), self.max_timeout)
                 else:
-                    sock = self.create_connection_withproxy((host, port), port, self.max_timeout, proxy=self.proxy)
+                    sock = self.create_connection_withproxy((realhost or host, port), port, self.max_timeout, proxy=self.proxy)
                     path = url
                     #crlf = self.crlf = 0
                     if scheme == 'https':
@@ -967,14 +969,6 @@ class Common(object):
         self.FETCHMAX_LOCAL = self.CONFIG.getint('fetchmax', 'local') if self.CONFIG.get('fetchmax', 'local') else 2
         self.FETCHMAX_SERVER = self.CONFIG.get('fetchmax', 'server')
 
-        if self.CONFIG.has_section('crlf'):
-            # XXX, cowork with GoAgentX
-            self.CRLF_ENABLE = self.CONFIG.getint('crlf', 'enable')
-            self.CRLF_DNSSERVER = self.CONFIG.get('crlf', 'dns')
-            self.CRLF_SITES = tuple(self.CONFIG.get('crlf', 'sites').split('|'))
-        else:
-            self.CRLF_ENABLE = 0
-
         if self.CONFIG.has_section('dns'):
             self.DNS_ENABLE = self.CONFIG.getint('dns', 'enable')
             self.DNS_LISTEN = self.CONFIG.get('dns', 'listen')
@@ -999,7 +993,8 @@ class Common(object):
         self.LOVE_TIMESTAMP = self.CONFIG.get('love', 'timestamp')
         self.LOVE_TIP = self.CONFIG.get('love', 'tip').encode('utf8').decode('unicode-escape').split('|')
 
-        self.HOSTS = dict((k, v.split('|') if v else []) for k, v in self.CONFIG.items('hosts'))
+        self.HOSTS = dict(self.CONFIG.items('hosts'))
+        self.HOSTS_MATCH = dict((re.compile(k).search, v) for k, v in self.HOSTS.items())
 
         random.shuffle(self.GAE_APPIDS)
         self.GAE_FETCHSERVER = '%s://%s.appspot.com%s?' % (self.GOOGLE_MODE, self.GAE_APPIDS[0], self.GAE_PATH)
@@ -1029,16 +1024,11 @@ class Common(object):
         if common.LIGHT_ENABLE:
             info += 'LIGHT Listen       : %s\n' % common.LIGHT_LISTEN
             info += 'LIGHT Server       : %s\n' % common.LIGHT_SERVER
-        if common.CRLF_ENABLE:
-            #http://www.acunetix.com/websitesecurity/crlf-injection.htm
-            info += 'CRLF Injection     : %s\n' % '|'.join(self.CRLF_SITES)
         info += '------------------------------------------------------\n'
         return info
 
 common = Common()
 http_util = HTTPUtil(max_window=common.GOOGLE_WINDOW, ssl_validate=common.GAE_VALIDATE or common.PAAS_VALIDATE, proxy=common.proxy)
-http_util.dns.update(common.HOSTS)
-
 
 def message_html(self, title, banner, detail=''):
     MESSAGE_TEMPLATE = '''
@@ -1123,13 +1113,13 @@ def gae_urlfetch(method, url, headers, payload, fetchserver, **kwargs):
     data = response.read(4)
     if len(data) < 4:
         response.status = 502
-        response.fp = io.BytesIO(b'connection aborted. too short leadtype data=%r' % data)
+        response.fp = io.BytesIO(b'connection aborted. too short leadtype data=' + data)
         return response
     response.status, headers_length = struct.unpack('!hh', data)
     data = response.read(headers_length)
     if len(data) < headers_length:
         response.status = 502
-        response.fp = io.BytesIO(b'connection aborted. too short headers data=%r' % data)
+        response.fp = io.BytesIO(b'connection aborted. too short headers data=' + data)
         return response
     response.headers = response.msg = http.client.parse_headers(io.BytesIO(zlib.decompress(data, -zlib.MAX_WBITS)))
     return response
@@ -1435,11 +1425,7 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
                     #http_util.dns[host] = http_util.dns.default_factory(http_util.dns_resolve(host))
                     http_util.dns[host] = list(set(common.GOOGLE_HOSTS))
                 need_forward = True
-        elif common.CRLF_ENABLE and host.endswith(common.CRLF_SITES):
-            if host not in http_util.dns:
-                logging.info('crlf dns_resolve(host=%r, dnsservers=%r)', host, common.CRLF_DNSSERVER)
-                http_util.dns[host] = list(set(http_util.dns_resolve(host, common.CRLF_DNSSERVER)))
-                logging.info('crlf dns_resolve(host=%r) return %s', host, list(http_util.dns[host]))
+        elif common.HOSTS_MATCH and any(x(self.path) for x in common.HOSTS_MATCH):
             need_forward = True
 
         if need_forward:
@@ -1452,15 +1438,21 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
         try:
             content_length = int(self.headers.get('Content-Length', 0))
             payload = self.rfile.read(content_length) if content_length else b''
-            response = http_util.request(self.command, self.path, payload, self.headers, crlf=common.GAE_CRLF)
-            if not response:
-                logging.warning('http_util.request "%s %s") return %r', self.command, self.path, response)
-                return
+            if common.HOSTS_MATCH and any(x(self.path) for x in common.HOSTS_MATCH):
+                realhost = next(common.HOSTS_MATCH[x] for x in common.HOSTS_MATCH if x(self.path)) or re.sub(r':\d+$', '', urllib.parse.urlparse(self.path).netloc)
+                logging.debug('hosts pattern mathed, url=%r realhost=%r', self.path, realhost)
+                response = http_util.request(self.command, self.path, payload, self.headers, realhost=realhost, crlf=1)
+            else:
+                response = http_util.request(self.command, self.path, payload, self.headers, crlf=common.GAE_CRLF)
             if response.status in (400, 405):
                 common.GAE_CRLF = 0
             logging.info('%s "FWD %s %s HTTP/1.1" %s %s', self.address_string(), self.command, self.path, response.status, response.headers.get('Content-Length', '-'))
             self.wfile.write(('HTTP/1.1 %s\r\n%s\r\n' % (response.status, ''.join('%s: %s\r\n' % (k.title(), v) for k, v in response.getheaders() if k != 'transfer-encoding'))).encode('latin-1'))
-            self.wfile.write(response.read())
+            while 1:
+                data = response.read(8192)
+                if not data:
+                    break
+                self.wfile.write(data)
             response.close()
         except OSError as e:
             if e.args[0] in (errno.ECONNRESET, 10063, errno.ENAMETOOLONG):
@@ -1589,7 +1581,7 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
             data = self.connection.recv(1024)
             for i in range(5):
                 try:
-                    timeout = 5
+                    timeout = 4
                     remote = http_util.create_connection((host, port), timeout)
                     if remote is not None and data:
                         remote.sendall(data)
@@ -1995,7 +1987,7 @@ def pre_start():
                 error = '某些安全软件(如 %s)可能和本软件存在冲突，造成 CPU 占用过高。\n如有此现象建议暂时退出此安全软件来继续运行GoAgent' % ','.join(softwares)
                 ctypes.windll.user32.MessageBoxW(None, error, 'GoAgent 建议', 0)
                 #sys.exit(0)
-    if common.GAE_APPIDS[0] == 'goagent' and not common.CRLF_ENABLE:
+    if common.GAE_APPIDS[0] == 'goagent':
         logging.critical('please edit %s to add your appid to [gae] !', common.CONFIG_FILENAME)
         sys.exit(-1)
     if common.PAC_ENABLE:
