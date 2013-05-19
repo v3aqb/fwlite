@@ -204,7 +204,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 #         req = b"\x05\x01\x00\x04" + ip
                 # else:
                 #     req = b"\x05\x01\x00\x01" + ip
-                req = b"\x05\x01\x00\x03" + len(self.request.host) + self.request.host.encode()
+                req = b"\x05\x01\x00\x03" + chr(len(self.request.host)).encode() + self.request.host.encode()
                 req += struct.pack(">H", self.requestport)
                 upstream.write(req.encode())
                 upstream.read_bytes(4, upstream_verify)
