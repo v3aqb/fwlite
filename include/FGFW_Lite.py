@@ -158,9 +158,10 @@ class ProxyHandler(tornado.web.RequestHandler):
             for key, value in self.request.headers.items():
                 s += '%s: %s\r\n' % (key, value)
             s += '\r\n'
+            s = s.encode()
             if self.request.body:
-                s += '%s\r\n\r\n' % self.request.body
-            start_tunnel(s.encode())
+                s += self.request.body + b'\r\n\r\n'
+            start_tunnel(s)
 
         def http_conntgt_d(data=None):
             s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
@@ -168,9 +169,10 @@ class ProxyHandler(tornado.web.RequestHandler):
             for key, value in self.request.headers.items():
                 s += '%s: %s\r\n' % (key, value)
             s += '\r\n'
+            s = s.encode()
             if self.request.body:
-                s += '%s\r\n\r\n' % self.request.body
-            start_tunnel(s.encode())
+                s += self.request.body + b'\r\n\r\n'
+            start_tunnel(s)
 
         def socks5_handshake(data=None):
             def socks5_auth(data=None):
@@ -185,7 +187,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                     fail()
 
             def socks5_auth_finish(data=None):
-                if data.startswith(b'\x01\x00'):  # auth pass
+                if data == b'\x01\x00':  # auth pass
                     conn_upstream()
                 else:
                     fail()
@@ -202,13 +204,13 @@ class ProxyHandler(tornado.web.RequestHandler):
                 #         req = b"\x05\x01\x00\x04" + ip
                 # else:
                 #     req = b"\x05\x01\x00\x01" + ip
-                req = b"\x05\x01\x00\x03" + chr(len(self.request.host)) + self.request.host
+                req = b"\x05\x01\x00\x03" + len(self.request.host) + self.request.host.encode()
                 req += struct.pack(">H", self.requestport)
                 upstream.write(req.encode())
                 upstream.read_bytes(4, upstream_verify)
 
             def upstream_verify(data=None):
-                if data.startswith(b'\x05\x00'):
+                if data[0:1] == b'\x05\x00':
                     if data[3] == b'\x01':
                         upstream.read_bytes(6, conn)
                     elif data[3] == b'\x03':
