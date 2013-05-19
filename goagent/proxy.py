@@ -409,12 +409,12 @@ class DNSUtil(object):
                     sock.connect((dnsserver, port))
                     data = struct.pack('>h', len(data)) + data
                     sock.send(data)
-                    rfile = sock.makefile('r', 512)
+                    rfile = sock.makefile('rb', 512)
                     data = rfile.read(2)
                     if not data:
                         logging.warning('DNSUtil._remote_resolve(dnsserver=%r, %r) return bad tcp header data=%r', qname, dnsserver, data)
                         continue
-                    data = rfile.read(struct.unpack('>h', data.encode('ascii'))[0])
+                    data = rfile.read(struct.unpack('>h', data)[0])
                     if data and not DNSUtil.is_bad_reply(data):
                         return data[2:]
                     else:
@@ -1410,7 +1410,9 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
 
         """rules match algorithm, need_forward= True or False"""
         need_forward = False
-        if host.endswith(common.GOOGLE_SITES) and host not in common.GOOGLE_WITHGAE:
+        if common.HOSTS_MATCH and any(x(self.path) for x in common.HOSTS_MATCH):
+            need_forward = True
+        elif host.endswith(common.GOOGLE_SITES) and host not in common.GOOGLE_WITHGAE:
             if self.path.startswith(('http://www.google.com/url', 'http://www.google.com.hk/url', 'https://www.google.com/url', 'https://www.google.com.hk/url')):
                 urls = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('url')
                 if urls:
@@ -1425,8 +1427,6 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
                     #http_util.dns[host] = http_util.dns.default_factory(http_util.dns_resolve(host))
                     http_util.dns[host] = list(set(common.GOOGLE_HOSTS))
                 need_forward = True
-        elif common.HOSTS_MATCH and any(x(self.path) for x in common.HOSTS_MATCH):
-            need_forward = True
 
         if need_forward:
             self.do_METHOD_FWD()
