@@ -29,7 +29,7 @@ sys.path += glob.glob('%s/*.egg' % os.path.dirname(os.path.abspath(__file__)))
 try:
     import gevent
     import gevent.monkey
-    gevent.monkey.patch_all()
+    gevent.monkey.patch_all(thread=True)
 except (ImportError, SystemError):
     gevent = None
 
@@ -104,7 +104,7 @@ class Logging(type(sys)):
         return cls(*args, **kwargs)
 
     def basicConfig(self, *args, **kwargs):
-        self.level = kwargs.get('level', self.__class__.INFO)
+        self.level = int(kwargs.get('level', self.__class__.INFO))
         if self.level > self.__class__.DEBUG:
             self.debug = self.dummy
 
@@ -500,7 +500,8 @@ class HTTPUtil(object):
         # set_ciphers as Modern Browsers
         self.ssl_context.set_ciphers(':'.join(self.cipher_suite))
         if self.ssl_validate:
-            self.ssl_context.load_cert_chain('cacert.pem')
+            self.ssl_context.verify_mode = ssl.CERT_REQUIRED
+            self.ssl_context.load_verify_locations('cacert.pem')
 
     def dns_resolve(self, host, dnsserver='', ipv4_only=True):
         iplist = self.dns.get(host)
@@ -515,25 +516,6 @@ class HTTPUtil(object):
                 iplist = [ip for ip in iplist if re.match(r'\d+\.\d+\.\d+\.\d+', ip)]
             self.dns[host] = iplist = list(set(iplist))
         return iplist
-
-    def wrap_socket(self, sock, **ssl_options):
-        if 'server_hostname' not in ssl_options:
-            return ssl.wrap_socket(sock, **ssl_options)
-        else:
-            if not getattr(ssl, 'HAS_SNI'):
-                del ssl_options['server_hostname']
-                return ssl.wrap_socket(sock, **ssl_options)
-            else:
-                context = ssl.SSLContext(ssl_options.get('ssl_version', ssl.PROTOCOL_SSLv23))
-                if 'certfile' in ssl_options:
-                    context.load_cert_chain(ssl_options['certfile'], ssl_options.get('keyfile', None))
-                if 'cert_reqs' in ssl_options:
-                    context.verify_mode = ssl_options['cert_reqs']
-                if 'ca_certs' in ssl_options:
-                    context.load_verify_locations(ssl_options['ca_certs'])
-                if 'ciphers' in ssl_options:
-                    context.set_ciphers(ssl_options['ciphers'])
-                return context.wrap_socket(sock, **ssl_options)
 
     def create_connection(self, address, timeout=None, source_address=None):
         def _create_connection(address, timeout, queobj):
@@ -1284,6 +1266,17 @@ class RangeFetch(object):
                 raise
 
 
+class LocalProxyServer(socketserver.ThreadingTCPServer):
+    """Local Proxy Server"""
+    allow_reuse_address = True
+
+    def close_request(self, request):
+        try:
+            request.close()
+        except:
+            pass
+
+
 class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
 
     bufsize = 256*1024
@@ -1441,13 +1434,15 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
             if common.HOSTS_MATCH and any(x(self.path) for x in common.HOSTS_MATCH):
                 realhost = next(common.HOSTS_MATCH[x] for x in common.HOSTS_MATCH if x(self.path)) or re.sub(r':\d+$', '', urllib.parse.urlparse(self.path).netloc)
                 logging.debug('hosts pattern mathed, url=%r realhost=%r', self.path, realhost)
-                response = http_util.request(self.command, self.path, payload, self.headers, realhost=realhost, crlf=1)
+                response = http_util.request(self.command, self.path, payload, self.headers, realhost=realhost, crlf=common.GAE_CRLF)
             else:
                 response = http_util.request(self.command, self.path, payload, self.headers, crlf=common.GAE_CRLF)
+            if not response:
+                return
+            logging.info('%s "FWD %s %s HTTP/1.1" %s %s', self.address_string(), self.command, self.path, response.status, response.headers.get('Content-Length', '-'))
             if response.status in (400, 405):
                 common.GAE_CRLF = 0
-            logging.info('%s "FWD %s %s HTTP/1.1" %s %s', self.address_string(), self.command, self.path, response.status, response.headers.get('Content-Length', '-'))
-            self.wfile.write(('HTTP/1.1 %s\r\n%s\r\n' % (response.status, ''.join('%s: %s\r\n' % (k.title(), v) for k, v in response.getheaders() if k != 'transfer-encoding'))).encode('latin-1'))
+            self.wfile.write(('HTTP/1.1 %s\r\n%s\r\n' % (response.status, ''.join('%s: %s\r\n' % (k.title(), v) for k, v in response.getheaders() if k != 'Transfer-Encoding'))).encode('latin-1'))
             while 1:
                 data = response.read(8192)
                 if not data:
@@ -1533,7 +1528,7 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
 
             if response.app_status != 200:
                 logging.info('%s "GAE %s %s HTTP/1.1" %s -', self.address_string(), self.command, self.path, response.status)
-                self.wfile.write(('HTTP/1.1 %s\r\n%s\r\n' % (response.status, ''.join('%s: %s\r\n' % (k.title(), v) for k, v in response.getheaders() if k != 'transfer-encoding'))).encode('latin-1'))
+                self.wfile.write(('HTTP/1.1 %s\r\n%s\r\n' % (response.status, ''.join('%s: %s\r\n' % (k.title(), v) for k, v in response.getheaders() if k != 'Transfer-Encoding'))).encode('latin-1'))
                 self.wfile.write(response.read())
                 response.close()
                 return
@@ -1547,7 +1542,7 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
 
             if 'Set-Cookie' in response.headers:
                 response.headers['Set-Cookie'] = self.normcookie(response.headers['Set-Cookie'])
-            self.wfile.write(('HTTP/1.1 %s\r\n%s\r\n' % (response.status, ''.join('%s: %s\r\n' % (k.title(), v) for k, v in response.getheaders() if k != 'transfer-encoding'))).encode('latin-1'))
+            self.wfile.write(('HTTP/1.1 %s\r\n%s\r\n' % (response.status, ''.join('%s: %s\r\n' % (k.title(), v) for k, v in response.getheaders() if k != 'Transfer-Encoding'))).encode('latin-1'))
 
             while 1:
                 data = response.read(8192)
@@ -1746,7 +1741,7 @@ class PAASProxyHandler(GAEProxyHandler):
 
             if 'Set-Cookie' in response.headers:
                 response.headers['Set-Cookie'] = re.sub(', ([^ =]+(?:=|$))', '\\r\\nSet-Cookie: \\1', response.headers['Set-Cookie'])
-            self.wfile.write(('HTTP/1.1 %s\r\n%s\r\n' % (response.status, ''.join('%s: %s\r\n' % (k.title(), v) for k, v in response.getheaders() if k != 'transfer-encoding'))).encode('latin-1'))
+            self.wfile.write(('HTTP/1.1 %s\r\n%s\r\n' % (response.status, ''.join('%s: %s\r\n' % (k.title(), v) for k, v in response.getheaders() if k != 'Transfer-Encoding'))).encode('latin-1'))
 
             while 1:
                 data = response.read(32768)
@@ -2015,20 +2010,18 @@ def main():
     CertUtil.check_ca()
     sys.stdout.write(common.info())
 
-    #socketserver.ThreadingTCPServer.allow_reuse_address = True
-
     if common.PAAS_ENABLE:
         host, port = common.PAAS_LISTEN.split(':')
-        server = socketserver.ThreadingTCPServer((host, int(port)), PAASProxyHandler)
+        server = LocalProxyServer((host, int(port)), PAASProxyHandler)
         threading._start_new_thread(server.serve_forever, tuple())
 
     if common.LIGHT_ENABLE:
         host, port = common.LIGHT_LISTEN.split(':')
-        server = socketserver.ThreadingTCPServer((host, int(port)), LightProxyHandler())
+        server = LocalProxyServer((host, int(port)), LightProxyHandler())
         threading._start_new_thread(server.serve_forever, tuple())
 
     if common.PAC_ENABLE:
-        server = socketserver.ThreadingTCPServer((common.PAC_IP, common.PAC_PORT), PACServerHandler)
+        server = LocalProxyServer((common.PAC_IP, common.PAC_PORT), PACServerHandler)
         threading._start_new_thread(server.serve_forever, tuple())
 
     if common.DNS_ENABLE:
@@ -2039,15 +2032,8 @@ def main():
         server.max_cache_size = common.DNS_CACHESIZE
         threading._start_new_thread(server.serve_forever, tuple())
 
-    server = socketserver.ThreadingTCPServer((common.LISTEN_IP, common.LISTEN_PORT), GAEProxyHandler)
+    server = LocalProxyServer((common.LISTEN_IP, common.LISTEN_PORT), GAEProxyHandler)
     server.serve_forever()
 
 if __name__ == '__main__':
-    try:
-        main()
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        if ctypes and os.name == 'nt':
-            ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 1)
-        raise
+    main()
