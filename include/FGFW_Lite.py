@@ -468,26 +468,31 @@ def backup():
                     filepath = '%s/%s-%s.tar.bz2' % (backupPath, backuplist[i][0], time.strftime('%Y%m%d%H%M%S'))
                     logger.info('packing %s to %s' % (backuplist[i][1], filepath))
                     pack = tarfile.open(filepath, "w:bz2")
-                    pack.add(backuplist[i][1])
-                    pack.close()
-                    logger.info('Done.')
+                    try:
+                        pack.add(backuplist[i][1])
+                    except Exception:
+                        pack.close()
+                        os.remove(filepath)
+                        logger.info('Packing %s failed.' % filepath)
+                    else:
+                        pack.close()
+                        logger.info('Done.')
         #remove old backup file
         rotation = conf.userconf.dgetint('AutoBackupConf', 'rotation', 10)
-        filelist = os.listdir(backupPath)
+        filelist = os.listdir(str(backupPath))
         filelist.sort()
         surname = ''
         group = []
         for filename in filelist:
-            if not re.search(r'\d{14}\.tar\.bz2$', filename):
-                continue
-            if filename.split('-')[0] == surname:
-                group.append(filename)
-                if len(group) > rotation:
-                    os.remove(backupPath + '/' + group.pop(0))
-            else:
-                group = []
-                group.append(filename)
-                surname = filename.split('-')[0]
+            if re.search(r'\d{14}\.tar\.bz2$', filename):
+                if filename.split('-')[0] == surname:
+                    group.append(filename)
+                    if len(group) > rotation:
+                        os.remove(backupPath + '/' + group.pop(0))
+                else:
+                    group = []
+                    group.append(filename)
+                    surname = filename.split('-')[0]
 
 
 class FGFWProxyAbs(object):
@@ -1047,9 +1052,9 @@ def main():
     while True:
         line = sys.stdin.readline().strip()
         if 'update' in line:
-            fgfw2Liteupdate(True)
+            fgfw2Liteupdate()
         elif 'backup'in line:
-            backup(True)
+            backup()
         else:
             print(line)
 
