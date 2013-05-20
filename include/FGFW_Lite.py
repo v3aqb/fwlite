@@ -588,7 +588,7 @@ class goagentabs(FGFWProxyAbs):
         proxy.read('./goagent/proxy.ini')
 
         proxy.set('gae', 'profile', conf.getconf('goagent', 'profile', 'google_cn'))
-        proxy.set('gae', 'appid', conf.getconf('goagent', 'goagentGAEAppid', 'gonggongid03|smartladder3|kawaiiushioplus|gonggongid06|smartladderhongkong|gongongid02|gonggongid10|aitaiyokani|f360uck|chromesaiko|smartladder6|bakajing600|kawaiiushio7|smartladder2|feijida600|diaoyudaobelongtochinasaiko|gonggongid08|yanlun001|kawaiiushio|gonggongid07|fangbingxingtodie|goagent-dup002|kawaiiushio6|flowerwakawaii|goagent-dup001|ilovesmartladder|chromeichi|smartladdercanada|sandaojushi3|gfwdies|sekaiwakerei|qq325862401|bakabaka300|goagent-dup003|smartladder7|gonggongid04|smartladder8|smartladderus|smartladder4|smartladderkoera|baiduchrometieba|kawaiiushio2|mzmzmz001|smartladdertaiwan|kawaiiushio4|baidufirefoxtieba|smartladderjapan|chrome360q|chromeqq|smartladderuk|kawaiiushio8|gonggongid01|smartladder1|ftencentuck|kawaiiushio9|kawaiiushio5|gonggongid09|akb48daisukilove|kawaiiushionoserve|chromelucky|window8saiko|gonggongid05|kawaiiushio1|chrometieba|gongmin700|jianiwoxiangni|yugongxisaiko|saosaiko|ippotsukobeta|smartladderchina'))
+        proxy.set('gae', 'appid', conf.getconf('goagent', 'goagentGAEAppid', 'ippotsukobeta|smartladderchina'))
         proxy.set("gae", "password", conf.getconf('goagent', 'goagentGAEpassword', ''))
         proxy.set('gae', 'obfuscate', conf.getconf('goagent', 'obfuscate', '0'))
         proxy.set('pac', 'enable', '0')
