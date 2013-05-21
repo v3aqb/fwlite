@@ -498,7 +498,8 @@ class HTTPUtil(object):
         # http://www.openssl.org/docs/apps/ciphers.html
         # openssl s_server -accept 443 -key CA.crt -cert CA.crt
         # set_ciphers as Modern Browsers
-        self.ssl_context.set_ciphers(':'.join(self.cipher_suite))
+        ciphers = random.sample(self.cipher_suite, random.randint(len(self.cipher_suite)//2, len(self.cipher_suite)))
+        self.ssl_context.set_ciphers(':'.join(ciphers))
         if self.ssl_validate:
             self.ssl_context.verify_mode = ssl.CERT_REQUIRED
             self.ssl_context.load_verify_locations('cacert.pem')
