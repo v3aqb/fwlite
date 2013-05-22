@@ -24,26 +24,33 @@ class Window(QtGui.QSystemTrayIcon):
         self.Menu()  # 右键菜单
 
     def Menu(self):
+        showToggleAction = QtGui.QAction("显示/隐藏", self, triggered=self.Message)
+        proxyOverallAction = QtGui.QAction("全局代理", self, triggered=self.Message)
+        proxyAutoAction = QtGui.QAction("自动代理", self, triggered=self.Message)
+        proxyDirectAction = QtGui.QAction("直接连接", self, triggered=self.Message)
 
-        self.minimizeAction = QtGui.QAction("最小化", self, triggered=self.Message)
-        self.maximizeAction = QtGui.QAction("最大化", self, triggered=self.Message)
-        self.restoreAction = QtGui.QAction("还原", self, triggered=self.Message)
-        self.quitAction = QtGui.QAction("退出", self, triggered=QtGui.qApp.quit)
+        trayIconMenu = QtGui.QMenu()
 
-        self.trayIconMenu = QtGui.QMenu()
+        trayIconMenu.addAction(showToggleAction)
 
-        self.trayIconMenu.addAction(self.minimizeAction)
-        self.trayIconMenu.addAction(self.maximizeAction)
-        self.trayIconMenu.addAction(self.restoreAction)
-        self.trayIconMenu.addSeparator()  # 间隔线
-        self.trayIconMenu.addAction(self.quitAction)
+        setproxyMenu = trayIconMenu.addMenu('设置代理')
+        setproxyMenu.addAction(proxyOverallAction)
+        setproxyMenu.addAction(proxyAutoAction)
+        setproxyMenu.addAction(proxyDirectAction)
 
-        self.setContextMenu(self.trayIconMenu)  # 右击托盘
+        advancedMenu = trayIconMenu.addMenu('高级')
+        advancedMenu.addAction(QtGui.QAction("软件升级", self, triggered=self.Message))
+        advancedMenu.addAction(QtGui.QAction("开机启动", self, triggered=self.Message))
+        advancedMenu.addAction(QtGui.QAction("本地规则", self, triggered=self.Message))
+        trayIconMenu.addSeparator()  # 间隔线
+        trayIconMenu.addAction(QtGui.QAction("退出", self, triggered=QtGui.qApp.quit))
+
+        self.setContextMenu(trayIconMenu)  # 右击托盘
 
     def trayClick(self, reason):
 
         if reason == QtGui.QSystemTrayIcon.DoubleClick:  # 双击
-            self.showNormal()
+            self.showMessage()
         elif reason == QtGui.QSystemTrayIcon.MiddleClick:  # 中击
             self.showMessage()
         else:
