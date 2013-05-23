@@ -591,6 +591,7 @@ class goagentabs(FGFWProxyAbs):
         proxy.set('gae', 'appid', conf.getconf('goagent', 'goagentGAEAppid', 'ippotsukobeta|smartladderchina'))
         proxy.set("gae", "password", conf.getconf('goagent', 'goagentGAEpassword', ''))
         proxy.set('gae', 'obfuscate', conf.getconf('goagent', 'obfuscate', '0'))
+        proxy.set("google_hk", "hosts", conf.getconf('goagent', 'gaehkhosts', ''))
         proxy.set('pac', 'enable', '0')
         proxy.set('paas', 'fetchserver', conf.getconf('goagent', 'paasfetchserver', ''))
         if conf.getconf('goagent', 'paasfetchserver'):
