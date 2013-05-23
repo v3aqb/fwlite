@@ -851,6 +851,7 @@ class fgfwproxy(FGFWProxyAbs):
         forcehttps = ['http://www.google.com/reader',
                       'http://www.google.com/search'
                       'http://www.google.com/url',
+                      'http://news.google.com',
                       'http://appengine.google.com',
                       'http://www.google.com.hk/url',
                       'http://www.google.com.hk/search',
