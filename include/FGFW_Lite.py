@@ -705,6 +705,7 @@ class shadowsocksabs(FGFWProxyAbs):
         server = conf.getconf('shadowsocks', 'server', '')
         server_port = conf.getconf('shadowsocks', 'server_port', '')
         password = conf.getconf('shadowsocks', 'password', 'barfoo!')
+        method = conf.getconf('shadowsocks', 'method', 'null')
         with open('./shadowsocks/config.json', 'w') as f:
             f.write('''\
 {
@@ -712,9 +713,10 @@ class shadowsocksabs(FGFWProxyAbs):
     "server_port":%s,
     "local_port":1080,
     "password":"%s",
-    "timeout":600
+    "timeout":600,
+    "method":%s
 }
-''' % (server, server_port, password))
+''' % (server, server_port, password, method))
 
 
 class gsnovaabs(FGFWProxyAbs):  # Need more work on this
