@@ -24,6 +24,7 @@ import sys
 import os
 import glob
 
+sys.version_info[0] >= 3 or sys.exit(sys.stderr.write('please install python 3.3 or later(http://python.org/getit/)\n'))
 sys.path += glob.glob('%s/*.egg' % os.path.dirname(os.path.abspath(__file__)))
 
 try:
@@ -975,7 +976,6 @@ class Common(object):
         self.USERAGENT_STRING = self.CONFIG.get('useragent', 'string')
 
         self.LOVE_ENABLE = self.CONFIG.getint('love', 'enable')
-        self.LOVE_TIMESTAMP = self.CONFIG.get('love', 'timestamp')
         self.LOVE_TIP = self.CONFIG.get('love', 'tip').encode('utf8').decode('unicode-escape').split('|')
 
         self.HOSTS = dict(self.CONFIG.items('hosts'))
@@ -987,7 +987,7 @@ class Common(object):
     def info(self):
         info = ''
         info += '------------------------------------------------------\n'
-        info += 'GoAgent Version    : %s (python/%s gevent/%s pyopenssl/%s)\n' % (__version__, sys.version[:5], getattr(gevent, '__version__', 'Disabled'), getattr(OpenSSL, '__version__', 'Disabled'))
+        info += 'GoAgent Version    : %s (python/%s %spyopenssl/%s)\n' % (__version__, sys.version[:5], gevent and 'gevent/%s ' % gevent.__version__ or '', getattr(OpenSSL, '__version__', 'Disabled'))
         info += 'Uvent Version      : %s (pyuv/%s libuv/%s)\n' % (__import__('uvent').__version__, __import__('pyuv').__version__, __import__('pyuv').LIBUV_VERSION) if all(x in sys.modules for x in ('pyuv', 'uvent')) else ''
         info += 'Listen Address     : %s:%d\n' % (self.LISTEN_IP, self.LISTEN_PORT)
         info += 'Local Proxy        : %s:%s\n' % (self.PROXY_HOST, self.PROXY_PORT) if self.PROXY_ENABLE else ''
@@ -1400,6 +1400,7 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
         host = self.headers.get('Host', '')
         if self.path[0] == '/' and host:
             self.path = 'http://%s%s' % (host, self.path)
+        self.parsed_url = urllib.parse.urlparse(self.path)
 
         if common.USERAGENT_ENABLE:
             self.headers['User-Agent'] = common.USERAGENT_STRING
@@ -1410,7 +1411,7 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
             need_forward = True
         elif host.endswith(common.GOOGLE_SITES) and host not in common.GOOGLE_WITHGAE:
             if self.path.startswith(('http://www.google.com/url', 'http://www.google.com.hk/url', 'https://www.google.com/url', 'https://www.google.com.hk/url')):
-                urls = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('url')
+                urls = urllib.parse.parse_qs(self.parsed_url.query).get('url')
                 if urls:
                     logging.debug('google search redirect to %s', urls[0])
                     self.wfile.write(('HTTP/1.1 301\r\nLocation: %s\r\n\r\n' % urls[0]).encode('latin-1'))
@@ -1435,7 +1436,7 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
             content_length = int(self.headers.get('Content-Length', 0))
             payload = self.rfile.read(content_length) if content_length else b''
             if common.HOSTS_MATCH and any(x(self.path) for x in common.HOSTS_MATCH):
-                realhost = next(common.HOSTS_MATCH[x] for x in common.HOSTS_MATCH if x(self.path)) or re.sub(r':\d+$', '', urllib.parse.urlparse(self.path).netloc)
+                realhost = next(common.HOSTS_MATCH[x] for x in common.HOSTS_MATCH if x(self.path)) or re.sub(r':\d+$', '', self.parsed_url.netloc)
                 logging.debug('hosts pattern mathed, url=%r realhost=%r', self.path, realhost)
                 response = http_util.request(self.command, self.path, payload, self.headers, realhost=realhost, crlf=common.GAE_CRLF)
             else:
@@ -1455,7 +1456,7 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
         except OSError as e:
             if e.args[0] in (errno.ECONNRESET, 10063, errno.ENAMETOOLONG):
                 logging.warn('http_util.request "%s %s" failed:%s, try addto `withgae`', self.command, self.path, e)
-                common.GOOGLE_WITHGAE.add(re.sub(r':\d+$', '', urllib.parse.urlparse(self.path).netloc))
+                common.GOOGLE_WITHGAE.add(re.sub(r':\d+$', '', self.parsed_url.netloc))
             elif e.args[0] not in (errno.ECONNABORTED, errno.EPIPE):
                 raise
         except Exception as e:
@@ -1466,7 +1467,7 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
     def do_METHOD_GAE(self):
         """GAE http urlfetch"""
         host = self.headers.get('Host', '')
-        path = urllib.parse.urlparse(self.path).path
+        path = self.parsed_url.path
         if 'Range' in self.headers:
             m = re.search('bytes=(\d+)-', self.headers['Range'])
             start = int(m.group(1) if m else 0)
@@ -1563,7 +1564,7 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
         if host.endswith(common.GOOGLE_SITES) and host not in common.GOOGLE_WITHGAE:
             self.do_CONNECT_FWD()
         else:
-            self.do_CONNECT_GAE()
+            self.do_CONNECT_AGENT()
 
     def do_CONNECT_FWD(self):
         """socket forward for http CONNECT command"""
@@ -1603,12 +1604,12 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(b'HTTP/1.1 200 OK\r\n\r\n')
             http_util.forward_socket(self.connection, remote, bufsize=self.bufsize)
 
-    def do_CONNECT_GAE(self):
+    def do_CONNECT_AGENT(self):
         """deploy fake cert to client"""
         host, _, port = self.path.rpartition(':')
         port = int(port)
         certfile = CertUtil.get_cert(host)
-        logging.info('%s "GAE %s %s:%d HTTP/1.1" - -', self.address_string(), self.command, host, port)
+        logging.info('%s "AGENT %s %s:%d HTTP/1.1" - -', self.address_string(), self.command, host, port)
         self.__realconnection = None
         self.wfile.write(b'HTTP/1.1 200 OK\r\n\r\n')
         try:
@@ -1672,8 +1673,8 @@ def paas_urlfetch(method, url, headers, payload, fetchserver, **kwargs):
     if common.PAAS_VALIDATE:
         kwargs['validate'] = 1
     metadata = 'G-Method:%s\nG-Url:%s\n%s%s' % (method, url, ''.join('G-%s:%s\n' % (k, v) for k, v in kwargs.items() if v), ''.join('%s:%s\n' % (k, v) for k, v in headers.items() if k not in skip_headers))
-    metadata = zlib.compress(metadata)[2:-4]
-    app_payload = '%s%s%s' % (struct.pack('!h', len(metadata)), metadata, payload)
+    metadata = zlib.compress(metadata.encode('latin-1'))[2:-4]
+    app_payload = b''.join((struct.pack('!h', len(metadata)), metadata, payload))
     fetchserver += '?%s' % random.random()
     response = http_util.request('POST', fetchserver, app_payload, {'Content-Length': len(app_payload)}, crlf=0)
     if not response:
@@ -1692,6 +1693,7 @@ def paas_urlfetch(method, url, headers, payload, fetchserver, **kwargs):
 class PAASProxyHandler(GAEProxyHandler):
 
     urlfetch = staticmethod(paas_urlfetch)
+    first_run_lock = threading.Lock()
 
     def first_run(self):
         if not common.PROXY_ENABLE:
@@ -1704,6 +1706,27 @@ class PAASProxyHandler(GAEProxyHandler):
             http_util.dns[fetchhost] = list(set(fethhost_iplist))
             logging.info('resolve common.PAAS_FETCHSERVER domain to iplist=%r', fethhost_iplist)
         return True
+
+    def setup(self):
+        if isinstance(self.__class__.first_run, collections.Callable):
+            try:
+                with self.__class__.first_run_lock:
+                    if isinstance(self.__class__.first_run, collections.Callable):
+                        self.first_run()
+                        self.__class__.first_run = None
+            except OSError as e:
+                logging.error('PAASProxyHandler.first_run() return %r', e)
+            except Exception as e:
+                logging.exception('PAASProxyHandler.first_run() return %r', e)
+        self.__class__.setup = http.server.BaseHTTPRequestHandler.setup
+        self.__class__.do_GET = self.__class__.do_METHOD
+        self.__class__.do_PUT = self.__class__.do_METHOD
+        self.__class__.do_POST = self.__class__.do_METHOD
+        self.__class__.do_HEAD = self.__class__.do_METHOD
+        self.__class__.do_DELETE = self.__class__.do_METHOD
+        self.__class__.do_OPTIONS = self.__class__.do_METHOD
+        self.__class__.do_CONNECT = GAEProxyHandler.do_CONNECT_AGENT
+        self.setup()
 
     def do_METHOD(self):
         try:
@@ -1757,8 +1780,6 @@ class PAASProxyHandler(GAEProxyHandler):
             if e.args[0] not in (errno.ECONNABORTED, errno.EPIPE):
                 raise
 
-    def do_CONNECT(self):
-        return GAEProxyHandler.do_CONNECT_GAE(self)
 
 
 class Autoproxy2Pac(object):
@@ -1909,14 +1930,14 @@ class DNSServer(socketserver.ThreadingUDPServer):
     timeout = 6
 
     def __init__(self, server_address, *args, **kwargs):
-        socketserver.ThreadingUDPServer.__init__(self, server_address, self.__class__.RequestHandlerClass, *args, **kwargs)
+        socketserver.ThreadingUDPServer.__init__(self, server_address, self.handle, *args, **kwargs)
         self._writelock = threading.Semaphore()
         self.cache = {}
 
     def handle(self, request, address, server):
         data, server_socket = request
         reqid = data[:2]
-        domain = data[12:data.find('\x00', 12)]
+        domain = data[12:data.find(b'\x00', 12)].decode('latin-1')
         if len(self.cache) > self.max_cache_size:
             self.cache.clear()
         if domain not in self.cache:
@@ -1952,28 +1973,14 @@ def pre_start():
             pass
     if ctypes and os.name == 'nt':
         ctypes.windll.kernel32.SetConsoleTitleW('GoAgent v%s' % __version__)
-        if not common.LOVE_TIMESTAMP.strip():
-            sys.stdout.write('Double click addto-startup.vbs could add goagent to autorun programs. :)\n')
         if not common.LISTEN_VISIBLE:
             ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
         else:
             ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 1)
-        if common.LOVE_ENABLE:
-            if common.LOVE_TIMESTAMP.strip():
-                common.LOVE_TIMESTAMP = int(common.LOVE_TIMESTAMP)
-            else:
-                common.LOVE_TIMESTAMP = int(time.time())
-                with open(common.CONFIG_FILENAME, 'w') as fp:
-                    common.CONFIG.set('love', 'timestamp', int(time.time()))
-                    common.CONFIG.write(fp)
-            if time.time() - common.LOVE_TIMESTAMP > 86400 and random.randint(1, 10) > 5:
-                title = ctypes.create_unicode_buffer(1024)
-                ctypes.windll.kernel32.GetConsoleTitleW(ctypes.byref(title), len(title)-1)
-                ctypes.windll.kernel32.SetConsoleTitleW('%s %s' % (title.value, random.choice(common.LOVE_TIP)))
-                with open(common.CONFIG_FILENAME, 'w') as fp:
-                    common.CONFIG.set('love', 'timestamp', str(int(time.time())))
-                    common.CONFIG.write(fp)
-
+        if common.LOVE_ENABLE and random.randint(1, 100) <= 5:
+            title = ctypes.create_unicode_buffer(1024)
+            ctypes.windll.kernel32.GetConsoleTitleW(ctypes.byref(title), len(title)-1)
+            ctypes.windll.kernel32.SetConsoleTitleW('%s %s' % (title.value, random.choice(common.LOVE_TIP)))
         blacklist = {'360safe': False,
                      'QQProtect': False, }
         softwares = [k for k, v in blacklist.items() if v]
