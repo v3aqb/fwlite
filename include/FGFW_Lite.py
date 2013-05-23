@@ -557,7 +557,7 @@ class FGFWProxyAbs(object):
             logger.info(path + ' Not modified ' + str(e))
         else:
             if r.status_code == 200:
-                with open(path, 'w') as localfile:
+                with open(path, 'wb') as localfile:
                     localfile.write(r.content)
                 with conf.iolock:
                     conf.presets.set('Update', path.split('/')[-1] + '.ver', str(r.headers.get('etag')))
@@ -573,9 +573,9 @@ class goagentabs(FGFWProxyAbs):
         FGFWProxyAbs.__init__(self)
 
     def _config(self):
-        self.filelist = [['https://fgfw-lite.googlecode.com/git/goagent/proxy.py', './goagent/proxy.py'],
-                        ['https://fgfw-lite.googlecode.com/git/goagent/proxy.ini', './goagent/proxy.ini'],
-                        ['https://fgfw-lite.googlecode.com/git/goagent/cacert.pem', './goagent/cacert.pem']
+        self.filelist = [['https://github.com/goagent/goagent/raw/3.0/local/proxy.py', './goagent/proxy.py'],
+                        ['https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.ini'],
+                        ['https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem']
                          ]
         self.cmd = PYTHON + ' d:/FGFW_Lite/goagent/proxy.py'
         self.enable = conf.getconfbool('goagent', 'enable', True)
