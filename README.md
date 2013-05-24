@@ -1,4 +1,4 @@
-﻿a proxy server based on tornado framework, support parent proxy.
+﻿a proxy server based on tornado framework, support parent proxy, and understands Autoproxy rules.
 
 Just for fun.
 
