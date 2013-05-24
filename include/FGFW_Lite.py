@@ -23,12 +23,14 @@ import time
 import requests
 if sys.version[0] == '2':
     from ConfigParser import SafeConfigParser
+    import _winreg as winreg
     import ipaddr
     ip_address = ipaddr.IPAddress
     ip_network = ipaddr.IPNetwork
     PYTHON = 'd:/FGFW_Lite/include/Python27/python27.exe'
 else:
     from configparser import SafeConfigParser
+    import winreg
     import ipaddress
     ip_address = ipaddress.ip_address
     ip_network = ipaddress.ip_network
@@ -1053,9 +1055,7 @@ def function():
 
 
 class Window(QtGui.QSystemTrayIcon):
-
     def __init__(self):
-
         super(Window, self).__init__()
 
         icon = QtGui.QIcon("./include/logo.png")
@@ -1063,9 +1063,7 @@ class Window(QtGui.QSystemTrayIcon):
         self.show()
 
         self.activated.connect(self.trayClick)  # 点击托盘
-
         self.setToolTip("托盘小程序")  # 托盘信息
-
         self.Menu()  # 右键菜单
 
     def Menu(self):
@@ -1093,7 +1091,6 @@ class Window(QtGui.QSystemTrayIcon):
         self.setContextMenu(trayIconMenu)  # 右击托盘
 
     def trayClick(self, reason):
-
         if reason == QtGui.QSystemTrayIcon.DoubleClick:  # 双击
             self.Message()
         elif reason == QtGui.QSystemTrayIcon.MiddleClick:  # 中击
