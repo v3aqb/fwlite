@@ -1004,7 +1004,7 @@ class Config(object):
         self.presets = SSafeConfigParser()
         self.userconf = SSafeConfigParser()
         self.reload()
-        self.UPDATE_INTV = 24
+        self.UPDATE_INTV = 6
         self.BACKUP_INTV = 24
 
     def reload(self):

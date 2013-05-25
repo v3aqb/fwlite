@@ -1,6 +1,5 @@
 @@||renren.com
-@@||xnimg.cn
-@@||sinaimg.cn
+@@||.cn
 @@||weibo.com
 ||web.tweetdeck.com
 ||huluim.com
