@@ -21,27 +21,28 @@ from subprocess import Popen
 import shlex
 import time
 import requests
+import re
 if sys.version[0] == '2':
-    from ConfigParser import SafeConfigParser
+    import ConfigParser as configparser
     import _winreg as winreg
     import ipaddr
     ip_address = ipaddr.IPAddress
     ip_network = ipaddr.IPNetwork
     PYTHON = 'd:/FGFW_Lite/include/Python27/python27.exe'
 else:
-    from configparser import SafeConfigParser
+    import configparser
     import winreg
     import ipaddress
     ip_address = ipaddress.ip_address
     ip_network = ipaddress.ip_network
     PYTHON = 'd:/FGFW_Lite/include/Python33/python33.exe'
+configparser.RawConfigParser.OPTCRE = re.compile(r'(?P<option>[^=\s][^=]*)\s*(?P<vi>[=])\s*(?P<value>.*)$')
 from threading import Thread, RLock, Timer
 import atexit
 import base64
 import socket
 import struct
 import random
-import re
 import tornado.ioloop
 import tornado.iostream
 import tornado.httpserver
@@ -589,7 +590,7 @@ class goagentabs(FGFWProxyAbs):
             fgfwproxy.addparentproxy('goagnet', ('http', '127.0.0.1', 8087, None, None))
 
         self.enableupdate = conf.getconfbool('goagent', 'update', True)
-        proxy = SSafeConfigParser()
+        proxy = SConfigParser()
         proxy.read('./goagent/proxy.ini')
 
         proxy.set('gae', 'profile', conf.getconf('goagent', 'profile', 'google_cn'))
@@ -737,7 +738,7 @@ class gsnovaabs(FGFWProxyAbs):  # Need more work on this
         if self.enable:
             fgfwproxy.addparentproxy('gsnova-gae', ('http', '127.0.0.1', 48101, None, None))
         self.enableupdate = conf.getconfbool('gsnova', 'update', False)
-        proxy = SSafeConfigParser()
+        proxy = SConfigParser()
         proxy.optionxform = str
         proxy.read('./gsnova/gsnova.conf')
 
@@ -971,10 +972,10 @@ class fgfwproxy(FGFWProxyAbs):
                 rfile.write('%s/%s\n' % (ip, mask2))
 
 
-class SSafeConfigParser(SafeConfigParser):
+class SConfigParser(configparser.ConfigParser):
     """docstring for SSafeConfigParser"""
     def __init__(self, arg=''):
-        SafeConfigParser.__init__(self)
+        super(SConfigParser, self).__init__()
         self.arg = arg
 
     def dget(self, section, option, default=None):
@@ -991,7 +992,7 @@ class SSafeConfigParser(SafeConfigParser):
 
     def get(self, section, option, raw=False, vars=None):
         try:
-            value = SafeConfigParser.get(self, section, option, raw=False, vars=None)
+            value = configparser.ConfigParser.get(self, section, option, raw=False, vars=None)
             if value == '' or value is None:
                 raise Exception
         except Exception:
@@ -1003,8 +1004,8 @@ class SSafeConfigParser(SafeConfigParser):
 class Config(object):
     def __init__(self):
         self.iolock = RLock()
-        self.presets = SSafeConfigParser()
-        self.userconf = SSafeConfigParser()
+        self.presets = SConfigParser()
+        self.userconf = SConfigParser()
         self.reload()
         self.UPDATE_INTV = 6
         self.BACKUP_INTV = 24
