@@ -57,6 +57,7 @@ try:
     from PySide import QtGui
 except Exception:
     QtGui = None
+GUI = False
 
 
 class ProxyHandler(tornado.web.RequestHandler):
@@ -784,6 +785,7 @@ class fgfwproxy(FGFWProxyAbs):
         self.filelist = [['https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './include/gfwlist.txt'],
                          ['http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './include/delegated-apnic-latest'],
                          ['https://fgfw-lite.googlecode.com/git/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
+                         ['https://fgfw-lite.googlecode.com/git/include/cloud.txt', './include/cloud.txt'],
                          ]
         #self.cmd = 'd:/FGFW_Lite/include/Python33/python33.exe d:/FGFW_Lite/include/fgfwproxy.py'
         self.enable = conf.getconfbool('fgfwproxy', 'enable', True)
@@ -1068,6 +1070,7 @@ class Window(QtGui.QSystemTrayIcon):
 
     def Menu(self):
         showToggleAction = QtGui.QAction("显示/隐藏", self, triggered=self.Message)
+        reloadAction = QtGui.QAction("重新载入", self, triggered=self.Message)
         proxyOverallAction = QtGui.QAction("全局代理", self, triggered=self.Message)
         proxyAutoAction = QtGui.QAction("自动代理", self, triggered=self.Message)
         proxyDirectAction = QtGui.QAction("直接连接", self, triggered=self.Message)
@@ -1075,6 +1078,7 @@ class Window(QtGui.QSystemTrayIcon):
         trayIconMenu = QtGui.QMenu()
 
         trayIconMenu.addAction(showToggleAction)
+        trayIconMenu.addAction(reloadAction)
 
         setproxyMenu = trayIconMenu.addMenu('设置代理')
         setproxyMenu.addAction(proxyOverallAction)
@@ -1128,14 +1132,17 @@ def main():
     updatedaemon = Thread(target=updateNbackup)
     updatedaemon.daemon = True
     updatedaemon.start()
-    while True:
-        line = sys.stdin.readline().strip()
-        if 'update' in line:
-            fgfw2Liteupdate()
-        elif 'backup'in line:
-            backup()
-        else:
-            print(line)
+    if QtGui and GUI is True:
+        gui()
+    else:
+        while True:
+            line = sys.stdin.readline().strip()
+            if 'update' in line:
+                fgfw2Liteupdate()
+            elif 'backup'in line:
+                backup()
+            else:
+                print(line)
 
 
 if __name__ == "__main__":
