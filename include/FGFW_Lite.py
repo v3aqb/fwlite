@@ -4,10 +4,8 @@
 # Name:        FGFW_Lite.py
 # Purpose:     Fuck the Great Firewall of China
 #
-# Author:      Jiang Chao
+# Contributer: Jiang Chao <sgzz.cj@gmail.com>
 #
-# Created:     08/03/2013
-# Copyright:   (c) 2013 Jiang Chao <sgzz.cj@gmail.com>
 # License:     The GPLv2 License
 #-------------------------------------------------------------------------------
 from __future__ import print_function
