@@ -149,24 +149,16 @@ class ProxyHandler(tornado.web.RequestHandler):
             client.write(b'HTTP/1.1 200 Connection established\r\n\r\n')
 
         def http_conntgt(data=None):
-            s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
-            if self.ppusername:
+            if self.pphost:
+                s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
+            else:
+                s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
+            self.request.headers['Connection'] = 'close'
+            for key, value in self.request.headers.items():
+                s += '%s: %s\r\n' % (key, value)
+            if not 'Proxy-Authorization' in self.request.headers and self.ppusername:
                 a = '%s:%s' % (self.ppusername, self.pppassword)
-                self.request.headers['Authorization'] = 'Basic %s\r\n' % base64.b64encode(a)
-            self.request.headers['Connection'] = 'close'
-            for key, value in self.request.headers.items():
-                s += '%s: %s\r\n' % (key, value)
-            s += '\r\n'
-            s = s.encode()
-            if self.request.body:
-                s += self.request.body + b'\r\n\r\n'
-            start_tunnel(s)
-
-        def http_conntgt_d(data=None):
-            s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
-            self.request.headers['Connection'] = 'close'
-            for key, value in self.request.headers.items():
-                s += '%s: %s\r\n' % (key, value)
+                self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             s += '\r\n'
             s = s.encode()
             if self.request.body:
@@ -224,7 +216,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                 if self.request.method == 'CONNECT':
                     start_ssltunnel()
                 else:
-                    http_conntgt_d()
+                    self.pphost = None
+                    http_conntgt()
 
             def fail():
                 client.write(b'HTTP/1.1 500 socks5 proxy Connection Failed.\r\n\r\n')
@@ -246,7 +239,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
                 upstream = tornado.iostream.IOStream(s)
-                upstream.connect((self.request.host.split(':')[0], int(self.requestport)), http_conntgt_d)
+                upstream.connect((self.request.host.split(':')[0], int(self.requestport)), http_conntgt)
         elif self.pptype == 'http':
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             upstream = tornado.iostream.IOStream(s)
