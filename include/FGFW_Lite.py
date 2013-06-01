@@ -52,11 +52,6 @@ if ' ' in WORKINGDIR:
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-try:
-    from PySide import QtGui
-except Exception:
-    QtGui = None
-GUI = False
 
 
 class ProxyHandler(tornado.web.RequestHandler):
@@ -548,15 +543,15 @@ class FGFWProxyAbs(object):
                 Thread(target=self.updateViaHTTP, args=(url, etag, path)).start()
 
     def updateViaHTTP(self, url, etag, path):
-        with consoleLock:
-            logger.info('updating ' + path)
-            proxy = {'http': 'http://127.0.0.1:8118',
-                     'https': 'http://127.0.0.1:8118'
-                     }
-            headers = {'If-None-Match': etag,
-                       }
+        logger.info('URL:' + url)
+        logger.info('etag:' + etag)
+        logger.info('path:' + path)
+        proxy = {'http': 'http://127.0.0.1:8118',
+                 }
+        header = {'If-None-Match': etag,
+                  }
         try:
-            r = requests.get(url, proxies=proxy, headers=headers)
+            r = requests.get(url, proxies=proxy, headers=header)
         except Exception as e:
             logger.info(path + ' Not modified ' + str(e))
         else:
@@ -578,8 +573,8 @@ class goagentabs(FGFWProxyAbs):
 
     def _config(self):
         self.filelist = [['https://github.com/goagent/goagent/raw/3.0/local/proxy.py', './goagent/proxy.py'],
-                        ['https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.ini'],
-                        ['https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem']
+                         ['https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.ini'],
+                         ['https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem']
                          ]
         self.cmd = PYTHON + ' d:/FGFW_Lite/goagent/proxy.py'
         self.enable = conf.getconfbool('goagent', 'enable', True)
@@ -1055,63 +1050,6 @@ def function():
     conf.confsave()
 
 
-class Window(QtGui.QSystemTrayIcon):
-    def __init__(self):
-        super(Window, self).__init__()
-
-        icon = QtGui.QIcon("./include/logo.png")
-        self.setIcon(icon)
-        self.show()
-
-        self.activated.connect(self.trayClick)  # 点击托盘
-        self.setToolTip("托盘小程序")  # 托盘信息
-        self.Menu()  # 右键菜单
-
-    def Menu(self):
-        showToggleAction = QtGui.QAction("显示/隐藏", self, triggered=self.Message)
-        reloadAction = QtGui.QAction("重新载入", self, triggered=self.Message)
-        proxyOverallAction = QtGui.QAction("全局代理", self, triggered=self.Message)
-        proxyAutoAction = QtGui.QAction("自动代理", self, triggered=self.Message)
-        proxyDirectAction = QtGui.QAction("直接连接", self, triggered=self.Message)
-
-        trayIconMenu = QtGui.QMenu()
-
-        trayIconMenu.addAction(showToggleAction)
-        trayIconMenu.addAction(reloadAction)
-
-        setproxyMenu = trayIconMenu.addMenu('设置代理')
-        setproxyMenu.addAction(proxyOverallAction)
-        setproxyMenu.addAction(proxyAutoAction)
-        setproxyMenu.addAction(proxyDirectAction)
-
-        advancedMenu = trayIconMenu.addMenu('高级')
-        advancedMenu.addAction(QtGui.QAction("软件升级", self, triggered=self.Message))
-        advancedMenu.addAction(QtGui.QAction("开机启动", self, triggered=self.Message))
-        advancedMenu.addAction(QtGui.QAction("本地规则", self, triggered=self.Message))
-        trayIconMenu.addSeparator()  # 间隔线
-        trayIconMenu.addAction(QtGui.QAction("退出", self, triggered=QtGui.qApp.quit))
-
-        self.setContextMenu(trayIconMenu)  # 右击托盘
-
-    def trayClick(self, reason):
-        if reason == QtGui.QSystemTrayIcon.DoubleClick:  # 双击
-            self.Message()
-        elif reason == QtGui.QSystemTrayIcon.MiddleClick:  # 中击
-            self.Message()
-        else:
-            pass
-
-    def Message(self):
-        icon = QtGui.QSystemTrayIcon.Information
-        self.showMessage("提示信息", "点我干嘛？", icon)
-
-
-def gui():
-    app = QtGui.QApplication(sys.argv)
-    Window()
-    sys.exit(app.exec_())
-
-
 def main():
     if conf.getconfbool('fgfwproxy', 'enable', True):
         fgfwproxy()
@@ -1131,17 +1069,14 @@ def main():
     updatedaemon = Thread(target=updateNbackup)
     updatedaemon.daemon = True
     updatedaemon.start()
-    if QtGui and GUI is True:
-        gui()
-    else:
-        while True:
-            line = sys.stdin.readline().strip()
-            if 'update' in line:
-                fgfw2Liteupdate()
-            elif 'backup'in line:
-                backup()
-            else:
-                print(line)
+    while True:
+        line = sys.stdin.readline().strip()
+        if 'update' in line:
+            fgfw2Liteupdate()
+        elif 'backup'in line:
+            backup()
+        else:
+            print(line)
 
 
 if __name__ == "__main__":
