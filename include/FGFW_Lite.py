@@ -20,21 +20,6 @@ import shlex
 import time
 import requests
 import re
-if sys.version[0] == '2':
-    import ConfigParser as configparser
-    import _winreg as winreg
-    import ipaddr
-    ip_address = ipaddr.IPAddress
-    ip_network = ipaddr.IPNetwork
-    PYTHON = 'd:/FGFW_Lite/include/Python27/python27.exe'
-else:
-    import configparser
-    import winreg
-    import ipaddress
-    ip_address = ipaddress.ip_address
-    ip_network = ipaddress.ip_network
-    PYTHON = 'd:/FGFW_Lite/include/Python33/python33.exe'
-configparser.RawConfigParser.OPTCRE = re.compile(r'(?P<option>[^=\s][^=]*)\s*(?P<vi>[=])\s*(?P<value>.*)$')
 from threading import Thread, RLock, Timer
 import atexit
 import base64
@@ -45,10 +30,39 @@ import tornado.ioloop
 import tornado.iostream
 import tornado.httpserver
 import tornado.web
+
+try:
+    import configparser
+except ImportError:
+    import ConfigParser as configparser
+finally:
+    configparser.RawConfigParser.OPTCRE = re.compile(r'(?P<option>[^=\s][^=]*)\s*(?P<vi>[=])\s*(?P<value>.*)$')
+try:
+    import winreg
+except ImportError:
+    import _winreg as winreg
+try:
+    import ipaddress
+    ip_address = ipaddress.ip_address
+    ip_network = ipaddress.ip_network
+except ImportError:
+    import ipaddr
+    ip_address = ipaddr.IPAddress
+    ip_network = ipaddr.IPNetwork
+
 WORKINGDIR = os.getcwd().replace('\\', '/')
 if ' ' in WORKINGDIR:
     print('no spacebar allowed in path')
     sys.exit()
+
+if sys.platform.startswith('win'):
+    if sys.version[0] == '2':
+        PYTHON = 'd:/FGFW_Lite/include/Python27/python27.exe'
+    else:
+        PYTHON = 'd:/FGFW_Lite/include/Python33/python33.exe'
+else:
+    PYTHON = '/usr/bin/env python3'
+
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
