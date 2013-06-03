@@ -38,10 +38,6 @@ except ImportError:
 finally:
     configparser.RawConfigParser.OPTCRE = re.compile(r'(?P<option>[^=\s][^=]*)\s*(?P<vi>[=])\s*(?P<value>.*)$')
 try:
-    import winreg
-except ImportError:
-    import _winreg as winreg
-try:
     import ipaddress
     ip_address = ipaddress.ip_address
     ip_network = ipaddress.ip_network
