@@ -1365,6 +1365,14 @@ class LocalProxyServer(socketserver.ThreadingTCPServer):
         except:
             pass
 
+    def finish_request(self, request, client_address):
+        """make python2 SocketServer happy"""
+        try:
+            return socketserver.ThreadingTCPServer.finish_request(self, request, client_address)
+        except (socket.error, ssl.SSLError) as e:
+            if e.args[0] not in (errno.ECONNABORTED, errno.EPIPE):
+                raise
+
 
 class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
 
@@ -1564,12 +1572,14 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
         """GAE http urlfetch"""
         host = self.headers.get('Host', '')
         path = self.parsed_url.path
+        range_in_query = 'range=' in self.parsed_url.query
+        special_range = (any(x(host) for x in common.AUTORANGE_HOSTS_MATCH) or path.endswith(common.AUTORANGE_ENDSWITH)) and not path.endswith(common.AUTORANGE_NOENDSWITH)
         if 'Range' in self.headers:
             m = re.search('bytes=(\d+)-', self.headers['Range'])
             start = int(m.group(1) if m else 0)
             self.headers['Range'] = 'bytes=%d-%d' % (start, start+common.AUTORANGE_MAXSIZE-1)
             logging.info('autorange range=%r match url=%r', self.headers['Range'], self.path)
-        elif 'range=' not in self.parsed_url.query and (any(x(host) for x in common.AUTORANGE_HOSTS_MATCH) or path.endswith(common.AUTORANGE_ENDSWITH)) and not path.endswith(common.AUTORANGE_NOENDSWITH):
+        elif not range_in_query and special_range:
             try:
                 logging.info('Found [autorange]endswith match url=%r', self.path)
                 m = re.search('bytes=(\d+)-', self.headers.get('Range', ''))
@@ -1588,6 +1598,7 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
         response = None
         errors = []
         headers_sent = False
+        fetchserver = common.GAE_FETCHSERVER
         for retry in range(common.FETCHMAX_LOCAL):
             try:
                 content_length = 0
@@ -1596,7 +1607,7 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
                     kwargs['password'] = common.GAE_PASSWORD
                 if common.GAE_VALIDATE:
                     kwargs['validate'] = 1
-                response = self.urlfetch(self.command, self.path, self.headers, payload, common.GAE_FETCHSERVER, **kwargs)
+                response = self.urlfetch(self.command, self.path, self.headers, payload, fetchserver, **kwargs)
                 if not response and retry == common.FETCHMAX_LOCAL-1:
                     html = message_html('502 URLFetch failed', 'Local URLFetch %r failed' % self.path, str(errors))
                     self.wfile.write(b'HTTP/1.0 502\r\nContent-Type: text/html\r\n\r\n' + html.encode('utf-8'))
@@ -1616,6 +1627,13 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
                 # bad request, disable CRLF injection
                 if response.app_status in (400, 405):
                     http_util.crlf = 0
+                    continue
+                if response.app_status == 500 and range_in_query and special_range:
+                    fetchserver = re.sub(r'//\w+\.appspot\.com', '//%s.appspot.com' % random.choice(common.GAE_APPIDS), fetchserver)
+                    logging.warning('500 with range in query, trying another APPID')
+                    # logging.warning('Temporary fetchserver: %s -> %s' % (common.GAE_FETCHSERVER, fetchserver))
+                    # retry -= 1
+                    # logging.warning('retry: %s' % retry)
                     continue
                 if response.app_status != 200 and retry == common.FETCHMAX_LOCAL-1:
                     logging.info('%s "GAE %s %s HTTP/1.1" %s -', self.address_string(), self.command, self.path, response.status)
