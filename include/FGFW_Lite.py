@@ -46,10 +46,11 @@ except ImportError:
     ip_address = ipaddr.IPAddress
     ip_network = ipaddr.IPNetwork
 
-WORKINGDIR = os.getcwd().replace('\\', '/')
+WORKINGDIR = '/'.join(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')).split('/')[:-1])
 if ' ' in WORKINGDIR:
     print('no spacebar allowed in path')
     sys.exit()
+os.chdir(WORKINGDIR)
 
 if sys.platform.startswith('win'):
     if sys.version[0] == '2':
