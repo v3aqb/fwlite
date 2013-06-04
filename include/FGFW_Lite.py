@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 #-*- coding: UTF-8 -*-
 #-------------------------------------------------------------------------------
 # Name:        FGFW_Lite.py
@@ -1081,6 +1081,7 @@ def main():
             backup()
         else:
             print(line)
+        time.sleep(0.1)
 
 
 if __name__ == "__main__":
