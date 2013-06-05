@@ -18,7 +18,6 @@ import os
 from subprocess import Popen
 import shlex
 import time
-import requests
 import re
 from threading import Thread, RLock, Timer
 import atexit
@@ -30,7 +29,10 @@ import tornado.ioloop
 import tornado.iostream
 import tornado.httpserver
 import tornado.web
-
+try:
+    import requests
+except ImportError:
+    requests = None
 try:
     import configparser
 except ImportError:
@@ -286,9 +288,12 @@ class autoproxy_rule(object):
     DOMAIN = 0
     URI = 1
     KEYWORD = 2
-    OVERRIDE_DOMAIN = 3
-    OVERRIDE_URI = 4
-    OVERRIDE_KEYWORD = 5
+    REGEX = 3
+    OVERRIDE_DOMAIN = 4
+    OVERRIDE_URI = 5
+    OVERRIDE_KEYWORD = 6
+    OVERRIDE_REGEX = 7
+
 
     def __init__(self, arg):
         super(autoproxy_rule, self).__init__()
@@ -299,11 +304,10 @@ class autoproxy_rule(object):
         self.rule = arg.strip()
         if self.rule == '' or\
                 self.rule.startswith('!') or\
-                self.rule.startswith('[') or\
-                self.rule.startswith('/'):
+                self.rule.startswith('['):
             raise ValueError("invalid autoproxy_rule")
         self.__type, self.__ptrnlst = self.__autopxy_rule_parse(self.rule)
-        if self.__type >= autoproxy_rule.OVERRIDE_DOMAIN:
+        if self.__type >= self.OVERRIDE_DOMAIN:
             self.override = True
         else:
             self.override = False
@@ -312,21 +316,26 @@ class autoproxy_rule(object):
         def parse(rule):
             if rule.startswith('||'):
                 result = rule.replace('||', '').replace('/', '')
-                return (autoproxy_rule.DOMAIN, result.split('*'))
+                return (self.DOMAIN, result.split('*'))
 
             elif rule.startswith('|'):
                 result = rule.replace('|', '')
-                return (autoproxy_rule.URI, result.split('*'))
+                return (self.URI, result.split('*'))
+
+            elif rule.startswith('/'):
+                return (self.REGEX, [re.compile(rule[1:-1]),])
 
             else:
-                return (autoproxy_rule.KEYWORD, rule.split('*'))
+                return (self.KEYWORD, rule.split('*'))
 
         if rule.startswith('@@||'):
-            return (autoproxy_rule.OVERRIDE_DOMAIN, parse(rule.replace('@@', ''))[1])
+            return (self.OVERRIDE_DOMAIN, parse(rule.replace('@@', ''))[1])
         elif rule.startswith('@@|'):
-            return (autoproxy_rule.OVERRIDE_URI, parse(rule.replace('@@', ''))[1])
+            return (self.OVERRIDE_URI, parse(rule.replace('@@', ''))[1])
+        elif rule.startswith('@@/'):
+            return (self.OVERRIDE_REGEX, parse(rule.replace('@@', ''))[1])
         elif rule.startswith('@@'):
-            return (autoproxy_rule.OVERRIDE_KEYWORD, parse(rule.replace('@@', ''))[1])
+            return (self.OVERRIDE_KEYWORD, parse(rule.replace('@@', ''))[1])
         else:
             return parse(rule)
 
@@ -359,27 +368,37 @@ class autoproxy_rule(object):
                     return False
             return True
 
+        def _match_regex(uri=url, index=0):
+            if ptrnlst[0].match(uri):
+                return True
+            return False
+
         if domain is None:
             domain = url.split('/')[2].split(':')[0]
-        if self.__type is autoproxy_rule.DOMAIN:
+
+        if self.__type is self.DOMAIN:
             return _match_domain()
-        elif self.__type is autoproxy_rule.URI:
+        elif self.__type is self.URI:
             if url.startswith('https://'):
                 if self.rule.startswith('|https://'):
                     return _match_uri()
                 return False
             return _match_uri()
-        elif self.__type is autoproxy_rule.KEYWORD:
+        elif self.__type is self.KEYWORD:
             if url.startswith('https://'):
                 return False
             return _match_keyword()
+        elif self.__type is self.REGEX:
+            return _match_regex()
 
-        elif self.__type is autoproxy_rule.OVERRIDE_DOMAIN:
+        elif self.__type is self.OVERRIDE_DOMAIN:
             return _match_domain()
-        elif self.__type is autoproxy_rule.OVERRIDE_URI:
+        elif self.__type is self.OVERRIDE_URI:
             return _match_uri()
-        elif self.__type is autoproxy_rule.OVERRIDE_KEYWORD:
+        elif self.__type is self.OVERRIDE_KEYWORD:
             return _match_keyword()
+        elif self.__type is self.OVERRIDE_REGEX:
+            return _match_regex()
 
 
 def run_proxy(port, start_ioloop=True):
