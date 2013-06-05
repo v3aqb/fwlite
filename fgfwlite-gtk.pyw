@@ -82,10 +82,10 @@ try:
     import gtk
     gtk.gdk.threads_init()
 except Exception:
-    sys.exit(os.system(u'gdialog --title "GoAgent GTK" --msgbox "\u8bf7\u5b89\u88c5 python-gtk2" 15 60'.encode(sys.getfilesystemencoding() or sys.getdefaultencoding(), 'replace')))
+    sys.exit(os.system(u'gdialog --title "FGFW-Lite GTK" --msgbox "\u8bf7\u5b89\u88c5 python-gtk2" 15 60'.encode(sys.getfilesystemencoding() or sys.getdefaultencoding(), 'replace')))
 try:
     import pynotify
-    pynotify.init('GoAgent Notify')
+    pynotify.init('FGFW-Lite Notify')
 except ImportError:
     pynotify = None
 try:
@@ -113,8 +113,8 @@ def drop_desktop():
 #!/usr/bin/env xdg-open
 [Desktop Entry]
 Type=Application
-Name=GoAgent GTK
-Comment=GoAgent GTK Launcher
+Name=FGFW-Lite GTK
+Comment=FGFW-Lite GTK Launcher
 Categories=Network;Proxy;
 Exec=/usr/bin/env python "%s"
 Icon=%s/goagent-logo.png
@@ -123,7 +123,7 @@ StartupNotify=true
 ''' % (filename, dirname)
     for dirname in map(os.path.expanduser, ['~/Desktop', u'~/桌面']):
         if os.path.isdir(dirname):
-            filename = os.path.join(dirname, 'goagent-gtk.desktop')
+            filename = os.path.join(dirname, 'fgfwlite-gtk.desktop')
             with open(filename, 'w') as fp:
                 fp.write(DESKTOP_FILE)
             os.chmod(filename, 0755)
@@ -133,9 +133,9 @@ def should_visible():
     import ConfigParser
     ConfigParser.RawConfigParser.OPTCRE = re.compile(r'(?P<option>[^=\s][^=]*)\s*(?P<vi>[=])\s*(?P<value>.*)$')
     config = ConfigParser.ConfigParser()
-    config.read('proxy.ini')
+    config.read('./goagent/proxy.ini')
     visible = config.has_option('listen', 'visible') and config.getint('listen', 'visible')
-    return visible
+    return False
 
 #gtk.main_quit = lambda: None
 #appindicator = None
@@ -143,9 +143,10 @@ def should_visible():
 
 class GoAgentGTK:
 
-    command = ['/usr/bin/env', 'python', 'proxy.py']
-    message = u'GoAgent已经启动，单击托盘图标可以最小化'
-    fail_message = u'GoAgent启动失败，请查看控制台窗口的错误信息。'
+    command = ['/usr/bin/env', 'python', './include/FGFW_Lite.py']
+    message = u'FGFW-Lite已经启动，单击托盘图标可以最小化'
+    message = None
+    fail_message = u'FGFW-Lite启动失败，请查看控制台窗口的错误信息。'
 
     def __init__(self, window, terminal):
         self.window = window
@@ -174,7 +175,7 @@ class GoAgentGTK:
         self.window.set_icon_from_file(logo_filename)
 
         if appindicator:
-            self.trayicon = appindicator.Indicator('GoAgent', 'indicator-messages', appindicator.CATEGORY_APPLICATION_STATUS)
+            self.trayicon = appindicator.Indicator('FGFW-Lite', 'indicator-messages', appindicator.CATEGORY_APPLICATION_STATUS)
             self.trayicon.set_status(appindicator.STATUS_ACTIVE)
             self.trayicon.set_attention_icon('indicator-messages-new')
             self.trayicon.set_icon(logo_filename)
@@ -184,14 +185,12 @@ class GoAgentGTK:
             self.trayicon.set_from_file(logo_filename)
             self.trayicon.connect('popup-menu', lambda i, b, t: self.make_menu().popup(None, None, gtk.status_icon_position_menu, b, t, self.trayicon))
             self.trayicon.connect('activate', self.show_hide_toggle)
-            self.trayicon.set_tooltip('GoAgent')
+            self.trayicon.set_tooltip('FGFW-Lite')
             self.trayicon.set_visible(True)
 
     def make_menu(self):
         menu = gtk.Menu()
-        itemlist = [(u'\u663e\u793a', self.on_show),
-                    (u'\u9690\u85cf', self.on_hide),
-                    (u'\u505c\u6b62', self.on_stop),
+        itemlist = [(u'\u663e\u793a/\u9690\u85cf', self.show_hide_toggle),
                     (u'\u91cd\u65b0\u8f7d\u5165', self.on_reload),
                     (u'\u9000\u51fa', self.on_quit)]
         for text, callback in itemlist:
@@ -204,7 +203,7 @@ class GoAgentGTK:
 
     def show_notify(self, message=None, timeout=None):
         if pynotify and message:
-            notification = pynotify.Notification('GoAgent Notify', message)
+            notification = pynotify.Notification('FGFW-Lite Notify', message)
             notification.set_hint('x', 200)
             notification.set_hint('y', 400)
             if timeout:
