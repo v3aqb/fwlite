@@ -53,12 +53,11 @@ if ' ' in WORKINGDIR:
 os.chdir(WORKINGDIR)
 
 if sys.platform.startswith('win'):
-    if sys.version[0] == '2':
-        PYTHON = 'd:/FGFW_Lite/include/Python27/python27.exe'
-    else:
-        PYTHON = 'd:/FGFW_Lite/include/Python33/python33.exe'
+    PYTHON2 = 'd:/FGFW_Lite/include/Python33/python27.exe'
+    PYTHON3 = 'd:/FGFW_Lite/include/Python33/python33.exe'
 else:
-    PYTHON = '/usr/bin/env python3'
+    PYTHON2 = '/usr/bin/env python2'
+    PYTHON3 = '/usr/bin/env python3'
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -580,7 +579,7 @@ class goagentabs(FGFWProxyAbs):
                          ['https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.ini'],
                          ['https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem']
                          ]
-        self.cmd = PYTHON + ' d:/FGFW_Lite/goagent/proxy.py'
+        self.cmd = PYTHON3 + ' d:/FGFW_Lite/goagent/proxy.py'
         self.enable = conf.getconfbool('goagent', 'enable', True)
 
         if self.enable:
@@ -700,7 +699,7 @@ class shadowsocksabs(FGFWProxyAbs):
         FGFWProxyAbs.__init__(self)
 
     def _config(self):
-        self.cmd = PYTHON + ' d:/FGFW_Lite/shadowsocks/local.py'
+        self.cmd = PYTHON2 + ' d:/FGFW_Lite/shadowsocks/local.py'
         self.enable = conf.getconfbool('shadowsocks', 'enable', False)
         if self.enable:
             fgfwproxy.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
@@ -785,7 +784,6 @@ class fgfwproxy(FGFWProxyAbs):
                          ['https://github.com/v3aqb/fgfw-lite/raw/master/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
                          ['https://github.com/v3aqb/fgfw-lite/raw/master/include/cloud.txt', './include/cloud.txt'],
                          ]
-        #self.cmd = 'd:/FGFW_Lite/include/Python33/python33.exe d:/FGFW_Lite/include/fgfwproxy.py'
         self.enable = conf.getconfbool('fgfwproxy', 'enable', True)
         self.enableupdate = conf.getconfbool('fgfwproxy', 'update', True)
         self.chinaroute()
