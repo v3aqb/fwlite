@@ -75,7 +75,10 @@ class ProxyHandler(tornado.web.RequestHandler):
         # redirector
         new_url = fgfwproxy.url_rewriter(self.request.uri)
         if new_url:
-            self.redirect(new_url)
+            if new_url == 401:
+                self.send_error(status_code=401)
+            else:
+                self.redirect(new_url)
             return
 
         uri = self.request.uri
@@ -91,9 +94,9 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.requestport = 443
         else:
             self.requestport = 80
-        #self.request.host = self.request.host.split(':')[0]
+
         self.pptype, self.pphost, self.ppport, self.ppusername,\
-            self.pppassword = fgfwproxy.parentproxy(uri, self.request.host)
+            self.pppassword = fgfwproxy.parentproxy(uri, self.request.host.split(':')[0])
         s = '%s %s' % (self.request.method, self.request.uri.split('?')[0])
         if self.pphost:
             s += ' via %s://%s:%s' % (self.pptype, self.pphost, self.ppport)
@@ -294,7 +297,6 @@ class autoproxy_rule(object):
     OVERRIDE_KEYWORD = 6
     OVERRIDE_REGEX = 7
 
-
     def __init__(self, arg):
         super(autoproxy_rule, self).__init__()
         if isinstance(arg, bytes):
@@ -323,7 +325,7 @@ class autoproxy_rule(object):
                 return (self.URI, result.split('*'))
 
             elif rule.startswith('/'):
-                return (self.REGEX, [re.compile(rule[1:-1]),])
+                return (self.REGEX, [re.compile(rule[1:-1]), ])
 
             else:
                 return (self.KEYWORD, rule.split('*'))
@@ -399,6 +401,35 @@ class autoproxy_rule(object):
             return _match_keyword()
         elif self.__type is self.OVERRIDE_REGEX:
             return _match_regex()
+
+
+class redirector(object):
+    """docstring for redirector"""
+    def __init__(self, arg):
+        super(redirector, self).__init__()
+        self.arg = arg
+        self.list = []
+        with open('./include/redirector.txt') as f:
+            for line in f:
+                if len(line.split()) == 2:
+                    try:
+                        o = autoproxy_rule(line.split()[0])
+                        if o.override:
+                            raise Exception
+                    except Exception:
+                        pass
+                    else:
+                        self.list.append((o, line.split()[1]))
+
+    def get(self, uri):
+        for rule, result in self.list:
+            if rule.match(uri):
+                if result == 'forcehttps':
+                    return uri.replace('http://', 'https://', 1)
+                return result
+        return False
+
+#REDIRECTOR = redirector()
 
 
 def run_proxy(port, start_ioloop=True):
