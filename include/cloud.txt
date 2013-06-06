@@ -12,3 +12,4 @@
 ||googlecode.com
 ||googleusercontent.com
 ||gstatic.com
+|https://zh.wikipedia.org
