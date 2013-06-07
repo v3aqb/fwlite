@@ -63,7 +63,7 @@ else:
 
 import logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('FGFW-Lite')
 
 
 class ProxyHandler(tornado.web.RequestHandler):
@@ -365,7 +365,7 @@ class autoproxy_rule(object):
             while ptrnlst:
                 s = ptrnlst.pop(0)
                 if s in url:
-                    i += uri.find(s, i) + len(s)
+                    i = uri.find(s, i) + len(s)
                 else:
                     return False
             return True
@@ -409,6 +409,24 @@ class redirector(object):
         super(redirector, self).__init__()
         self.arg = arg
         self.list = []
+        self.text = '''\
+|http://www.google.com/reader forcehttps
+|http://www.google.com/search forcehttps
+|http://www.google.com/url forcehttps
+|http://news.google.com forcehttps
+|http://appengine.google.com forcehttps
+|http://www.google.com.hk/url forcehttps
+|http://www.google.com.hk/search forcehttps
+/^http://www\.google\.com/?$/ forcehttps
+/^http://[^/]+\.googlecode\.com/ forcehttps
+/^http://[^/]+\.wikipedia\.org/ forcehttps
+
+
+'''
+        if not os.path.isfile('./include/redirector.txt'):
+            with open('./include/redirector.txt', 'w') as f:
+                f.write(self.text)
+
         with open('./include/redirector.txt') as f:
             for line in f:
                 if len(line.split()) == 2:
@@ -483,11 +501,11 @@ def ifbackup():
 
 def fgfw2Liteupdate(m=False):
     open("./include/dummy", 'w').close()
+    conf.presets.set('Update', 'LastUpdate', str(time.time()))
     for item in FGFWProxyAbs.ITEMS:
         if item.enableupdate:
             item.update()
-    conf.presets.set('Update', 'LastUpdate', str(time.time()))
-    Timer(40, fgfw2Literestart).start()
+    Timer(4, fgfw2Literestart).start()
 
 
 def fgfw2Literestart():
@@ -593,18 +611,15 @@ class FGFWProxyAbs(object):
             for i in range(len(self.filelist)):
                 url, path = self.filelist[i]
                 etag = conf.presets.dget('Update', path.split('/')[-1] + '.ver', '')
-                Thread(target=self.updateViaHTTP, args=(url, etag, path)).start()
+                self.updateViaHTTP(url, etag, path)
 
     def updateViaHTTP(self, url, etag, path):
-        logger.info('URL:' + url)
-        logger.info('etag:' + etag)
-        logger.info('path:' + path)
         proxy = {'http': 'http://127.0.0.1:8118',
                  }
         header = {'If-None-Match': etag,
                   }
         try:
-            r = requests.get(url, proxies=proxy, headers=header)
+            r = requests.get(url, proxies=proxy, headers=header, timeout=5)
         except Exception as e:
             logger.info(path + ' Not modified ' + str(e))
         else:
@@ -1122,14 +1137,13 @@ def main():
     updatedaemon.daemon = True
     updatedaemon.start()
     while True:
-        line = sys.stdin.readline().strip()
+        line = input()
         if 'update' in line:
             fgfw2Liteupdate()
         elif 'backup'in line:
             backup()
         else:
             print(line)
-        time.sleep(0.1)
 
 
 if __name__ == "__main__":
