@@ -73,17 +73,17 @@ class ProxyHandler(tornado.web.RequestHandler):
     @tornado.web.asynchronous
     def prepare(self):
         # redirector
-        new_url = fgfwproxy.url_rewriter(self.request.uri)
+        uri = self.request.uri
+        if not ('//' in uri):
+            uri = 'https://' + uri
+
+        new_url = REDIRECTOR.get(uri)
         if new_url:
             if new_url == 401:
                 self.send_error(status_code=401)
             else:
                 self.redirect(new_url)
             return
-
-        uri = self.request.uri
-        if not ('//' in uri):
-            uri = 'https://' + uri
 
         urisplit = uri.split('/')
         self.requestpath = '/'.join(urisplit[3:])
@@ -299,10 +299,11 @@ class autoproxy_rule(object):
 
     def __init__(self, arg):
         super(autoproxy_rule, self).__init__()
-        if isinstance(arg, bytes):
-            arg = arg.decode()
-        elif not isinstance(arg, str):
-            raise TypeError("invalid type: must be a string(or bytes)")
+        if not isinstance(arg, str):
+            if isinstance(arg, bytes):
+                arg = arg.decode()
+            else:
+                raise TypeError("invalid type: must be a string(or bytes)")
         self.rule = arg.strip()
         if self.rule == '' or\
                 self.rule.startswith('!') or\
@@ -405,7 +406,7 @@ class autoproxy_rule(object):
 
 class redirector(object):
     """docstring for redirector"""
-    def __init__(self, arg):
+    def __init__(self, arg=None):
         super(redirector, self).__init__()
         self.arg = arg
         self.list = []
@@ -421,7 +422,6 @@ class redirector(object):
 /^http://[^/]+\.googlecode\.com/ forcehttps
 /^http://[^/]+\.wikipedia\.org/ forcehttps
 
-
 '''
         if not os.path.isfile('./include/redirector.txt'):
             with open('./include/redirector.txt', 'w') as f:
@@ -429,6 +429,7 @@ class redirector(object):
 
         with open('./include/redirector.txt') as f:
             for line in f:
+                line = line.strip()
                 if len(line.split()) == 2:
                     try:
                         o = autoproxy_rule(line.split()[0])
@@ -442,12 +443,13 @@ class redirector(object):
     def get(self, uri):
         for rule, result in self.list:
             if rule.match(uri):
+                logger.info('Match redirect rule %s, %s' % (rule.rule, result))
                 if result == 'forcehttps':
                     return uri.replace('http://', 'https://', 1)
                 return result
         return False
 
-#REDIRECTOR = redirector()
+REDIRECTOR = redirector()
 
 
 def run_proxy(port, start_ioloop=True):
@@ -773,6 +775,8 @@ class shadowsocksabs(FGFWProxyAbs):
         server_port = conf.getconf('shadowsocks', 'server_port', '')
         password = conf.getconf('shadowsocks', 'password', 'barfoo!')
         method = conf.getconf('shadowsocks', 'method', 'null')
+        if method != 'null':
+            method = '"%s"' % method.strip('"')
         with open('./shadowsocks/config.json', 'w') as f:
             f.write('''\
 {
@@ -915,23 +919,6 @@ class fgfwproxy(FGFWProxyAbs):
                     cls.gfwlist.insert(0, o)
                 else:
                     cls.gfwlist.append(o)
-
-    @classmethod
-    def url_rewriter(cls, uri):
-        forcehttps = ['http://www.google.com/reader',
-                      'http://www.google.com/search'
-                      'http://www.google.com/url',
-                      'http://news.google.com',
-                      'http://appengine.google.com',
-                      'http://www.google.com.hk/url',
-                      'http://www.google.com.hk/search',
-                      r're^http://www\.google\.com/?$',
-                      r're^http://[^/]+\.googlecode\.com',
-                      r're^http://[^/]+\.wikipedia\.org']
-        for string in forcehttps:
-            if re.match(string[2:], uri) if string.startswith('re')\
-                    else uri.startswith(string):
-                return uri.replace('http://', 'https://', 1)
 
     @classmethod
     def addparentproxy(cls, name, proxy):
