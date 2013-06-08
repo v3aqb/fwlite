@@ -76,8 +76,9 @@ class ProxyHandler(tornado.web.RequestHandler):
         uri = self.request.uri
         if not ('//' in uri):
             uri = 'https://' + uri
+        host = self.request.host.split(':')[0]
 
-        new_url = REDIRECTOR.get(uri)
+        new_url = REDIRECTOR.get(uri, host)
         if new_url:
             if new_url == 401:
                 self.send_error(status_code=401)
@@ -96,7 +97,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.requestport = 80
 
         self.pptype, self.pphost, self.ppport, self.ppusername,\
-            self.pppassword = fgfwproxy.parentproxy(uri, self.request.host.split(':')[0])
+            self.pppassword = fgfwproxy.parentproxy(uri, host)
         s = '%s %s' % (self.request.method, self.request.uri.split('?')[0])
         if self.pphost:
             s += ' via %s://%s:%s' % (self.pptype, self.pphost, self.ppport)
@@ -440,9 +441,9 @@ class redirector(object):
                     else:
                         self.list.append((o, line.split()[1]))
 
-    def get(self, uri):
+    def get(self, uri, host=None):
         for rule, result in self.list:
-            if rule.match(uri):
+            if rule.match(uri, host):
                 logger.info('Match redirect rule %s, %s' % (rule.rule, result))
                 if result == 'forcehttps':
                     return uri.replace('http://', 'https://', 1)
@@ -501,8 +502,9 @@ def ifbackup():
         Thread(target=backup).start()
 
 
-def fgfw2Liteupdate(m=False):
-    open("./include/dummy", 'w').close()
+def fgfw2Liteupdate(auto=True):
+    if auto:
+        open("./include/dummy", 'w').close()
     conf.presets.set('Update', 'LastUpdate', str(time.time()))
     for item in FGFWProxyAbs.ITEMS:
         if item.enableupdate:
@@ -1126,7 +1128,7 @@ def main():
     while True:
         line = input()
         if 'update' in line:
-            fgfw2Liteupdate()
+            fgfw2Liteupdate(auto=False)
         elif 'backup'in line:
             backup()
         else:
