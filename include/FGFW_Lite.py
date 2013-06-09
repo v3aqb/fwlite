@@ -622,8 +622,9 @@ class FGFWProxyAbs(object):
                  }
         header = {'If-None-Match': etag,
                   }
+        cafile = './goagent/cacert.pem'
         try:
-            r = requests.get(url, proxies=proxy, headers=header, timeout=5)
+            r = requests.get(url, proxies=proxy, headers=header, timeout=5, verify=cafile)
         except Exception as e:
             logger.info(path + ' Not modified ' + str(e))
         else:
