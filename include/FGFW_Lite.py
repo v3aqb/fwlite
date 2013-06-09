@@ -11,7 +11,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
-__version__ = '0.3.1.0'
+__version__ = '0.3.1.2'
 
 import sys
 import os
@@ -55,7 +55,7 @@ if ' ' in WORKINGDIR:
 os.chdir(WORKINGDIR)
 
 if sys.platform.startswith('win'):
-    PYTHON2 = 'd:/FGFW_Lite/include/Python33/python27.exe'
+    PYTHON2 = 'c:/python27/python.exe'
     PYTHON3 = 'd:/FGFW_Lite/include/Python33/python33.exe'
 else:
     PYTHON2 = '/usr/bin/env python2'
