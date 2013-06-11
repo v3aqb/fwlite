@@ -304,7 +304,7 @@ class autoproxy_rule(object):
             else:
                 raise TypeError("invalid type: must be a string(or bytes)")
         self.rule = arg.strip()
-        if self.rule == '' or\
+        if self.rule == '' or len(self.rule) < 3 or\
                 self.rule.startswith('!') or\
                 self.rule.startswith('['):
             raise ValueError("invalid autoproxy_rule")
@@ -324,7 +324,7 @@ class autoproxy_rule(object):
                 result = rule.replace('|', '')
                 return (self.URI, result.split('*'))
 
-            elif rule.startswith('/'):
+            elif rule.startswith('/') and rule.endswith('/'):
                 return (self.REGEX, [re.compile(rule[1:-1]), ])
 
             else:
@@ -334,7 +334,7 @@ class autoproxy_rule(object):
             return (self.OVERRIDE_DOMAIN, parse(rule.replace('@@', ''))[1])
         elif rule.startswith('@@|'):
             return (self.OVERRIDE_URI, parse(rule.replace('@@', ''))[1])
-        elif rule.startswith('@@/'):
+        elif rule.startswith('@@/') and rule.endswith('/'):
             return (self.OVERRIDE_REGEX, parse(rule.replace('@@', ''))[1])
         elif rule.startswith('@@'):
             return (self.OVERRIDE_KEYWORD, parse(rule.replace('@@', ''))[1])
@@ -646,7 +646,6 @@ class goagentabs(FGFWProxyAbs):
         self.filelist = [['https://github.com/goagent/goagent/raw/3.0/local/proxy.py', './goagent/proxy.py'],
                          ['https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.ini'],
                          ['https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'],
-                         ['https://wwqgtxx-goagent.googlecode.com/git/Appid.txt', './include/Appid.txt'],
                          ]
         self.cmd = PYTHON3 + ' d:/FGFW_Lite/goagent/proxy.py'
         self.enable = conf.getconfbool('goagent', 'enable', True)
@@ -857,6 +856,7 @@ class fgfwproxy(FGFWProxyAbs):
 
     def _config(self):
         self.filelist = [['https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './include/gfwlist.txt'],
+                         ['https://wwqgtxx-goagent.googlecode.com/git/Appid.txt', './include/Appid.txt'],
                          ['http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './include/delegated-apnic-latest'],
                          ['https://github.com/v3aqb/fgfw-lite/raw/master/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
                          ['https://github.com/v3aqb/fgfw-lite/raw/master/include/cloud.txt', './include/cloud.txt'],
@@ -894,10 +894,7 @@ class fgfwproxy(FGFWProxyAbs):
                     except Exception:
                         pass
                     else:
-                        if o.override:
-                            cls.gfwlist.insert(0, o)
-                        else:
-                            cls.gfwlist.append(o)
+                        cls.gfwlist.append(o)
         else:
             with open('./include/local.txt', 'w') as f:
                 f.write('! local gfwlist config\n! rules: http://t.cn/zTeBinu\n')
@@ -909,10 +906,7 @@ class fgfwproxy(FGFWProxyAbs):
                 except Exception:
                     pass
                 else:
-                    if o.override:
-                        cls.gfwlist.insert(0, o)
-                    else:
-                        cls.gfwlist.append(o)
+                    cls.gfwlist.append(o)
 
         with open('./include/gfwlist.txt') as f:
             data = f.read()
@@ -923,10 +917,7 @@ class fgfwproxy(FGFWProxyAbs):
             except Exception:
                 pass
             else:
-                if o.override:
-                    cls.gfwlist.insert(0, o)
-                else:
-                    cls.gfwlist.append(o)
+                cls.gfwlist.append(o)
 
     @classmethod
     def addparentproxy(cls, name, proxy):
@@ -956,10 +947,9 @@ class fgfwproxy(FGFWProxyAbs):
             result = cls.inchinadict.get('domain')
             if result is None:
                 try:
-                    ip = socket.gethostbyname(domain)
+                    ipo = ip_address(socket.gethostbyname(domain))
                 except Exception:
                     return False
-                ipo = ip_address(ip)
                 result = False
                 for net in cls.chinanet:
                     if ipo in net:
@@ -977,7 +967,7 @@ class fgfwproxy(FGFWProxyAbs):
         def ifgfwlist():
             for rule in cls.gfwlist:
                 if rule.match(uri, domain):
-                    logger.info('Rule match %s' % rule.rule)
+                    logger.info('Autoproxy Rule match %s' % rule.rule)
                     return not rule.override
             return False
 
@@ -990,11 +980,6 @@ class fgfwproxy(FGFWProxyAbs):
             if uri.startswith('ftp://'):
                 try:
                     parentlist.remove('goagent')
-                    parentlist.remove('gsnova-gae')
-                except Exception:
-                    pass
-            if 'twitter.com' in uri:
-                try:
                     parentlist.remove('gsnova-gae')
                 except Exception:
                     pass
