@@ -29,10 +29,8 @@ import tornado.ioloop
 import tornado.iostream
 import tornado.httpserver
 import tornado.web
-try:
-    import requests
-except ImportError:
-    requests = None
+import requests
+
 try:
     import configparser
 except ImportError:
@@ -647,7 +645,8 @@ class goagentabs(FGFWProxyAbs):
     def _config(self):
         self.filelist = [['https://github.com/goagent/goagent/raw/3.0/local/proxy.py', './goagent/proxy.py'],
                          ['https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.ini'],
-                         ['https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem']
+                         ['https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'],
+                         ['https://wwqgtxx-goagent.googlecode.com/git/Appid.txt', './include/Appid.txt'],
                          ]
         self.cmd = PYTHON3 + ' d:/FGFW_Lite/goagent/proxy.py'
         self.enable = conf.getconfbool('goagent', 'enable', True)
@@ -660,7 +659,13 @@ class goagentabs(FGFWProxyAbs):
         proxy.read('./goagent/proxy.ini')
 
         proxy.set('gae', 'profile', conf.getconf('goagent', 'profile', 'google_cn'))
-        proxy.set('gae', 'appid', conf.getconf('goagent', 'goagentGAEAppid', 'ippotsukobeta|smartladderchina'))
+
+        appid = 'ippotsukobeta|smartladderchina'
+        if os.path.isfile('./include/Appid.txt'):
+            with open('./include/Appid.txt') as f:
+                appid = f.read().strip()
+        proxy.set('gae', 'appid', conf.getconf('goagent', 'goagentGAEAppid', appid))
+
         proxy.set("gae", "password", conf.getconf('goagent', 'goagentGAEpassword', ''))
         proxy.set('gae', 'obfuscate', conf.getconf('goagent', 'obfuscate', '0'))
         proxy.set("google_hk", "hosts", conf.getconf('goagent', 'gaehkhosts', 'www.google.com|mail.google.com'))
@@ -972,6 +977,7 @@ class fgfwproxy(FGFWProxyAbs):
         def ifgfwlist():
             for rule in cls.gfwlist:
                 if rule.match(uri, domain):
+                    logger.info('Rule match %s' % rule.rule)
                     return not rule.override
             return False
 
