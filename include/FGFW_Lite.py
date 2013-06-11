@@ -15,6 +15,7 @@ __version__ = '0.3.1.2'
 
 import sys
 import os
+import io
 from subprocess import Popen
 import shlex
 import time
@@ -78,7 +79,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         new_url = REDIRECTOR.get(uri, host)
         if new_url:
-            if new_url == 401:
+            if new_url.startswith('401'):
                 self.send_error(status_code=401)
             else:
                 self.redirect(new_url)
@@ -782,19 +783,10 @@ class shadowsocksabs(FGFWProxyAbs):
         server_port = conf.getconf('shadowsocks', 'server_port', '')
         password = conf.getconf('shadowsocks', 'password', 'barfoo!')
         method = conf.getconf('shadowsocks', 'method', 'null')
+        self.cmd = PYTHON2 + ' d:/FGFW_Lite/shadowsocks/local.py -s %s -p %s -l 1080 -k %s'\
+            % (server, server_port, password)
         if method != 'null':
-            method = '"%s"' % method.strip('"')
-        with open('./shadowsocks/config.json', 'w') as f:
-            f.write('''\
-{
-    "server":"%s",
-    "server_port":%s,
-    "local_port":1080,
-    "password":"%s",
-    "timeout":600,
-    "method":%s
-}
-''' % (server, server_port, password, method))
+            self.cmd += ' -m %s' % method.strip('"')
 
 
 class gsnovaabs(FGFWProxyAbs):  # Need more work on this
@@ -874,15 +866,15 @@ class fgfwproxy(FGFWProxyAbs):
     def conf(cls):
         cls.parentdict = {}
         cls.addparentproxy('direct', (None, None, None, None, None))
+
         cls.chinanet = []
         cls.chinanet.append(ip_network('192.168.0.0/16'))
         cls.chinanet.append(ip_network('172.16.0.0/12'))
         cls.chinanet.append(ip_network('10.0.0.0/8'))
         cls.chinanet.append(ip_network('127.0.0.0/8'))
-        with open('./include/chinaroutes') as f:
-            for line in f:
-                if line:
-                    cls.chinanet.append(ip_network(line.strip()))
+        for line in cls.chinaroutes:
+            if line:
+                cls.chinanet.append(ip_network(line.strip()))
 
         cls.gfwlist = []
 
@@ -910,8 +902,8 @@ class fgfwproxy(FGFWProxyAbs):
 
         with open('./include/gfwlist.txt') as f:
             data = f.read()
-        data = base64.b64decode(data).split()
-        for line in data:
+        data = base64.b64decode(data)
+        for line in io.BytesIO(data):
             try:
                 o = autoproxy_rule(line)
             except Exception:
@@ -987,7 +979,8 @@ class fgfwproxy(FGFWProxyAbs):
                 return cls.parentdictalive.get(random.choice(parentlist))
         return cls.parentdictalive.get('direct')
 
-    def chinaroute(self):
+    @classmethod
+    def chinaroute(cls):
         # ripped from https://github.com/fivesheep/chnroutes
         import math
         with open('./include/delegated-apnic-latest') as remotefile:
@@ -1007,10 +1000,9 @@ class fgfwproxy(FGFWProxyAbs):
             mask2 = 32 - int(math.log(num_ip, 2))
 
             results.append((starting_ip, mask2))
-
-        with open('./include/chinaroutes', 'w') as rfile:
-            for ip, mask2 in results:
-                rfile.write('%s/%s\n' % (ip, mask2))
+        cls.chinaroutes = io.StringIO()
+        for ip, mask2 in results:
+            cls.chinaroutes.write('%s/%s\n' % (ip, mask2))
 
 
 class SConfigParser(configparser.ConfigParser):
