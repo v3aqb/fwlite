@@ -1,6 +1,3 @@
-@@||renren.com
-@@||.cn
-@@||weibo.com
 ||web.tweetdeck.com
 ||huluim.com
 ||hulu.com
@@ -12,4 +9,3 @@
 ||googlecode.com
 ||googleusercontent.com
 ||gstatic.com
-|https://zh.wikipedia.org
