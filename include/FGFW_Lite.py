@@ -28,9 +28,7 @@ import struct
 import random
 import tornado.ioloop
 import tornado.iostream
-import tornado.httpserver
 import tornado.web
-import requests
 
 try:
     import configparser
@@ -187,7 +185,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 elif data == b'\x05\02':  # basic auth
                     upstream.write(b"\x01" +
                                    chr(len(self.ppusername)).encode() + self.ppusername.encode() +
-                                   chr(len(self.pppassword)).encode() + self.pppassword).encode()
+                                   chr(len(self.pppassword)).encode() + self.pppassword.encode())
                     upstream.read_bytes(2, socks5_auth_finish)
                 else:  # bad day, no auth supported
                     fail()
@@ -217,15 +215,18 @@ class ProxyHandler(tornado.web.RequestHandler):
 
             def upstream_verify(data=None):
                 if data[0:1] == b'\x05\x00':
-                    if data[3] == b'\x01':
-                        upstream.read_bytes(6, conn)
-                    elif data[3] == b'\x03':
-                        upstream.read_bytes(3, readaddr)
+                    if data[3] == b'\x01':  # read socket ipaddr(ipv4) and port
+                        upstream.read_bytes(4, readport)
+                    elif data[3] == b'\x03':  # read socket host and port
+                        upstream.read_bytes(1, readaddr)
                 else:
                     fail()
 
             def readaddr(data=None):
-                upstream.read_bytes(data[0], conn)
+                upstream.read_bytes(data[0], readport)
+
+            def readport(data=None):
+                upstream.read_bytes(2, conn)
 
             def conn(data=None):
                 if self.request.method == 'CONNECT':
@@ -617,6 +618,8 @@ class FGFWProxyAbs(object):
                 self.updateViaHTTP(url, etag, path)
 
     def updateViaHTTP(self, url, etag, path):
+        import requests
+
         proxy = {'http': 'http://127.0.0.1:8118',
                  }
         header = {'If-None-Match': etag,
