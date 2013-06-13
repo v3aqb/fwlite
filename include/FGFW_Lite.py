@@ -871,15 +871,6 @@ class fgfwproxy(FGFWProxyAbs):
         cls.parentdict = {}
         cls.addparentproxy('direct', (None, None, None, None, None))
 
-        cls.chinanet = []
-        cls.chinanet.append(ip_network('192.168.0.0/16'))
-        cls.chinanet.append(ip_network('172.16.0.0/12'))
-        cls.chinanet.append(ip_network('10.0.0.0/8'))
-        cls.chinanet.append(ip_network('127.0.0.0/8'))
-        for line in cls.chinaroutes:
-            if line:
-                cls.chinanet.append(ip_network(line.strip()))
-
         cls.gfwlist = []
 
         if os.path.isfile('./include/local.txt'):
@@ -985,6 +976,12 @@ class fgfwproxy(FGFWProxyAbs):
 
     @classmethod
     def chinaroute(cls):
+
+        cls.chinanet = []
+        cls.chinanet.append(ip_network('192.168.0.0/16'))
+        cls.chinanet.append(ip_network('172.16.0.0/12'))
+        cls.chinanet.append(ip_network('10.0.0.0/8'))
+        cls.chinanet.append(ip_network('127.0.0.0/8'))
         # ripped from https://github.com/fivesheep/chnroutes
         import math
         with open('./include/delegated-apnic-latest') as remotefile:
@@ -992,8 +989,6 @@ class fgfwproxy(FGFWProxyAbs):
 
         cnregex = re.compile(r'apnic\|cn\|ipv4\|[0-9\.]+\|[0-9]+\|[0-9]+\|a.*', re.IGNORECASE)
         cndata = cnregex.findall(data)
-
-        results = []
 
         for item in cndata:
             unit_items = item.split('|')
@@ -1003,10 +998,7 @@ class fgfwproxy(FGFWProxyAbs):
             #mask in *nix format
             mask2 = 32 - int(math.log(num_ip, 2))
 
-            results.append((starting_ip, mask2))
-        cls.chinaroutes = io.StringIO()
-        for ip, mask2 in results:
-            cls.chinaroutes.write('%s/%s\n' % (ip, mask2))
+            cls.chinanet.append(ip_network('%s/%s' % (starting_ip, mask2)))
 
 
 class SConfigParser(configparser.ConfigParser):
