@@ -73,7 +73,6 @@ REDIRECTOR = '''\
 /^http://www\.google\.com/?$/ forcehttps
 /^http://[^/]+\.googlecode\.com/ forcehttps
 /^http://[^/]+\.wikipedia\.org/ forcehttps
-
 '''
 if not os.path.isfile('./include/redirector.txt'):
     with open('./include/redirector.txt', 'w') as f:

@@ -1,4 +1,4 @@
-﻿
+﻿#-*- coding: UTF-8 -*-
 #NoTrayIcon
 #region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Icon=taskbar.ico
@@ -57,14 +57,19 @@ Func setTray()
 	TrayCreateItem("清除DNS缓存", $trayMenuAdvanced)
 	TrayItemSetOnEvent(-1, "flushDNS")
 
-	TrayCreateItem("这个网站被墙了？", $trayMenuAdvanced)
+	TrayCreateItem("网址提交", $trayMenuAdvanced)
 	TrayItemSetOnEvent(-1, "ifGFWed")
 
 	TrayCreateItem("设置开机启动", $trayMenuAdvanced)
 	TrayItemSetOnEvent(-1, "setAutorun")
 
-	TrayCreateItem("Edit Local Config")
+	$trayMenuLConf = TrayCreateMenu("修改配置文件")
+	TrayCreateItem("userconf.ini", $trayMenuLConf)
+	TrayItemSetOnEvent(-1, "editUserconf")
+	TrayCreateItem("local.txt", $trayMenuLConf)
 	TrayItemSetOnEvent(-1, "editLocal")
+	TrayCreateItem("redirector.txt", $trayMenuLConf)
+	TrayItemSetOnEvent(-1, "editRedirector")
 
 	TrayCreateItem("")
 
@@ -73,7 +78,7 @@ Func setTray()
 
 	TraySetOnEvent($TRAY_EVENT_PRIMARYDOUBLE, "showHideConsole")
 	TraySetState()
-	TraySetToolTip("其实更难翻的是心中的那堵墙")
+	TraySetToolTip("FGFW_Lite--Internet Unchained")
 	TraySetClick(16)
 
 EndFunc   ;==>setTray
@@ -99,8 +104,16 @@ Func setProxyDirect()
 	_setIEProxy(0)
 EndFunc   ;==>setProxyDirect
 
+Func editUserconf()
+	ShellExecute(@ScriptDir & "\userconf.ini")
+EndFunc   ;==>viewLog
+
 Func editLocal()
 	ShellExecute(@ScriptDir & "\include\local.txt")
+EndFunc   ;==>viewLog
+
+Func editRedirector()
+	ShellExecute(@ScriptDir & "\include\redirector.txt")
 EndFunc   ;==>viewLog
 
 Func flushDNS()
@@ -108,7 +121,7 @@ Func flushDNS()
 EndFunc   ;==>flushDNS
 
 Func ifGFWed()
-	ShellExecute("http://17ce.com/")
+	ShellExecute("https://gfwlist.autoproxy.org/report/")
 EndFunc   ;==>ifGFWed
 
 Func ExitScript()
