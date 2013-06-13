@@ -62,6 +62,23 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('FGFW-Lite')
 
+REDIRECTOR = '''\
+|http://www.google.com/reader forcehttps
+|http://www.google.com/search forcehttps
+|http://www.google.com/url forcehttps
+|http://news.google.com forcehttps
+|http://appengine.google.com forcehttps
+|http://www.google.com.hk/url forcehttps
+|http://www.google.com.hk/search forcehttps
+/^http://www\.google\.com/?$/ forcehttps
+/^http://[^/]+\.googlecode\.com/ forcehttps
+/^http://[^/]+\.wikipedia\.org/ forcehttps
+
+'''
+if not os.path.isfile('./include/redirector.txt'):
+    with open('./include/redirector.txt', 'w') as f:
+        f.write(REDIRECTOR)
+
 
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE',
@@ -411,22 +428,6 @@ class redirector(object):
         super(redirector, self).__init__()
         self.arg = arg
         self.list = []
-        self.text = '''\
-|http://www.google.com/reader forcehttps
-|http://www.google.com/search forcehttps
-|http://www.google.com/url forcehttps
-|http://news.google.com forcehttps
-|http://appengine.google.com forcehttps
-|http://www.google.com.hk/url forcehttps
-|http://www.google.com.hk/search forcehttps
-/^http://www\.google\.com/?$/ forcehttps
-/^http://[^/]+\.googlecode\.com/ forcehttps
-/^http://[^/]+\.wikipedia\.org/ forcehttps
-
-'''
-        if not os.path.isfile('./include/redirector.txt'):
-            with open('./include/redirector.txt', 'w') as f:
-                f.write(self.text)
 
         with open('./include/redirector.txt') as f:
             for line in f:
