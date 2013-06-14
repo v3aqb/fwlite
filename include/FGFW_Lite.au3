@@ -78,7 +78,7 @@ Func setTray()
 
 	TraySetOnEvent($TRAY_EVENT_PRIMARYDOUBLE, "showHideConsole")
 	TraySetState()
-	TraySetToolTip("FGFW_Lite--Internet Unchained")
+	TraySetToolTip("FGFW_Lite Internet Unleashed")
 	TraySetClick(16)
 
 EndFunc   ;==>setTray
