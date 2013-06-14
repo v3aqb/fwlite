@@ -778,6 +778,8 @@ class shadowsocksabs(FGFWProxyAbs):
 
     def _config(self):
         self.cmd = PYTHON2 + ' d:/FGFW_Lite/shadowsocks/local.py'
+        if sys.platform.startswith('win'):
+            self.cmd = 'd:/FGFW_Lite/shadowsocks/shadowsocks-local.exe'
         self.enable = conf.getconfbool('shadowsocks', 'enable', False)
         if self.enable:
             fgfwproxy.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
