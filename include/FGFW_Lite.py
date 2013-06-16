@@ -195,6 +195,9 @@ class ProxyHandler(tornado.web.RequestHandler):
             start_tunnel(s)
 
         def socks5_handshake(data=None):
+            def get_server_auth_method(data=None):
+                upstream.read_bytes(2, socks5_auth)
+
             def socks5_auth(data=None):
                 if data == b'\x05\00':  # no auth needed
                     conn_upstream()
@@ -226,19 +229,21 @@ class ProxyHandler(tornado.web.RequestHandler):
                 #     req = b"\x05\x01\x00\x01" + ip
                 req = b"\x05\x01\x00\x03" + chr(len(self.request.host)).encode() + self.request.host.encode()
                 req += struct.pack(">H", self.requestport)
-                upstream.write(req)
-                upstream.read_bytes(4, upstream_verify)
+                upstream.write(req, post_conn_upstream)
 
-            def upstream_verify(data=None):
+            def post_conn_upstream(data=None):
+                upstream.read_bytes(4, read_upstream_data)
+
+            def read_upstream_data(data=None):
                 if data[0:1] == b'\x05\x00':
                     if data[3] == b'\x01':  # read socket ipaddr(ipv4) and port
                         upstream.read_bytes(4, readport)
                     elif data[3] == b'\x03':  # read socket host and port
-                        upstream.read_bytes(1, readaddr)
+                        upstream.read_bytes(1, readhost)
                 else:
                     fail()
 
-            def readaddr(data=None):
+            def readhost(data=None):
                 upstream.read_bytes(data[0], readport)
 
             def readport(data=None):
@@ -260,8 +265,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 authmethod = b"\x05\x02\x00\x02"
             else:
                 authmethod = b"\x05\x01\x00"
-            upstream.write(authmethod)
-            upstream.read_bytes(2, socks5_auth)
+            upstream.write(authmethod, get_server_auth_method)
 
         if self.pphost is None:
             if self.request.method == 'CONNECT':
@@ -594,7 +598,7 @@ class FGFWProxyAbs(object):
         while True:
             if self.enable:
                 self.subpobj = Popen(shlex.split(self.cmd.replace('d:/FGFW_Lite', WORKINGDIR)))
-                self.subpobj .wait()
+                self.subpobj.wait()
             time.sleep(3)
 
     def restart(self):
@@ -650,6 +654,7 @@ class goagentabs(FGFWProxyAbs):
         self.filelist = [['https://github.com/goagent/goagent/raw/3.0/local/proxy.py', './goagent/proxy.py'],
                          ['https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.ini'],
                          ['https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'],
+                         ['https://wwqgtxx-goagent.googlecode.com/git/Appid.txt', './include/Appid.txt'],
                          ]
         self.cmd = PYTHON3 + ' d:/FGFW_Lite/goagent/proxy.py'
         self.enable = conf.getconfbool('goagent', 'enable', True)
@@ -853,7 +858,6 @@ class fgfwproxy(FGFWProxyAbs):
 
     def _config(self):
         self.filelist = [['https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './include/gfwlist.txt'],
-                         ['https://wwqgtxx-goagent.googlecode.com/git/Appid.txt', './include/Appid.txt'],
                          ['http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './include/delegated-apnic-latest'],
                          ['https://github.com/v3aqb/fgfw-lite/raw/master/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
                          ['https://github.com/v3aqb/fgfw-lite/raw/master/include/cloud.txt', './include/cloud.txt'],
