@@ -11,7 +11,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
-__version__ = '0.3.1.2'
+__version__ = '0.3.2.0'
 
 import sys
 import os
@@ -29,7 +29,8 @@ import random
 import tornado.ioloop
 import tornado.iostream
 import tornado.web
-
+from tornado.escape import native_str
+from tornado.httputil import HTTPHeaders
 try:
     import configparser
 except ImportError:
@@ -82,6 +83,7 @@ if not os.path.isfile('./include/redirector.txt'):
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE',
                          'TRACE', 'CONNECT']
+    UPSTREAM_POOL = {}
 
     @tornado.web.asynchronous
     def prepare(self):
@@ -121,34 +123,8 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        return self.connect()
+        # return self.connect()
         client = self.request.connection.stream
-
-        def read_from_client(data):
-            self.upstream.write(data)
-
-        def read_from_upstream(data):
-            client.write(data)
-
-        def client_close(data=None):
-            if self.upstream.closed():
-                return
-            if data:
-                self.upstream.write(data)
-            self.upstream.close()
-
-        def upstream_close(data=None):
-            if client.closed():
-                return
-            if data:
-                client.write(data)
-            client.close()
-
-        def _on_header(data=None):
-            client.read_until_close(client_close, read_from_client)
-            self.upstream.read_until_close(upstream_close, read_from_upstream)
-            if data:
-                self.upstream.write(data)
 
         def _get_upstream():
             def socks5_handshake(data=None):
@@ -173,17 +149,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                         fail()
 
                 def conn_upstream(data=None):
-                    # try:
-                    #     ip = socket.aton(self.request.host)  # guess ipv4
-                    # except socket.error:
-                    #     try:  # guess ipv6
-                    #         ip = socket.inet_pton(socket.AF_INET6, self.request.host)
-                    #     except Exception:  # got to be domain name
-                    #         req = b"\x05\x01\x00\x03" + chr(len(self.request.host)) + self.request.host
-                    #     else:
-                    #         req = b"\x05\x01\x00\x04" + ip
-                    # else:
-                    #     req = b"\x05\x01\x00\x01" + ip
                     req = b"\x05\x01\x00\x03" + chr(len(self.request.host)).encode() + self.request.host.encode()
                     req += struct.pack(">H", self.requestport)
                     self.upstream.write(req, post_conn_upstream)
@@ -204,7 +169,10 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.upstream.read_bytes(data[0], readport)
 
                 def readport(data=None):
-                    self.upstream.read_bytes(2, _sent_request)
+                    self.upstream.read_bytes(2, _go)
+
+                def _go(data=None):
+                    pass
 
                 def fail():
                     client.write(b'HTTP/1.1 500 socks5 proxy Connection Failed.\r\n\r\n')
@@ -239,8 +207,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                 lst = self.UPSTREAM_POOL.get(self.request.host)
             self.upstream = None
             if isinstance(lst, list):
-                for item in lst:
-                    lst.remove(item)
+                while len(lst) > 0:
+                    item = lst.pop(0)
                     if not item.closed():
                         self.upstream = item
                         break
@@ -252,8 +220,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
             else:
                 s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
-            # if not self.request.method == 'CONNECT':
-            #     self.request.headers['Connection'] = 'close'
+            self.close_flag = True if self.request.headers.get('Connection') == 'close' else False
             for key, value in self.request.headers.items():
                 s += '%s: %s\r\n' % (key, value)
             if not 'Proxy-Authorization' in self.request.headers and self.ppusername:
@@ -263,7 +230,60 @@ class ProxyHandler(tornado.web.RequestHandler):
             s = s.encode()
             if self.request.body:
                 s += self.request.body + b'\r\n\r\n'
-            _on_header(s)
+            _fetch_headers(s)
+
+        def _fetch_headers(data=None):
+            self.upstream.read_until(b'\r\n\r\n', _forward_header)
+            self.upstream.write(data)
+
+        def _forward_header(data=None):
+            header = data.decode()
+            header = header.replace('Connection: keep-alive', 'Connection: close')
+            client.write(header.encode())
+            _on_body(data)
+
+        def _on_body(data=None):
+            data = native_str(data.decode("latin1"))
+            first_line, _, header_data = data.partition("\n")
+            headers = HTTPHeaders.parse(header_data)
+            self.close_flag = True if headers.get('Connection') == 'close' else False
+            if "Content-Length" in headers:
+                if "," in headers["Content-Length"]:
+                    # Proxies sometimes cause Content-Length headers to get
+                    # duplicated.  If all the values are identical then we can
+                    # use them but if they differ it's an error.
+                    pieces = re.split(r',\s*', headers["Content-Length"])
+                    if any(i != pieces[0] for i in pieces):
+                        raise ValueError("Multiple unequal Content-Lengths: %r" %
+                                         headers["Content-Length"])
+                    headers["Content-Length"] = pieces[0]
+                content_length = int(headers["Content-Length"])
+            else:
+                content_length = None
+
+            if headers.get("Transfer-Encoding") == "chunked":
+                self.upstream.read_until(b"\r\n0\r\n\r\n", _finish)
+            elif content_length is not None:
+                self.upstream.read_bytes(content_length, _finish)
+            elif headers.get("Connection") == "close":
+                self.upstream.read_until_close(_finish)
+
+        def _finish(data):
+            if self.pphost:
+                n = self.ppname
+            else:
+                n = self.request.host
+            if not n in self.UPSTREAM_POOL:
+                self.UPSTREAM_POOL[n] = []
+            lst = self.UPSTREAM_POOL.get(n)
+            for item in lst:
+                if item.closed():
+                    lst.remove(item)
+            if self.close_flag:
+                self.upstream.close()
+            if not self.upstream.closed():
+                lst.append(self.upstream)
+            client.write(data)
 
         _get_upstream()
         _sent_request()
