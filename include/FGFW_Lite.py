@@ -109,8 +109,9 @@ class ProxyHandler(tornado.web.RequestHandler):
         else:
             self.requestport = 80
 
+        self.ppname, pp = fgfwproxy.parentproxy(uri, host)
         self.pptype, self.pphost, self.ppport, self.ppusername,\
-            self.pppassword = fgfwproxy.parentproxy(uri, host)
+            self.pppassword = pp
         s = '%s %s' % (self.request.method, self.request.uri.split('?')[0])
         if self.pphost:
             s += ' via %s://%s:%s' % (self.pptype, self.pphost, self.ppport)
@@ -233,7 +234,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                     client.close()
 
             if self.pphost:
-                lst = self.UPSTREAM_POOL.get(self.pphost)
+                lst = self.UPSTREAM_POOL.get(self.ppname)
             else:
                 lst = self.UPSTREAM_POOL.get(self.request.host)
             self.upstream = None
@@ -1112,7 +1113,7 @@ class fgfwproxy(FGFWProxyAbs):
         # select parent via uri
         parentlist = list(cls.parentdictalive.keys())
         if ifhost_in_china():
-            return cls.parentdictalive.get('direct')
+            return ('direct', cls.parentdictalive.get('direct'))
         if ifgfwlist():
             parentlist.remove('direct')
             if uri.startswith('ftp://'):
@@ -1122,8 +1123,9 @@ class fgfwproxy(FGFWProxyAbs):
                 except Exception:
                     pass
             if parentlist:
-                return cls.parentdictalive.get(random.choice(parentlist))
-        return cls.parentdictalive.get('direct')
+                ppname = random.choice(parentlist)
+                return (ppname, cls.parentdictalive.get(ppname))
+        return ('direct', cls.parentdictalive.get('direct'))
 
     @classmethod
     def chinaroute(cls):
