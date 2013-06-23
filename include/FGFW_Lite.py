@@ -89,7 +89,7 @@ class ProxyHandler(tornado.web.RequestHandler):
     def prepare(self):
         # redirector
         uri = self.request.uri
-        if not ('//' in uri):
+        if '//' not in uri:
             uri = 'https://' + uri
         host = self.request.host.split(':')[0]
 
@@ -223,7 +223,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.close_flag = True if self.request.headers.get('Connection') == 'close' else False
             for key, value in self.request.headers.items():
                 s += '%s: %s\r\n' % (key, value)
-            if not 'Proxy-Authorization' in self.request.headers and self.ppusername:
+            if 'Proxy-Authorization' not in self.request.headers and self.ppusername:
                 a = '%s:%s' % (self.ppusername, self.pppassword)
                 self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             s += '\r\n'
@@ -273,7 +273,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 n = self.ppname
             else:
                 n = self.request.host
-            if not n in self.UPSTREAM_POOL:
+            if n not in self.UPSTREAM_POOL:
                 self.UPSTREAM_POOL[n] = []
             lst = self.UPSTREAM_POOL.get(n)
             for item in lst:
@@ -348,13 +348,13 @@ class ProxyHandler(tornado.web.RequestHandler):
                 s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
             else:
                 s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
-            if not self.request.method == 'CONNECT':
+            if self.request.method != 'CONNECT':
                 self.request.headers['Connection'] = 'close'
-            for key, value in self.request.headers.items():
-                s += '%s: %s\r\n' % (key, value)
-            if not 'Proxy-Authorization' in self.request.headers and self.ppusername:
+            if 'Proxy-Authorization' not in self.request.headers and self.ppusername:
                 a = '%s:%s' % (self.ppusername, self.pppassword)
                 self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
+            for key, value in self.request.headers.items():
+                s += '%s: %s\r\n' % (key, value)
             s += '\r\n'
             s = s.encode()
             if self.request.body:
@@ -1089,7 +1089,7 @@ class fgfwproxy(FGFWProxyAbs):
         cls.parentdict[name] = proxy
 
     @classmethod
-    def parentproxy(cls, uri, domain=''):
+    def parentproxy(cls, uri, domain=None):
         '''
             decide which parentproxy to use.
             url:  'https://www.google.com'
@@ -1097,7 +1097,7 @@ class fgfwproxy(FGFWProxyAbs):
         '''
         # return cls.parentdict.get('https')
 
-        if not domain:
+        if domain is None:
             domain = uri.split('/')[2].split(':')[0]
 
         cls.inchinadict = {}
