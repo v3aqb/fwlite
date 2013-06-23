@@ -201,10 +201,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                     client.write(b'HTTP/1.1 501 %s proxy not supported.\r\n\r\n' % self.pptype)
                     client.close()
 
-            if self.pphost:
-                lst = self.UPSTREAM_POOL.get(self.ppname)
-            else:
-                lst = self.UPSTREAM_POOL.get(self.request.host)
+            n = self.ppname if self.pphost else self.request.host
+            lst = self.UPSTREAM_POOL.get(n)
             self.upstream = None
             if isinstance(lst, list):
                 while len(lst) > 0:
@@ -220,12 +218,11 @@ class ProxyHandler(tornado.web.RequestHandler):
                 s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
             else:
                 s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
-            self.close_flag = True if self.request.headers.get('Connection') == 'close' else False
-            for key, value in self.request.headers.items():
-                s += '%s: %s\r\n' % (key, value)
-            if 'Proxy-Authorization' not in self.request.headers and self.ppusername:
+            if self.ppusername and 'Proxy-Authorization' not in self.request.headers:
                 a = '%s:%s' % (self.ppusername, self.pppassword)
                 self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
+            for key, value in self.request.headers.items():
+                s += '%s: %s\r\n' % (key, value)
             s += '\r\n'
             s = s.encode()
             if self.request.body:
@@ -262,17 +259,27 @@ class ProxyHandler(tornado.web.RequestHandler):
                 content_length = None
 
             if headers.get("Transfer-Encoding") == "chunked":
-                self.upstream.read_until(b"\r\n0\r\n\r\n", _finish)
+                self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             elif content_length is not None:
                 self.upstream.read_bytes(content_length, _finish)
             elif headers.get("Connection") == "close":
                 self.upstream.read_until_close(_finish)
 
-        def _finish(data):
-            if self.pphost:
-                n = self.ppname
+        def _on_chunk_lenth(data):
+            client.write(data)
+            length = int(data.strip(), 16)
+            if length == 0:
+                _finish(b'0\r\n\r\n')
             else:
-                n = self.request.host
+                self.upstream.read_bytes(length + 2,  # chunk ends with \r\n
+                                         _on_chunk_data)
+
+        def _on_chunk_data(data):
+            client.write(data)
+            self.upstream.read_until(b"\r\n", _on_chunk_lenth)
+
+        def _finish(data):
+            n = self.ppname if self.pphost else self.request.host
             if n not in self.UPSTREAM_POOL:
                 self.UPSTREAM_POOL[n] = []
             lst = self.UPSTREAM_POOL.get(n)
@@ -284,6 +291,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             if not self.upstream.closed():
                 lst.append(self.upstream)
             client.write(data)
+            client.close()
 
         _get_upstream()
         _sent_request()
