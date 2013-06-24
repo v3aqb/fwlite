@@ -29,7 +29,6 @@ import random
 import tornado.ioloop
 import tornado.iostream
 import tornado.web
-from tornado.escape import native_str
 from tornado.httputil import HTTPHeaders
 try:
     import configparser
@@ -106,10 +105,8 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         if ':' in urisplit[2]:
             self.requestport = int(urisplit[2].split(':')[1])
-        elif uri.startswith('https://'):
-            self.requestport = 443
         else:
-            self.requestport = 80
+            self.requestport = 443 if uri.startswith('https://') else 80
 
         self.ppname, pp = fgfwproxy.parentproxy(uri, host)
         self.pptype, self.pphost, self.ppport, self.ppusername,\
@@ -205,8 +202,8 @@ class ProxyHandler(tornado.web.RequestHandler):
             lst = self.UPSTREAM_POOL.get(n)
             self.upstream = None
             if isinstance(lst, list):
-                while len(lst) > 0:
-                    item = lst.pop(0)
+                for item in lst:
+                    lst.remove(item)
                     if not item.closed():
                         self.upstream = item
                         break
@@ -240,9 +237,9 @@ class ProxyHandler(tornado.web.RequestHandler):
             _on_body(data)
 
         def _on_body(data=None):
-            data = native_str(data.decode("latin1"))
+            data = data.decode()
             first_line, _, header_data = data.partition("\n")
-            headers = HTTPHeaders.parse(header_data)
+            headers = HTTPHeaders.parse(header_data.strip())
             self.close_flag = True if headers.get('Connection') == 'close' else False
             if "Content-Length" in headers:
                 if "," in headers["Content-Length"]:
@@ -268,17 +265,17 @@ class ProxyHandler(tornado.web.RequestHandler):
         def _on_chunk_lenth(data):
             client.write(data)
             length = int(data.strip(), 16)
-            if length == 0:
-                _finish(b'0\r\n\r\n')
-            else:
-                self.upstream.read_bytes(length + 2,  # chunk ends with \r\n
-                                         _on_chunk_data)
+            self.upstream.read_bytes(length + 2,  # chunk ends with \r\n
+                                     _on_chunk_data)
 
         def _on_chunk_data(data):
             client.write(data)
-            self.upstream.read_until(b"\r\n", _on_chunk_lenth)
+            if len(data) != 2:
+                self.upstream.read_until(b"\r\n", _on_chunk_lenth)
+            else:
+                _finish()
 
-        def _finish(data):
+        def _finish(data=None):
             n = self.ppname if self.pphost else self.request.host
             if n not in self.UPSTREAM_POOL:
                 self.UPSTREAM_POOL[n] = []
@@ -290,11 +287,12 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.upstream.close()
             if not self.upstream.closed():
                 lst.append(self.upstream)
-            client.write(data)
-            client.close()
+            if data is not None:
+                client.write(data)
 
         _get_upstream()
         _sent_request()
+        client.close()
 
     @tornado.web.asynchronous
     def post(self):
