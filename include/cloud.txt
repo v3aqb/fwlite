@@ -9,3 +9,5 @@
 ||googlecode.com
 ||googleusercontent.com
 ||gstatic.com
+||feedly.com
+||rhcloud.com
