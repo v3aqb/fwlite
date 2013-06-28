@@ -213,11 +213,11 @@ class ProxyHandler(tornado.web.RequestHandler):
         def _sent_request():
             if self.pphost and self.pptype != 'socks5':
                 s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
+                if self.ppusername and 'Proxy-Authorization' not in self.request.headers:
+                    a = '%s:%s' % (self.ppusername, self.pppassword)
+                    self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             else:
                 s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
-            if self.ppusername and 'Proxy-Authorization' not in self.request.headers:
-                a = '%s:%s' % (self.ppusername, self.pppassword)
-                self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             for key, value in self.request.headers.items():
                 s += '%s: %s\r\n' % (key, value)
             s += '\r\n'
@@ -227,16 +227,11 @@ class ProxyHandler(tornado.web.RequestHandler):
             _fetch_headers(s)
 
         def _fetch_headers(data=None):
-            self.upstream.read_until(b'\r\n\r\n', _forward_header)
+            self.upstream.read_until(b'\r\n\r\n', _on_body)
             self.upstream.write(data)
 
-        def _forward_header(data=None):
-            header = data.decode()
-            header = header.replace('Connection: keep-alive', 'Connection: close')
-            client.write(header.encode())
-            _on_body(data)
-
         def _on_body(data=None):
+            self.cbuffer = data.replace(b'Connection: keep-alive', b'Connection: close')
             data = data.decode()
             first_line, _, header_data = data.partition("\n")
             headers = HTTPHeaders.parse(header_data.strip())
@@ -263,13 +258,13 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.upstream.read_until_close(_finish)
 
         def _on_chunk_lenth(data):
-            client.write(data)
+            self.cbuffer += data
             length = int(data.strip(), 16)
             self.upstream.read_bytes(length + 2,  # chunk ends with \r\n
                                      _on_chunk_data)
 
         def _on_chunk_data(data):
-            client.write(data)
+            self.cbuffer += data
             if len(data) != 2:
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             else:
@@ -285,14 +280,17 @@ class ProxyHandler(tornado.web.RequestHandler):
                     lst.remove(item)
             if self.close_flag:
                 self.upstream.close()
-            if not self.upstream.closed():
+            elif not self.upstream.closed():
                 lst.append(self.upstream)
             if data is not None:
-                client.write(data)
+                self.cbuffer += data
+            client.write(self.cbuffer, _close)
+
+        def _close(data=None):
+            client.close()
 
         _get_upstream()
         _sent_request()
-        client.close()
 
     @tornado.web.asynchronous
     def post(self):
