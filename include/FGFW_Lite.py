@@ -646,7 +646,8 @@ def updateNbackup():
         time.sleep(90)
         chkproxy()
         ifupdate()
-        ifbackup()
+        if conf.getconfbool('backup', 'enable', False):
+            ifbackup()
 
 
 def chkproxy():
