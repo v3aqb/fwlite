@@ -650,7 +650,7 @@ def updateNbackup():
         time.sleep(90)
         chkproxy()
         ifupdate()
-        if conf.getconfbool('backup', 'enable', False):
+        if conf.getconfbool('AutoBackupConf', 'enable', False):
             ifbackup()
 
 
