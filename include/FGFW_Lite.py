@@ -282,10 +282,11 @@ class ProxyHandler(tornado.web.RequestHandler):
             for item in lst:
                 if item.closed():
                     lst.remove(item)
-            if self.close_flag:
-                self.upstream.close()
-            elif not self.upstream.closed():
-                lst.append(self.upstream)
+            if not self.upstream.closed():
+                if self.close_flag:
+                    self.upstream.close()
+                else:
+                    lst.append(self.upstream)
             if data is not None:
                 self.cbuffer += data
             client.write(self.cbuffer, _close)
@@ -294,7 +295,10 @@ class ProxyHandler(tornado.web.RequestHandler):
             client.close()
 
         _get_upstream()
-        _sent_request()
+        try:
+            _sent_request()
+        except Exception as e:
+            logger.info(str(e))
 
     @tornado.web.asynchronous
     def post(self):
