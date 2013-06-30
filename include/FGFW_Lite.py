@@ -71,8 +71,8 @@ REDIRECTOR = '''\
 |http://www.google.com.hk/url forcehttps
 |http://www.google.com.hk/search forcehttps
 /^http://www\.google\.com/?$/ forcehttps
-/^http://[^/]+\.googlecode\.com/ forcehttps
-/^http://[^/]+\.wikipedia\.org/ forcehttps
+|http://*.googlecode.com forcehttps
+|http://*.wikipedia.org forcehttps
 '''
 if not os.path.isfile('./include/redirector.txt'):
     with open('./include/redirector.txt', 'w') as f:
@@ -84,7 +84,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                          'TRACE', 'CONNECT']
     UPSTREAM_POOL = {}
 
-    @tornado.web.asynchronous
     def prepare(self):
         # redirector
         uri = self.request.uri
@@ -188,6 +187,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
             def _create_upstream():
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+                s.settimeout(5)
                 self.upstream = tornado.iostream.IOStream(s)
                 if self.pphost is None:
                     self.upstream.connect((self.request.host.split(':')[0], int(self.requestport)))
