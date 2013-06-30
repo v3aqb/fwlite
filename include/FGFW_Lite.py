@@ -85,12 +85,11 @@ class ProxyHandler(tornado.web.RequestHandler):
     UPSTREAM_POOL = {}
 
     def prepare(self):
-        # redirector
         uri = self.request.uri
         if '//' not in uri:
             uri = 'https://' + uri
         host = self.request.host.split(':')[0]
-
+        # redirector
         new_url = REDIRECTOR.get(uri, host)
         if new_url:
             if new_url.startswith('401'):
@@ -356,15 +355,15 @@ class ProxyHandler(tornado.web.RequestHandler):
             client.write(b'HTTP/1.1 200 Connection established\r\n\r\n')
 
         def http_conntgt(data=None):
-            if self.pphost:
+            if self.pphost and self.pptype != 'socks5':
                 s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
+                if 'Proxy-Authorization' not in self.request.headers and self.ppusername:
+                    a = '%s:%s' % (self.ppusername, self.pppassword)
+                    self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             else:
                 s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
             if self.request.method != 'CONNECT':
                 self.request.headers['Connection'] = 'close'
-            if 'Proxy-Authorization' not in self.request.headers and self.ppusername:
-                a = '%s:%s' % (self.ppusername, self.pppassword)
-                self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             for key, value in self.request.headers.items():
                 s += '%s: %s\r\n' % (key, value)
             s += '\r\n'
@@ -432,7 +431,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                 if self.request.method == 'CONNECT':
                     start_ssltunnel()
                 else:
-                    self.pphost = None
                     http_conntgt()
 
             def fail():
