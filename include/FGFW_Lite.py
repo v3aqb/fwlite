@@ -770,6 +770,7 @@ class FGFWProxyAbs(object):
 
     def _config(self):
         self.cmd = ''
+        self.cwd = ''
         self.filelist = []
         self.enable = True
         self.enableupdate = True
@@ -777,7 +778,10 @@ class FGFWProxyAbs(object):
     def start(self):
         while True:
             if self.enable:
+                if self.cwd:
+                    os.chdir(self.cwd.replace('d:/FGFW_Lite', WORKINGDIR))
                 self.subpobj = Popen(shlex.split(self.cmd.replace('d:/FGFW_Lite', WORKINGDIR)))
+                os.chdir(WORKINGDIR)
                 self.subpobj.wait()
             time.sleep(3)
 
@@ -836,6 +840,7 @@ class goagentabs(FGFWProxyAbs):
                          ['https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'],
                          ['https://wwqgtxx-goagent.googlecode.com/git/Appid.txt', './include/Appid.txt'],
                          ]
+        self.cwd = 'd:/FGFW_Lite/goagent'
         self.cmd = PYTHON3 + ' d:/FGFW_Lite/goagent/proxy.py'
         self.enable = conf.getconfbool('goagent', 'enable', True)
 
@@ -856,6 +861,7 @@ class goagentabs(FGFWProxyAbs):
 
         proxy.set("gae", "password", conf.getconf('goagent', 'goagentGAEpassword', ''))
         proxy.set('gae', 'obfuscate', conf.getconf('goagent', 'obfuscate', '0'))
+        proxy.set('gae', 'validate', conf.getconf('goagent', 'validate', '1'))
         proxy.set("google_hk", "hosts", conf.getconf('goagent', 'gaehkhosts', 'www.google.com|mail.google.com'))
         proxy.set('pac', 'enable', '0')
         proxy.set('paas', 'fetchserver', conf.getconf('goagent', 'paasfetchserver', ''))
@@ -963,6 +969,7 @@ class shadowsocksabs(FGFWProxyAbs):
 
     def _config(self):
         self.cmd = PYTHON2 + ' d:/FGFW_Lite/shadowsocks/local.py'
+        self.cwd = 'd:/FGFW_Lite/shadowsocks'
         if sys.platform.startswith('win'):
             self.cmd = 'd:/FGFW_Lite/shadowsocks/shadowsocks-local.exe'
         self.enable = conf.getconfbool('shadowsocks', 'enable', False)
@@ -987,6 +994,7 @@ class gsnovaabs(FGFWProxyAbs):  # Need more work on this
 
     def _config(self):
         self.cmd = 'd:/FGFW_Lite/gsnova/gsnova.exe'
+        self.cwd = 'd:/FGFW_Lite/gsnova'
         self.filelist = []
         self.enable = conf.getconfbool('gsnova', 'enable', False)
         if self.enable:
