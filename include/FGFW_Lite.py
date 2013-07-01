@@ -122,7 +122,8 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        # return self.connect()
+        if sys.platform.startswith('win') and self.pphost is None:
+            return self.connect()
         client = self.request.connection.stream
 
         def _get_upstream():
