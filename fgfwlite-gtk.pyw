@@ -71,7 +71,6 @@ AAAASUVORK5CYII="""
 
 import sys
 import os
-import re
 import thread
 import base64
 import platform
@@ -97,6 +96,19 @@ try:
 except ImportError:
     sys.exit(gtk.MessageDialog(None, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, u'请安装 python-vte').run())
 
+DESKTOP_FILE = '''\
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Type=Application
+Name=FGFW-Lite GTK
+Comment=FGFW-Lite GTK Launcher
+Categories=Network;Proxy;
+Exec=/usr/bin/env python "%s"
+Icon=%s/goagent-logo.png
+Terminal=false
+StartupNotify=true
+''' % (os.path.abspath(__file__), os.path.dirname(os.path.abspath(__file__)))
+
 
 def spawn_later(seconds, target, *args, **kwargs):
     def wrap(*args, **kwargs):
@@ -108,19 +120,8 @@ def spawn_later(seconds, target, *args, **kwargs):
 
 def drop_desktop():
     filename = os.path.abspath(__file__)
-    dirname = os.path.dirname(filename)
-    DESKTOP_FILE = '''\
-#!/usr/bin/env xdg-open
-[Desktop Entry]
-Type=Application
-Name=FGFW-Lite GTK
-Comment=FGFW-Lite GTK Launcher
-Categories=Network;Proxy;
-Exec=/usr/bin/env python "%s"
-Icon=%s/goagent-logo.png
-Terminal=false
-StartupNotify=true
-''' % (filename, dirname)
+    dirname = os.path.dirname(os.path.abspath(__file__))
+
     for dirname in map(os.path.expanduser, ['~/Desktop', u'~/桌面']):
         if os.path.isdir(dirname):
             filename = os.path.join(dirname, 'fgfwlite-gtk.desktop')
@@ -128,14 +129,6 @@ StartupNotify=true
                 fp.write(DESKTOP_FILE)
             os.chmod(filename, 0755)
 
-
-def should_visible():
-    import ConfigParser
-    ConfigParser.RawConfigParser.OPTCRE = re.compile(r'(?P<option>[^=\s][^=]*)\s*(?P<vi>[=])\s*(?P<value>.*)$')
-    config = ConfigParser.ConfigParser()
-    config.read('./goagent/proxy.ini')
-    visible = config.has_option('listen', 'visible') and config.getint('listen', 'visible')
-    return False
 
 #gtk.main_quit = lambda: None
 #appindicator = None
@@ -164,9 +157,6 @@ class GoAgentGTK:
             self.childexited = None
 
         spawn_later(0.5, self.show_startup_notify)
-
-        if should_visible():
-            self.window.show_all()
 
         logo_filename = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'goagent-logo.png')
         if not os.path.isfile(logo_filename):
@@ -250,7 +240,7 @@ class GoAgentGTK:
         self.childpid = self.terminal.fork_command(self.command[0], self.command, os.getcwd())
         self.childexited = self.terminal.connect('child-exited', lambda term: gtk.main_quit())
 
-    def show_hide_toggle(self, widget, data= None):
+    def show_hide_toggle(self, widget, data=None):
         if self.window.get_property('visible'):
             self.on_hide(widget, data)
         else:

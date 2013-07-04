@@ -11,7 +11,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
-__version__ = '0.3.1.2'
+__version__ = '0.3.2.0'
 
 import sys
 import os
@@ -29,7 +29,7 @@ import random
 import tornado.ioloop
 import tornado.iostream
 import tornado.web
-
+from tornado.httputil import HTTPHeaders
 try:
     import configparser
 except ImportError:
@@ -71,8 +71,8 @@ REDIRECTOR = '''\
 |http://www.google.com.hk/url forcehttps
 |http://www.google.com.hk/search forcehttps
 /^http://www\.google\.com/?$/ forcehttps
-/^http://[^/]+\.googlecode\.com/ forcehttps
-/^http://[^/]+\.wikipedia\.org/ forcehttps
+|http://*.googlecode.com forcehttps
+|http://*.wikipedia.org forcehttps
 '''
 if not os.path.isfile('./include/redirector.txt'):
     with open('./include/redirector.txt', 'w') as f:
@@ -82,15 +82,14 @@ if not os.path.isfile('./include/redirector.txt'):
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE',
                          'TRACE', 'CONNECT']
+    UPSTREAM_POOL = {}
 
-    @tornado.web.asynchronous
     def prepare(self):
-        # redirector
         uri = self.request.uri
-        if not ('//' in uri):
+        if '//' not in uri:
             uri = 'https://' + uri
         host = self.request.host.split(':')[0]
-
+        # redirector
         new_url = REDIRECTOR.get(uri, host)
         if new_url:
             if new_url.startswith('401'):
@@ -104,13 +103,16 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         if ':' in urisplit[2]:
             self.requestport = int(urisplit[2].split(':')[1])
-        elif uri.startswith('https://'):
-            self.requestport = 443
         else:
-            self.requestport = 80
+            self.requestport = 443 if uri.startswith('https://') else 80
 
+        self.ppname, pp = fgfwproxy.parentproxy(uri, host)
         self.pptype, self.pphost, self.ppport, self.ppusername,\
-            self.pppassword = fgfwproxy.parentproxy(uri, host)
+            self.pppassword = pp
+        if self.pptype == 'socks5':
+            self.upstream_name = '%s:%s' % (self.ppname, self.request.host)
+        else:
+            self.upstream_name = self.ppname if self.pphost else self.request.host
         s = '%s %s' % (self.request.method, self.request.uri.split('?')[0])
         if self.pphost:
             s += ' via %s://%s:%s' % (self.pptype, self.pphost, self.ppport)
@@ -120,7 +122,183 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        return self.connect()
+        if sys.platform.startswith('win') and self.pphost is None:
+            return self.connect()
+        client = self.request.connection.stream
+
+        def _get_upstream():
+            def socks5_handshake(data=None):
+                def get_server_auth_method(data=None):
+                    self.upstream.read_bytes(2, socks5_auth)
+
+                def socks5_auth(data=None):
+                    if data == b'\x05\00':  # no auth needed
+                        conn_upstream()
+                    elif data == b'\x05\02':  # basic auth
+                        self.upstream.write(b"\x01" +
+                                            chr(len(self.ppusername)).encode() + self.ppusername.encode() +
+                                            chr(len(self.pppassword)).encode() + self.pppassword.encode())
+                        self.upstream.read_bytes(2, socks5_auth_finish)
+                    else:  # bad day, no auth supported
+                        fail()
+
+                def socks5_auth_finish(data=None):
+                    if data == b'\x01\x00':  # auth pass
+                        conn_upstream()
+                    else:
+                        fail()
+
+                def conn_upstream(data=None):
+                    req = b"\x05\x01\x00\x03" + chr(len(self.request.host)).encode() + self.request.host.encode()
+                    req += struct.pack(">H", self.requestport)
+                    self.upstream.write(req, post_conn_upstream)
+
+                def post_conn_upstream(data=None):
+                    self.upstream.read_bytes(4, read_upstream_data)
+
+                def read_upstream_data(data=None):
+                    if data[0:1] == b'\x05\x00':
+                        if data[3] == b'\x01':  # read socket ipaddr(ipv4) and port
+                            self.upstream.read_bytes(4, readport)
+                        elif data[3] == b'\x03':  # read socket host and port
+                            self.upstream.read_bytes(1, readhost)
+                    else:
+                        fail()
+
+                def readhost(data=None):
+                    self.upstream.read_bytes(data[0], readport)
+
+                def readport(data=None):
+                    self.upstream.read_bytes(2, _go)
+
+                def _go(data=None):
+                    pass
+
+                def fail():
+                    client.write(b'HTTP/1.1 500 socks5 proxy Connection Failed.\r\n\r\n')
+                    self.upstream.close()
+                    client.close()
+
+                if self.ppusername:
+                    authmethod = b"\x05\x02\x00\x02"
+                else:
+                    authmethod = b"\x05\x01\x00"
+                self.upstream.write(authmethod, get_server_auth_method)
+
+            def _create_upstream():
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+                s.settimeout(5)
+                self.upstream = tornado.iostream.IOStream(s)
+                if self.pphost is None:
+                    self.upstream.connect((self.request.host.split(':')[0], int(self.requestport)))
+                elif self.pptype == 'http':
+                    self.upstream.connect((self.pphost, int(self.ppport)))
+                elif self.pptype == 'https':
+                    self.upstream = tornado.iostream.SSLIOStream(s)
+                    self.upstream.connect((self.pphost, int(self.ppport)))
+                elif self.pptype == 'socks5':
+                    self.upstream.connect((self.pphost, int(self.ppport)), socks5_handshake)
+                else:
+                    client.write(b'HTTP/1.1 501 %s proxy not supported.\r\n\r\n' % self.pptype)
+                    client.close()
+
+            lst = self.UPSTREAM_POOL.get(self.upstream_name)
+            self.upstream = None
+            if isinstance(lst, list):
+                for item in lst:
+                    lst.remove(item)
+                    if not item.closed():
+                        self.upstream = item
+                        break
+            if self.upstream is None:
+                _create_upstream()
+
+        def _sent_request():
+            if self.pphost and self.pptype != 'socks5':
+                s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
+                if self.ppusername and 'Proxy-Authorization' not in self.request.headers:
+                    a = '%s:%s' % (self.ppusername, self.pppassword)
+                    self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
+            else:
+                s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
+            for key, value in self.request.headers.items():
+                s += '%s: %s\r\n' % (key, value)
+            s += '\r\n'
+            s = s.encode()
+            if self.request.body:
+                s += self.request.body + b'\r\n\r\n'
+            _on_header(s)
+
+        def _on_header(data=None):
+            self.upstream.read_until(b'\r\n\r\n', _on_body)
+            self.upstream.write(data)
+
+        def _on_body(data=None):
+            self.cbuffer = data.replace(b'Connection: keep-alive', b'Connection: close')
+            data = data.decode()
+            first_line, _, header_data = data.partition("\n")
+            headers = HTTPHeaders.parse(header_data)
+            self.close_flag = True if headers.get('Connection') == 'close' else False
+            if "Content-Length" in headers:
+                if "," in headers["Content-Length"]:
+                    # Proxies sometimes cause Content-Length headers to get
+                    # duplicated.  If all the values are identical then we can
+                    # use them but if they differ it's an error.
+                    pieces = re.split(r',\s*', headers["Content-Length"])
+                    if any(i != pieces[0] for i in pieces):
+                        raise ValueError("Multiple unequal Content-Lengths: %r" %
+                                         headers["Content-Length"])
+                    headers["Content-Length"] = pieces[0]
+                content_length = int(headers["Content-Length"])
+            else:
+                content_length = None
+
+            if headers.get("Transfer-Encoding") == "chunked":
+                self.upstream.read_until(b"\r\n", _on_chunk_lenth)
+            elif content_length is not None:
+                self.upstream.read_bytes(content_length, _finish)
+            elif headers.get("Connection") == "close":
+                self.upstream.read_until_close(_finish)
+            else:
+                _finish()
+
+        def _on_chunk_lenth(data):
+            self.cbuffer += data
+            length = int(data.strip(), 16)
+            self.upstream.read_bytes(length + 2,  # chunk ends with \r\n
+                                     _on_chunk_data)
+
+        def _on_chunk_data(data):
+            self.cbuffer += data
+            if len(data) != 2:
+                self.upstream.read_until(b"\r\n", _on_chunk_lenth)
+            else:
+                _finish()
+
+        def _finish(data=None):
+            if self.upstream_name not in self.UPSTREAM_POOL:
+                self.UPSTREAM_POOL[self.upstream_name] = []
+            lst = self.UPSTREAM_POOL.get(self.upstream_name)
+            for item in lst:
+                if item.closed():
+                    lst.remove(item)
+            if not self.upstream.closed():
+                if self.close_flag:
+                    self.upstream.close()
+                else:
+                    lst.append(self.upstream)
+            if data is not None:
+                self.cbuffer += data
+            client.write(self.cbuffer, _close)
+
+        def _close(data=None):
+            client.close()
+
+        _get_upstream()
+        try:
+            _sent_request()
+        except Exception as e:
+            logger.info(str(e))
 
     @tornado.web.asynchronous
     def post(self):
@@ -178,16 +356,17 @@ class ProxyHandler(tornado.web.RequestHandler):
             client.write(b'HTTP/1.1 200 Connection established\r\n\r\n')
 
         def http_conntgt(data=None):
-            if self.pphost:
+            if self.pphost and self.pptype != 'socks5':
                 s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
+                if 'Proxy-Authorization' not in self.request.headers and self.ppusername:
+                    a = '%s:%s' % (self.ppusername, self.pppassword)
+                    self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             else:
                 s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
-            self.request.headers['Connection'] = 'close'
+            if self.request.method != 'CONNECT':
+                self.request.headers['Connection'] = 'close'
             for key, value in self.request.headers.items():
                 s += '%s: %s\r\n' % (key, value)
-            if not 'Proxy-Authorization' in self.request.headers and self.ppusername:
-                a = '%s:%s' % (self.ppusername, self.pppassword)
-                self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             s += '\r\n'
             s = s.encode()
             if self.request.body:
@@ -253,7 +432,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                 if self.request.method == 'CONNECT':
                     start_ssltunnel()
                 else:
-                    self.pphost = None
                     http_conntgt()
 
             def fail():
@@ -475,7 +653,8 @@ def updateNbackup():
         time.sleep(90)
         chkproxy()
         ifupdate()
-        ifbackup()
+        if conf.getconfbool('AutoBackupConf', 'enable', False):
+            ifbackup()
 
 
 def chkproxy():
@@ -590,6 +769,7 @@ class FGFWProxyAbs(object):
 
     def _config(self):
         self.cmd = ''
+        self.cwd = ''
         self.filelist = []
         self.enable = True
         self.enableupdate = True
@@ -597,7 +777,10 @@ class FGFWProxyAbs(object):
     def start(self):
         while True:
             if self.enable:
+                if self.cwd:
+                    os.chdir(self.cwd.replace('d:/FGFW_Lite', WORKINGDIR))
                 self.subpobj = Popen(shlex.split(self.cmd.replace('d:/FGFW_Lite', WORKINGDIR)))
+                os.chdir(WORKINGDIR)
                 self.subpobj.wait()
             time.sleep(3)
 
@@ -656,6 +839,7 @@ class goagentabs(FGFWProxyAbs):
                          ['https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'],
                          ['https://wwqgtxx-goagent.googlecode.com/git/Appid.txt', './include/Appid.txt'],
                          ]
+        self.cwd = 'd:/FGFW_Lite/goagent'
         self.cmd = PYTHON3 + ' d:/FGFW_Lite/goagent/proxy.py'
         self.enable = conf.getconfbool('goagent', 'enable', True)
 
@@ -676,6 +860,7 @@ class goagentabs(FGFWProxyAbs):
 
         proxy.set("gae", "password", conf.getconf('goagent', 'goagentGAEpassword', ''))
         proxy.set('gae', 'obfuscate', conf.getconf('goagent', 'obfuscate', '0'))
+        proxy.set('gae', 'validate', conf.getconf('goagent', 'validate', '1'))
         proxy.set("google_hk", "hosts", conf.getconf('goagent', 'gaehkhosts', 'www.google.com|mail.google.com'))
         proxy.set('pac', 'enable', '0')
         proxy.set('paas', 'fetchserver', conf.getconf('goagent', 'paasfetchserver', ''))
@@ -783,6 +968,7 @@ class shadowsocksabs(FGFWProxyAbs):
 
     def _config(self):
         self.cmd = PYTHON2 + ' d:/FGFW_Lite/shadowsocks/local.py'
+        self.cwd = 'd:/FGFW_Lite/shadowsocks'
         if sys.platform.startswith('win'):
             self.cmd = 'd:/FGFW_Lite/shadowsocks/shadowsocks-local.exe'
         self.enable = conf.getconfbool('shadowsocks', 'enable', False)
@@ -807,6 +993,7 @@ class gsnovaabs(FGFWProxyAbs):  # Need more work on this
 
     def _config(self):
         self.cmd = 'd:/FGFW_Lite/gsnova/gsnova.exe'
+        self.cwd = 'd:/FGFW_Lite/gsnova'
         self.filelist = []
         self.enable = conf.getconfbool('gsnova', 'enable', False)
         if self.enable:
@@ -922,7 +1109,7 @@ class fgfwproxy(FGFWProxyAbs):
         cls.parentdict[name] = proxy
 
     @classmethod
-    def parentproxy(cls, uri, domain=''):
+    def parentproxy(cls, uri, domain=None):
         '''
             decide which parentproxy to use.
             url:  'https://www.google.com'
@@ -930,7 +1117,7 @@ class fgfwproxy(FGFWProxyAbs):
         '''
         # return cls.parentdict.get('https')
 
-        if not domain:
+        if domain is None:
             domain = uri.split('/')[2].split(':')[0]
 
         cls.inchinadict = {}
@@ -966,7 +1153,7 @@ class fgfwproxy(FGFWProxyAbs):
         # select parent via uri
         parentlist = list(cls.parentdictalive.keys())
         if ifhost_in_china():
-            return cls.parentdictalive.get('direct')
+            return ('direct', cls.parentdictalive.get('direct'))
         if ifgfwlist():
             parentlist.remove('direct')
             if uri.startswith('ftp://'):
@@ -976,8 +1163,9 @@ class fgfwproxy(FGFWProxyAbs):
                 except Exception:
                     pass
             if parentlist:
-                return cls.parentdictalive.get(random.choice(parentlist))
-        return cls.parentdictalive.get('direct')
+                ppname = random.choice(parentlist)
+                return (ppname, cls.parentdictalive.get(ppname))
+        return ('direct', cls.parentdictalive.get('direct'))
 
     @classmethod
     def chinaroute(cls):

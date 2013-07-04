@@ -5,7 +5,8 @@
 ||google.com
 ||google.com.hk
 ||google-analytics.com
-||googleapis.com
 ||googlecode.com
 ||googleusercontent.com
 ||gstatic.com
+||feedly.com
+||rhcloud.com
