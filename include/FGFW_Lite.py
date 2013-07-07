@@ -187,7 +187,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
             def _create_upstream():
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-                s.settimeout(5)
+                # s.settimeout(5)
                 self.upstream = tornado.iostream.IOStream(s)
                 if self.pphost is None:
                     self.upstream.connect((self.request.host.split(':')[0], int(self.requestport)))
@@ -987,9 +987,8 @@ class shadowsocksabs(FGFWProxyAbs):
 
 class gsnovaabs(FGFWProxyAbs):  # Need more work on this
     """docstring for ClassName"""
-    def __init__(self, arg=''):
+    def __init__(self):
         FGFWProxyAbs.__init__(self)
-        self.arg = arg
 
     def _config(self):
         self.cmd = 'd:/FGFW_Lite/gsnova/gsnova.exe'
@@ -1109,7 +1108,7 @@ class fgfwproxy(FGFWProxyAbs):
         cls.parentdict[name] = proxy
 
     @classmethod
-    def parentproxy(cls, uri, domain=None):
+    def parentproxy(cls, uri=None, domain=None):
         '''
             decide which parentproxy to use.
             url:  'https://www.google.com'
@@ -1117,12 +1116,14 @@ class fgfwproxy(FGFWProxyAbs):
         '''
         # return cls.parentdict.get('https')
 
-        if domain is None:
+        if uri is not None and domain is None:
             domain = uri.split('/')[2].split(':')[0]
 
         cls.inchinadict = {}
 
         def ifhost_in_china():
+            if domain is None:
+                return False
             result = cls.inchinadict.get('domain')
             if result is None:
                 try:
@@ -1154,7 +1155,7 @@ class fgfwproxy(FGFWProxyAbs):
         parentlist = list(cls.parentdictalive.keys())
         if ifhost_in_china():
             return ('direct', cls.parentdictalive.get('direct'))
-        if ifgfwlist():
+        if uri is None or ifgfwlist():
             parentlist.remove('direct')
             if uri.startswith('ftp://'):
                 try:
@@ -1196,9 +1197,8 @@ class fgfwproxy(FGFWProxyAbs):
 
 class SConfigParser(configparser.ConfigParser):
     """docstring for SSafeConfigParser"""
-    def __init__(self, arg=''):
+    def __init__(self):
         super(SConfigParser, self).__init__()
-        self.arg = arg
 
     def dget(self, section, option, default=None):
         value = self.get(section, option)
