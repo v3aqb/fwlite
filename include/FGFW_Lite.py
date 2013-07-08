@@ -58,6 +58,10 @@ else:
     PYTHON2 = '/usr/bin/env python2'
     PYTHON3 = '/usr/bin/env python3'
 
+if not os.path.isfile('./userconf.ini'):
+    import shutil
+    shutil.copy2('./userconf.sample.ini', './userconf.ini')
+
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('FGFW-Lite')
@@ -877,9 +881,7 @@ class goagentabs(FGFWProxyAbs):
 
         with open('./goagent/proxy.ini', 'w') as configfile:
             proxy.write(configfile)
-        self.cert()
 
-    def cert(self):
         if not os.path.isfile('./goagent/CA.crt'):
             self.createCert()
 

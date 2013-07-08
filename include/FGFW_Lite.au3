@@ -24,7 +24,7 @@ Func setEnv()
 		Exit (1)
 	EndIf
 	If Not FileExists("userconf.ini") Then
-		FileWrite("userconf.ini", "[FGFW_Lite]" & @CRLF & "[goagent]" & @CRLF & "goagentGAEAppid =" & @CRLF & "password =" & @CRLF & "[gfwlistUserconf]" & @CRLF & "[gfwlistUserOverride]" & @CRLF & "[AutoBackup]" & @CRLF & ";filename = C:/Users/DummyAccount/AppData" & @CRLF & "[AutoBackupConf]" & @CRLF & "BackupPath = e:/backup")
+		FileCopy("userconf.sample.ini", "userconf.ini")
 	EndIf
 	FileWrite('./include/dummy', @CRLF)
 EndFunc   ;==>setEnv
