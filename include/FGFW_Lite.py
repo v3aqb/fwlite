@@ -241,7 +241,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.cbuffer = data.replace(b'Connection: keep-alive', b'Connection: close')
             data = data.decode()
             first_line, _, header_data = data.partition("\n")
-            version, status_code, reason = first_line.split()
+            status_code = int(first_line.split()[1])
             headers = HTTPHeaders.parse(header_data)
             self.close_flag = True if headers.get('Connection') == 'close' else False
 
@@ -259,7 +259,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 content_length = None
 
-            if self.request.method == "HEAD" or int(status_code) == 304:
+            if self.request.method == "HEAD" or status_code == 304:
                 _finish()
             elif headers.get("Transfer-Encoding") == "chunked":
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
