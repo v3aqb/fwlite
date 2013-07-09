@@ -58,6 +58,10 @@ else:
     PYTHON2 = '/usr/bin/env python2'
     PYTHON3 = '/usr/bin/env python3'
 
+if not os.path.isfile('./userconf.ini'):
+    import shutil
+    shutil.copy2('./userconf.sample.ini', './userconf.ini')
+
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('FGFW-Lite')
@@ -187,7 +191,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
             def _create_upstream():
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-                s.settimeout(5)
+                # s.settimeout(5)
                 self.upstream = tornado.iostream.IOStream(s)
                 if self.pphost is None:
                     self.upstream.connect((self.request.host.split(':')[0], int(self.requestport)))
@@ -227,18 +231,20 @@ class ProxyHandler(tornado.web.RequestHandler):
             s = s.encode()
             if self.request.body:
                 s += self.request.body + b'\r\n\r\n'
-            _on_header(s)
+            _on_connect(s)
 
-        def _on_header(data=None):
-            self.upstream.read_until(b'\r\n\r\n', _on_body)
+        def _on_connect(data=None):
+            self.upstream.read_until(b'\r\n\r\n', _on_headers)
             self.upstream.write(data)
 
-        def _on_body(data=None):
+        def _on_headers(data=None):
             self.cbuffer = data.replace(b'Connection: keep-alive', b'Connection: close')
             data = data.decode()
             first_line, _, header_data = data.partition("\n")
+            status_code = int(first_line.split()[1])
             headers = HTTPHeaders.parse(header_data)
             self.close_flag = True if headers.get('Connection') == 'close' else False
+
             if "Content-Length" in headers:
                 if "," in headers["Content-Length"]:
                     # Proxies sometimes cause Content-Length headers to get
@@ -253,7 +259,9 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 content_length = None
 
-            if headers.get("Transfer-Encoding") == "chunked":
+            if self.request.method == "HEAD" or status_code == 304:
+                _finish()
+            elif headers.get("Transfer-Encoding") == "chunked":
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             elif content_length is not None:
                 self.upstream.read_bytes(content_length, _finish)
@@ -608,6 +616,18 @@ class redirector(object):
     def __init__(self, arg=None):
         super(redirector, self).__init__()
         self.arg = arg
+        self.config()
+
+    def get(self, uri, host=None):
+        for rule, result in self.list:
+            if rule.match(uri, host):
+                logger.info('Match redirect rule %s, %s' % (rule.rule, result))
+                if result == 'forcehttps':
+                    return uri.replace('http://', 'https://', 1)
+                return result
+        return False
+
+    def config(self):
         self.list = []
 
         with open('./include/redirector.txt') as f:
@@ -622,15 +642,6 @@ class redirector(object):
                         pass
                     else:
                         self.list.append((o, line.split()[1]))
-
-    def get(self, uri, host=None):
-        for rule, result in self.list:
-            if rule.match(uri, host):
-                logger.info('Match redirect rule %s, %s' % (rule.rule, result))
-                if result == 'forcehttps':
-                    return uri.replace('http://', 'https://', 1)
-                return result
-        return False
 
 REDIRECTOR = redirector()
 
@@ -697,6 +708,7 @@ def fgfw2Liteupdate(auto=True):
 
 def fgfw2Literestart():
     conf.confsave()
+    REDIRECTOR.config()
     for item in FGFWProxyAbs.ITEMS:
         item.config()
         item.restart()
@@ -877,9 +889,7 @@ class goagentabs(FGFWProxyAbs):
 
         with open('./goagent/proxy.ini', 'w') as configfile:
             proxy.write(configfile)
-        self.cert()
 
-    def cert(self):
         if not os.path.isfile('./goagent/CA.crt'):
             self.createCert()
 
@@ -987,9 +997,8 @@ class shadowsocksabs(FGFWProxyAbs):
 
 class gsnovaabs(FGFWProxyAbs):  # Need more work on this
     """docstring for ClassName"""
-    def __init__(self, arg=''):
+    def __init__(self):
         FGFWProxyAbs.__init__(self)
-        self.arg = arg
 
     def _config(self):
         self.cmd = 'd:/FGFW_Lite/gsnova/gsnova.exe'
@@ -1109,7 +1118,7 @@ class fgfwproxy(FGFWProxyAbs):
         cls.parentdict[name] = proxy
 
     @classmethod
-    def parentproxy(cls, uri, domain=None):
+    def parentproxy(cls, uri=None, domain=None):
         '''
             decide which parentproxy to use.
             url:  'https://www.google.com'
@@ -1117,12 +1126,14 @@ class fgfwproxy(FGFWProxyAbs):
         '''
         # return cls.parentdict.get('https')
 
-        if domain is None:
+        if uri is not None and domain is None:
             domain = uri.split('/')[2].split(':')[0]
 
         cls.inchinadict = {}
 
         def ifhost_in_china():
+            if domain is None:
+                return False
             result = cls.inchinadict.get('domain')
             if result is None:
                 try:
@@ -1154,7 +1165,7 @@ class fgfwproxy(FGFWProxyAbs):
         parentlist = list(cls.parentdictalive.keys())
         if ifhost_in_china():
             return ('direct', cls.parentdictalive.get('direct'))
-        if ifgfwlist():
+        if uri is None or ifgfwlist():
             parentlist.remove('direct')
             if uri.startswith('ftp://'):
                 try:
@@ -1196,9 +1207,8 @@ class fgfwproxy(FGFWProxyAbs):
 
 class SConfigParser(configparser.ConfigParser):
     """docstring for SSafeConfigParser"""
-    def __init__(self, arg=''):
+    def __init__(self):
         super(SConfigParser, self).__init__()
-        self.arg = arg
 
     def dget(self, section, option, default=None):
         value = self.get(section, option)
@@ -1304,6 +1314,8 @@ def main():
             fgfw2Liteupdate(auto=False)
         elif 'backup'in line:
             backup()
+        elif 'restart'in line:
+            fgfw2Literestart()
         else:
             print(line)
 
