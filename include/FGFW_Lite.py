@@ -616,6 +616,18 @@ class redirector(object):
     def __init__(self, arg=None):
         super(redirector, self).__init__()
         self.arg = arg
+        self.config()
+
+    def get(self, uri, host=None):
+        for rule, result in self.list:
+            if rule.match(uri, host):
+                logger.info('Match redirect rule %s, %s' % (rule.rule, result))
+                if result == 'forcehttps':
+                    return uri.replace('http://', 'https://', 1)
+                return result
+        return False
+
+    def config(self):
         self.list = []
 
         with open('./include/redirector.txt') as f:
@@ -630,15 +642,6 @@ class redirector(object):
                         pass
                     else:
                         self.list.append((o, line.split()[1]))
-
-    def get(self, uri, host=None):
-        for rule, result in self.list:
-            if rule.match(uri, host):
-                logger.info('Match redirect rule %s, %s' % (rule.rule, result))
-                if result == 'forcehttps':
-                    return uri.replace('http://', 'https://', 1)
-                return result
-        return False
 
 REDIRECTOR = redirector()
 
@@ -705,6 +708,7 @@ def fgfw2Liteupdate(auto=True):
 
 def fgfw2Literestart():
     conf.confsave()
+    REDIRECTOR.config()
     for item in FGFWProxyAbs.ITEMS:
         item.config()
         item.restart()
@@ -1310,6 +1314,8 @@ def main():
             fgfw2Liteupdate(auto=False)
         elif 'backup'in line:
             backup()
+        elif 'restart'in line:
+            fgfw2Literestart()
         else:
             print(line)
 
