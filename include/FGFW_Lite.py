@@ -231,18 +231,20 @@ class ProxyHandler(tornado.web.RequestHandler):
             s = s.encode()
             if self.request.body:
                 s += self.request.body + b'\r\n\r\n'
-            _on_header(s)
+            _on_connect(s)
 
-        def _on_header(data=None):
-            self.upstream.read_until(b'\r\n\r\n', _on_body)
+        def _on_connect(data=None):
+            self.upstream.read_until(b'\r\n\r\n', _on_headers)
             self.upstream.write(data)
 
-        def _on_body(data=None):
+        def _on_headers(data=None):
             self.cbuffer = data.replace(b'Connection: keep-alive', b'Connection: close')
             data = data.decode()
             first_line, _, header_data = data.partition("\n")
+            version, status_code, reason = first_line.split()
             headers = HTTPHeaders.parse(header_data)
             self.close_flag = True if headers.get('Connection') == 'close' else False
+
             if "Content-Length" in headers:
                 if "," in headers["Content-Length"]:
                     # Proxies sometimes cause Content-Length headers to get
@@ -257,7 +259,9 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 content_length = None
 
-            if headers.get("Transfer-Encoding") == "chunked":
+            if self.request.method == "HEAD" or int(status_code) == 304:
+                _finish()
+            elif headers.get("Transfer-Encoding") == "chunked":
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             elif content_length is not None:
                 self.upstream.read_bytes(content_length, _finish)
