@@ -651,7 +651,7 @@ def run_proxy(port, start_ioloop=True):
     Run proxy on the specified port. If start_ioloop is True (default),
     the tornado IOLoop will be started immediately.
     """
-    print ("Starting HTTP proxy on port %d" % port)
+    print ("Starting HTTP proxy on port %s" % port)
     app = tornado.web.Application([(r'.*', ProxyHandler), ])
     app.listen(port)
     ioloop = tornado.ioloop.IOLoop.instance()
@@ -1060,12 +1060,16 @@ class fgfwproxy(FGFWProxyAbs):
                          ]
         self.enable = conf.getconfbool('fgfwproxy', 'enable', True)
         self.enableupdate = conf.getconfbool('fgfwproxy', 'update', True)
+        self.listen = conf.getconf('fgfwproxy', 'listen', '8118')
         self.chinaroute()
         self.conf()
 
     def start(self):
         if self.enable:
-            run_proxy(8118)
+            if ':' in self.listen:
+                run_proxy(self.listen.split(':')[1], address=self.listen.split(':')[0])
+            else:
+                run_proxy(self.listen)
 
     @classmethod
     def conf(cls):
