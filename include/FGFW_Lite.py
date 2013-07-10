@@ -855,12 +855,21 @@ class goagentabs(FGFWProxyAbs):
         self.cmd = PYTHON3 + ' d:/FGFW_Lite/goagent/proxy.py'
         self.enable = conf.getconfbool('goagent', 'enable', True)
 
-        if self.enable:
-            fgfwproxy.addparentproxy('goagnet', ('http', '127.0.0.1', 8087, None, None))
-
         self.enableupdate = conf.getconfbool('goagent', 'update', True)
+        listen = conf.getconf('goagent', 'listen', '127.0.0.1:8087')
+        if ':' in listen:
+            listen_ip, listen_port = listen.split(':')
+        else:
+            listen_ip = '127.0.0.1'
+            listen_port = listen
+
         proxy = SConfigParser()
         proxy.read('./goagent/proxy.ini')
+        proxy.set('listen', 'ip', listen_ip)
+        proxy.set('listen', 'port', listen_port)
+
+        if self.enable:
+            fgfwproxy.addparentproxy('goagnet', ('http', '127.0.0.1', int(listen_port), None, None))
 
         proxy.set('gae', 'profile', conf.getconf('goagent', 'profile', 'google_cn'))
 
