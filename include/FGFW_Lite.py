@@ -126,7 +126,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        if sys.platform.startswith('win') and self.pphost is None:
+        if self.pphost is None:
             return self.connect()
         client = self.request.connection.stream
 
@@ -191,7 +191,6 @@ class ProxyHandler(tornado.web.RequestHandler):
 
             def _create_upstream():
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-                # s.settimeout(5)
                 self.upstream = tornado.iostream.IOStream(s)
                 if self.pphost is None:
                     self.upstream.connect((self.request.host.split(':')[0], int(self.requestport)))
@@ -234,7 +233,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             _on_connect(s)
 
         def _on_connect(data=None):
-            self.upstream.read_until(b'\r\n\r\n', _on_headers)
+            self.upstream.read_until_regex(b"\r?\n\r?\n", _on_headers)
             self.upstream.write(data)
 
         def _on_headers(data=None):
@@ -307,6 +306,9 @@ class ProxyHandler(tornado.web.RequestHandler):
             _sent_request()
         except Exception as e:
             logger.info(str(e))
+            if not self.upstream.closed():
+                self.upstream.close()
+            client.close()
 
     @tornado.web.asynchronous
     def post(self):
@@ -404,12 +406,12 @@ class ProxyHandler(tornado.web.RequestHandler):
 
             def conn_upstream(data=None):
                 # try:
-                #     ip = socket.aton(self.request.host)  # guess ipv4
+                #     ip = socket.inet_aton(self.request.host)  # guess ipv4
                 # except socket.error:
                 #     try:  # guess ipv6
                 #         ip = socket.inet_pton(socket.AF_INET6, self.request.host)
                 #     except Exception:  # got to be domain name
-                #         req = b"\x05\x01\x00\x03" + chr(len(self.request.host)) + self.request.host
+                #         req = b"\x05\x01\x00\x03" + chr(len(self.request.host)).encode() + self.request.host.encode()
                 #     else:
                 #         req = b"\x05\x01\x00\x04" + ip
                 # else:
