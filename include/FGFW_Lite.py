@@ -11,7 +11,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
-__version__ = '0.3.2.0'
+__version__ = '0.3.2.1'
 
 import sys
 import os
@@ -84,8 +84,7 @@ if not os.path.isfile('./include/redirector.txt'):
 
 
 class ProxyHandler(tornado.web.RequestHandler):
-    SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE',
-                         'TRACE', 'CONNECT']
+    SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT']
     UPSTREAM_POOL = {}
 
     def prepare(self):
@@ -126,7 +125,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        if self.pphost is None:
+        if sys.platform.startswith('win') and self.pphost is None:
             return self.connect()
         client = self.request.connection.stream
 
@@ -216,6 +215,9 @@ class ProxyHandler(tornado.web.RequestHandler):
             if self.upstream is None:
                 _create_upstream()
 
+        def read_from_upstream(data):
+            client.write(data)
+
         def _sent_request():
             if self.pphost and self.pptype != 'socks5':
                 s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
@@ -237,7 +239,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.upstream.write(data)
 
         def _on_headers(data=None):
-            self.cbuffer = data.replace(b'Connection: keep-alive', b'Connection: close')
+            client.write(data.replace(b'Connection: keep-alive', b'Connection: close'))
             data = data.decode()
             first_line, _, header_data = data.partition("\n")
             status_code = int(first_line.split()[1])
@@ -263,20 +265,20 @@ class ProxyHandler(tornado.web.RequestHandler):
             elif headers.get("Transfer-Encoding") == "chunked":
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             elif content_length is not None:
-                self.upstream.read_bytes(content_length, _finish)
+                self.upstream.read_bytes(content_length, _finish, streaming_callback=read_from_upstream)
             elif headers.get("Connection") == "close":
                 self.upstream.read_until_close(_finish)
             else:
                 _finish()
 
         def _on_chunk_lenth(data):
-            self.cbuffer += data
+            client.write(data)
             length = int(data.strip(), 16)
             self.upstream.read_bytes(length + 2,  # chunk ends with \r\n
                                      _on_chunk_data)
 
         def _on_chunk_data(data):
-            self.cbuffer += data
+            client.write(data)
             if len(data) != 2:
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             else:
@@ -295,10 +297,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 else:
                     lst.append(self.upstream)
             if data is not None:
-                self.cbuffer += data
-            client.write(self.cbuffer, _close)
-
-        def _close(data=None):
+                client.write(data)
             client.close()
 
         _get_upstream()
@@ -308,7 +307,8 @@ class ProxyHandler(tornado.web.RequestHandler):
             logger.info(str(e))
             if not self.upstream.closed():
                 self.upstream.close()
-            client.close()
+            if not client.closed():
+                client.close()
 
     @tornado.web.asynchronous
     def post(self):
