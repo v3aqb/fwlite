@@ -11,7 +11,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
-__version__ = '0.3.2.0'
+__version__ = '0.3.2.1'
 
 import sys
 import os
@@ -84,8 +84,7 @@ if not os.path.isfile('./include/redirector.txt'):
 
 
 class ProxyHandler(tornado.web.RequestHandler):
-    SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE',
-                         'TRACE', 'CONNECT']
+    SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT']
     UPSTREAM_POOL = {}
 
     def prepare(self):
@@ -114,7 +113,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         self.pptype, self.pphost, self.ppport, self.ppusername,\
             self.pppassword = pp
         if self.pptype == 'socks5':
-            self.upstream_name = '%s:%s' % (self.ppname, self.request.host)
+            self.upstream_name = '%s-%s-%s' % (self.ppname, self.request.host, str(self.requestport))
         else:
             self.upstream_name = self.ppname if self.pphost else self.request.host
         s = '%s %s' % (self.request.method, self.request.uri.split('?')[0])
@@ -127,6 +126,8 @@ class ProxyHandler(tornado.web.RequestHandler):
     @tornado.web.asynchronous
     def get(self):
         if sys.platform.startswith('win') and self.pphost is None:
+            return self.connect()
+        if self.pptype == 'socks5':
             return self.connect()
         client = self.request.connection.stream
 
@@ -143,11 +144,11 @@ class ProxyHandler(tornado.web.RequestHandler):
                                             chr(len(self.ppusername)).encode() + self.ppusername.encode() +
                                             chr(len(self.pppassword)).encode() + self.pppassword.encode())
                         self.upstream.read_bytes(2, socks5_auth_finish)
-                    else:  # bad day, no auth supported
+                    else:  # bad day, something is wrong
                         fail()
 
                 def socks5_auth_finish(data=None):
-                    if data == b'\x01\x00':  # auth pass
+                    if data == b'\x01\x00':  # auth passed
                         conn_upstream()
                     else:
                         fail()
@@ -161,19 +162,15 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.upstream.read_bytes(4, read_upstream_data)
 
                 def read_upstream_data(data=None):
-                    if data[0:1] == b'\x05\x00':
-                        if data[3] == b'\x01':  # read socket ipaddr(ipv4) and port
-                            self.upstream.read_bytes(4, readport)
-                        elif data[3] == b'\x03':  # read socket host and port
-                            self.upstream.read_bytes(1, readhost)
+                    if data.startswith(b'\x05\x00\x00\x01'):
+                        self.upstream.read_bytes(6, _go)
+                    elif data.startswith(b'\x05\x00\x00\x03'):
+                        self.upstream.read_bytes(3, readhost)
                     else:
                         fail()
 
                 def readhost(data=None):
-                    self.upstream.read_bytes(data[0], readport)
-
-                def readport(data=None):
-                    self.upstream.read_bytes(2, _go)
+                    self.upstream.read_bytes(data[0], _go)
 
                 def _go(data=None):
                     pass
@@ -191,7 +188,6 @@ class ProxyHandler(tornado.web.RequestHandler):
 
             def _create_upstream():
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-                # s.settimeout(5)
                 self.upstream = tornado.iostream.IOStream(s)
                 if self.pphost is None:
                     self.upstream.connect((self.request.host.split(':')[0], int(self.requestport)))
@@ -217,6 +213,9 @@ class ProxyHandler(tornado.web.RequestHandler):
             if self.upstream is None:
                 _create_upstream()
 
+        def read_from_upstream(data):
+            client.write(data)
+
         def _sent_request():
             if self.pphost and self.pptype != 'socks5':
                 s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
@@ -234,11 +233,11 @@ class ProxyHandler(tornado.web.RequestHandler):
             _on_connect(s)
 
         def _on_connect(data=None):
-            self.upstream.read_until(b'\r\n\r\n', _on_headers)
+            self.upstream.read_until_regex(b"\r?\n\r?\n", _on_headers)
             self.upstream.write(data)
 
         def _on_headers(data=None):
-            self.cbuffer = data.replace(b'Connection: keep-alive', b'Connection: close')
+            client.write(data.replace(b'Connection: keep-alive', b'Connection: close'))
             data = data.decode()
             first_line, _, header_data = data.partition("\n")
             status_code = int(first_line.split()[1])
@@ -264,20 +263,20 @@ class ProxyHandler(tornado.web.RequestHandler):
             elif headers.get("Transfer-Encoding") == "chunked":
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             elif content_length is not None:
-                self.upstream.read_bytes(content_length, _finish)
+                self.upstream.read_bytes(content_length, _finish, streaming_callback=read_from_upstream)
             elif headers.get("Connection") == "close":
                 self.upstream.read_until_close(_finish)
             else:
                 _finish()
 
         def _on_chunk_lenth(data):
-            self.cbuffer += data
+            client.write(data)
             length = int(data.strip(), 16)
             self.upstream.read_bytes(length + 2,  # chunk ends with \r\n
                                      _on_chunk_data)
 
         def _on_chunk_data(data):
-            self.cbuffer += data
+            client.write(data)
             if len(data) != 2:
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             else:
@@ -296,10 +295,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 else:
                     lst.append(self.upstream)
             if data is not None:
-                self.cbuffer += data
-            client.write(self.cbuffer, _close)
-
-        def _close(data=None):
+                client.write(data)
             client.close()
 
         _get_upstream()
@@ -307,6 +303,10 @@ class ProxyHandler(tornado.web.RequestHandler):
             _sent_request()
         except Exception as e:
             logger.info(str(e))
+            if not self.upstream.closed():
+                self.upstream.close()
+            if not client.closed():
+                client.close()
 
     @tornado.web.asynchronous
     def post(self):
@@ -364,7 +364,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             client.write(b'HTTP/1.1 200 Connection established\r\n\r\n')
 
         def http_conntgt(data=None):
-            if self.pphost and self.pptype != 'socks5':
+            if self.pptype == 'http' or self.pptype == 'https':
                 s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
                 if 'Proxy-Authorization' not in self.request.headers and self.ppusername:
                     a = '%s:%s' % (self.ppusername, self.pppassword)
@@ -393,23 +393,23 @@ class ProxyHandler(tornado.web.RequestHandler):
                                    chr(len(self.ppusername)).encode() + self.ppusername.encode() +
                                    chr(len(self.pppassword)).encode() + self.pppassword.encode())
                     upstream.read_bytes(2, socks5_auth_finish)
-                else:  # bad day, no auth supported
+                else:  # bad day, something is wrong
                     fail()
 
             def socks5_auth_finish(data=None):
-                if data == b'\x01\x00':  # auth pass
+                if data == b'\x01\x00':  # auth passed
                     conn_upstream()
                 else:
                     fail()
 
             def conn_upstream(data=None):
                 # try:
-                #     ip = socket.aton(self.request.host)  # guess ipv4
+                #     ip = socket.inet_aton(self.request.host)  # guess ipv4
                 # except socket.error:
                 #     try:  # guess ipv6
                 #         ip = socket.inet_pton(socket.AF_INET6, self.request.host)
                 #     except Exception:  # got to be domain name
-                #         req = b"\x05\x01\x00\x03" + chr(len(self.request.host)) + self.request.host
+                #         req = b"\x05\x01\x00\x03" + chr(len(self.request.host)).encode() + self.request.host.encode()
                 #     else:
                 #         req = b"\x05\x01\x00\x04" + ip
                 # else:
@@ -422,19 +422,15 @@ class ProxyHandler(tornado.web.RequestHandler):
                 upstream.read_bytes(4, read_upstream_data)
 
             def read_upstream_data(data=None):
-                if data[0:1] == b'\x05\x00':
-                    if data[3] == b'\x01':  # read socket ipaddr(ipv4) and port
-                        upstream.read_bytes(4, readport)
-                    elif data[3] == b'\x03':  # read socket host and port
-                        upstream.read_bytes(1, readhost)
+                if data.startswith(b'\x05\x00\x00\x01'):
+                    upstream.read_bytes(6, conn)
+                elif data.startswith(b'\x05\x00\x00\x03'):
+                    upstream.read_bytes(3, readhost)
                 else:
                     fail()
 
             def readhost(data=None):
-                upstream.read_bytes(data[0], readport)
-
-            def readport(data=None):
-                upstream.read_bytes(2, conn)
+                upstream.read_bytes(data[0], conn)
 
             def conn(data=None):
                 if self.request.method == 'CONNECT':
@@ -651,7 +647,7 @@ def run_proxy(port, start_ioloop=True):
     Run proxy on the specified port. If start_ioloop is True (default),
     the tornado IOLoop will be started immediately.
     """
-    print ("Starting HTTP proxy on port %d" % port)
+    print ("Starting HTTP proxy on port %s" % port)
     app = tornado.web.Application([(r'.*', ProxyHandler), ])
     app.listen(port)
     ioloop = tornado.ioloop.IOLoop.instance()
@@ -855,12 +851,21 @@ class goagentabs(FGFWProxyAbs):
         self.cmd = PYTHON3 + ' d:/FGFW_Lite/goagent/proxy.py'
         self.enable = conf.getconfbool('goagent', 'enable', True)
 
-        if self.enable:
-            fgfwproxy.addparentproxy('goagnet', ('http', '127.0.0.1', 8087, None, None))
-
         self.enableupdate = conf.getconfbool('goagent', 'update', True)
+        listen = conf.getconf('goagent', 'listen', '127.0.0.1:8087')
+        if ':' in listen:
+            listen_ip, listen_port = listen.split(':')
+        else:
+            listen_ip = '127.0.0.1'
+            listen_port = listen
+
         proxy = SConfigParser()
         proxy.read('./goagent/proxy.ini')
+        proxy.set('listen', 'ip', listen_ip)
+        proxy.set('listen', 'port', listen_port)
+
+        if self.enable:
+            fgfwproxy.addparentproxy('goagnet', ('http', '127.0.0.1', int(listen_port), None, None))
 
         proxy.set('gae', 'profile', conf.getconf('goagent', 'profile', 'google_cn'))
 
@@ -1060,12 +1065,16 @@ class fgfwproxy(FGFWProxyAbs):
                          ]
         self.enable = conf.getconfbool('fgfwproxy', 'enable', True)
         self.enableupdate = conf.getconfbool('fgfwproxy', 'update', True)
+        self.listen = conf.getconf('fgfwproxy', 'listen', '8118')
         self.chinaroute()
         self.conf()
 
     def start(self):
         if self.enable:
-            run_proxy(8118)
+            if ':' in self.listen:
+                run_proxy(self.listen.split(':')[1], address=self.listen.split(':')[0])
+            else:
+                run_proxy(self.listen)
 
     @classmethod
     def conf(cls):
