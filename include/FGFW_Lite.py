@@ -809,7 +809,7 @@ class FGFWProxyAbs(object):
         if len(self.filelist) > 0:
             for i in range(len(self.filelist)):
                 url, path = self.filelist[i]
-                etag = conf.presets.dget('Update', path.split('/')[-1] + '.ver', '')
+                etag = conf.presets.dget('Update', path.replace('./', '').replace('/', '-'), '')
                 self.updateViaHTTP(url, etag, path)
 
     def updateViaHTTP(self, url, etag, path):
@@ -829,7 +829,7 @@ class FGFWProxyAbs(object):
                 with open(path, 'wb') as localfile:
                     localfile.write(r.content)
                 with conf.iolock:
-                    conf.presets.set('Update', path.split('/')[-1] + '.ver', str(r.headers.get('etag')))
+                    conf.presets.set('Update', path.replace('./', '').replace('/', '-'), str(r.headers.get('etag')))
                 with consoleLock:
                     logger.info(path + ' Updated.')
             else:
@@ -982,6 +982,10 @@ class shadowsocksabs(FGFWProxyAbs):
         FGFWProxyAbs.__init__(self)
 
     def _config(self):
+        self.filelist = [['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/local.py', './shadowsocks/local.py'],
+                         ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/encrypt.py', './shadowsocks/encrypt.py'],
+                         ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/utils.py', './shadowsocks/utils.py'],
+                         ]
         self.cmd = PYTHON2 + ' d:/FGFW_Lite/shadowsocks/local.py'
         self.cwd = 'd:/FGFW_Lite/shadowsocks'
         if sys.platform.startswith('win'):
