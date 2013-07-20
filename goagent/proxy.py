@@ -101,12 +101,11 @@ class Logging(type(sys)):
 
     def __init__(self, *args, **kwargs):
         self.level = self.__class__.INFO
-        if self.level > self.__class__.DEBUG:
-            self.debug = self.dummy
         self.__write = __write = sys.stderr.write
         self.isatty = getattr(sys.stderr, 'isatty', lambda: False)()
         self.__set_error_color = lambda: None
         self.__set_warning_color = lambda: None
+        self.__set_debug_color = lambda: None
         self.__reset_color = lambda: None
         if self.isatty:
             if os.name == 'nt':
@@ -114,10 +113,12 @@ class Logging(type(sys)):
                 GetStdHandle = ctypes.windll.kernel32.GetStdHandle
                 self.__set_error_color = lambda: SetConsoleTextAttribute(GetStdHandle(-11), 0x04)
                 self.__set_warning_color = lambda: SetConsoleTextAttribute(GetStdHandle(-11), 0x06)
+                self.__set_debug_color = lambda: SetConsoleTextAttribute(GetStdHandle(-11), 0x002)
                 self.__reset_color = lambda: SetConsoleTextAttribute(GetStdHandle(-11), 0x07)
             elif os.name == 'posix':
                 self.__set_error_color = lambda: __write('\033[31m')
                 self.__set_warning_color = lambda: __write('\033[33m')
+                self.__set_debug_color = lambda: __write('\033[32m')
                 self.__reset_color = lambda: __write('\033[0m')
 
     @classmethod
@@ -136,7 +137,9 @@ class Logging(type(sys)):
         pass
 
     def debug(self, fmt, *args, **kwargs):
+        self.__set_debug_color()
         self.log('DEBUG', fmt, *args, **kwargs)
+        self.__reset_color()
 
     def info(self, fmt, *args, **kwargs):
         self.log('INFO', fmt, *args)
@@ -292,15 +295,13 @@ class CertUtil(object):
                     begin = b'-----BEGIN CERTIFICATE-----'
                     end = b'-----END CERTIFICATE-----'
                     certdata = base64.b64decode(b''.join(certdata[certdata.find(begin)+len(begin):certdata.find(end)].strip().splitlines()))
-                crypt32_handle = ctypes.windll.kernel32.LoadLibraryW(u'crypt32.dll')
-                crypt32 = ctypes.WinDLL(None, handle=crypt32_handle)
-                store_handle = crypt32.CertOpenStore(10, 0, 0, 0x4000 | 0x20000, u'ROOT')
+                crypt32 = ctypes.WinDLL(b'crypt32.dll'.decode())
+                store_handle = crypt32.CertOpenStore(10, 0, 0, 0x4000 | 0x20000, b'ROOT'.decode())
                 if not store_handle:
                     return -1
                 ret = crypt32.CertAddEncodedCertificateToStore(store_handle, 0x1, certdata, len(certdata), 4, None)
                 crypt32.CertCloseStore(store_handle, 0)
                 del crypt32
-                ctypes.windll.kernel32.FreeLibrary(crypt32_handle)
                 return 0 if ret else -1
         elif sys.platform == 'darwin':
             return os.system('security find-certificate -a -c "%s" | grep "%s" >/dev/null || security add-trusted-cert -d -r trustRoot -k "/Library/Keychains/System.keychain" "%s"' % (commonname, commonname, certfile))
@@ -786,7 +787,7 @@ class HTTPUtil(object):
             hostname = random.choice(self.dns.get(host) or [host if not host.endswith('.appspot.com') else 'www.google.com'])
             request_data = 'CONNECT %s:%s HTTP/1.1\r\n' % (hostname, port)
             if username and password:
-                request_data += 'Proxy-authorization: Basic %s\r\n' % base64.b64encode(('%s:%s' % (username, password)).encode()).strip().decode()
+                request_data += 'Proxy-authorization: Basic %s\r\n' % base64.b64encode(('%s:%s' % (username, password)).encode()).decode().strip()
             request_data += '\r\n'
             sock.sendall(request_data)
             response = http.client.HTTPResponse(sock)
@@ -878,7 +879,7 @@ class HTTPUtil(object):
         if self.proxy:
             _, username, password, _ = ProxyUtil.parse_proxy(self.proxy)
             if username and password:
-                request_data += 'Proxy-Authorization: Basic %s\r\n' % base64.b64encode('%s:%s' % (username, password))
+                request_data += 'Proxy-Authorization: Basic %s\r\n' % base64.b64encode(('%s:%s' % (username, password)).encode()).decode().strip()
         request_data += '\r\n'
 
         if isinstance(payload, bytes):
@@ -1025,7 +1026,7 @@ class Common(object):
         self.GOOGLE_HOSTS = [x for x in self.CONFIG.get(self.GAE_PROFILE, 'hosts').split('|') if x]
         self.GOOGLE_SITES = tuple(x for x in self.CONFIG.get(self.GAE_PROFILE, 'sites').split('|') if x)
         self.GOOGLE_FORCEHTTPS = tuple('http://'+x for x in self.CONFIG.get(self.GAE_PROFILE, 'forcehttps').split('|') if x)
-        self.GOOGLE_WITHGAE = set(x for x in self.CONFIG.get(self.GAE_PROFILE, 'withgae').split('|') if x)
+        self.GOOGLE_WITHGAE = tuple(x for x in self.CONFIG.get(self.GAE_PROFILE, 'withgae').split('|') if x)
 
         self.AUTORANGE_HOSTS = self.CONFIG.get('autorange', 'hosts').split('|')
         self.AUTORANGE_HOSTS_MATCH = [re.compile(fnmatch.translate(h)).match for h in self.AUTORANGE_HOSTS]
@@ -1062,7 +1063,7 @@ class Common(object):
         self.LOVE_ENABLE = self.CONFIG.getint('love', 'enable')
         self.LOVE_TIP = self.CONFIG.get('love', 'tip').encode('utf8').decode('unicode-escape').split('|')
 
-        self.HOSTS = collections.OrderedDict(self.CONFIG.items('hosts'))
+        self.HOSTS = getattr(collections, 'OrderedDict', dict)(self.CONFIG.items('hosts'))
         self.HOSTS_MATCH = collections.OrderedDict((re.compile(k).search, v) for k, v in self.HOSTS.items() if not re.search(r'\d+$', k))
         self.HOSTS_CONNECT_MATCH = collections.OrderedDict((re.compile(k).search, v) for k, v in self.HOSTS.items() if re.search(r'\d+$', k))
 
@@ -1101,7 +1102,7 @@ common = Common()
 http_util = HTTPUtil(max_window=common.GOOGLE_WINDOW, ssl_validate=common.GAE_VALIDATE or common.PAAS_VALIDATE, ssl_obfuscate=common.GAE_OBFUSCATE, proxy=common.proxy)
 
 
-def message_html(self, title, banner, detail=''):
+def message_html(title, banner, detail=''):
     MESSAGE_TEMPLATE = '''
     <html><head>
     <meta http-equiv="content-type" content="text/html;charset=utf-8">
@@ -1365,13 +1366,13 @@ class LocalProxyServer(socketserver.ThreadingTCPServer):
         except:
             pass
 
-    def finish_request(self, request, client_address):
-        """make python2 SocketServer happy"""
-        try:
-            return socketserver.ThreadingTCPServer.finish_request(self, request, client_address)
-        except (socket.error, ssl.SSLError) as e:
-            if e.args[0] not in (errno.ECONNABORTED, errno.EPIPE):
-                raise
+    def handle_error(self, request, client_address):
+        """make ThreadingTCPServer happy"""
+        etype, value, tb = sys.exc_info()
+        if isinstance(value, ssl.SSLError) and 'bad write retry' in value.args[1]:
+            etype = value = tb = None
+        else:
+            socketserver.ThreadingTCPServer.handle_error(self, request, client_address)
 
 
 class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
@@ -1389,15 +1390,17 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
                 if not re.match(r'\d+\.\d+\.\d+\.\d+', domain):
                     try:
                         iplist = socket.gethostbyname_ex(domain)[-1]
-                        if len(iplist) >= 3:
+                        if len(iplist) >= 2:
                             google_ipmap[domain] = iplist
-                        if len(iplist) < 4:
-                            need_resolve_remote.append(domain)
                     except (socket.error, ssl.SSLError, OSError):
                         need_resolve_remote.append(domain)
                         continue
                 else:
                     google_ipmap[domain] = [domain]
+            google_iplist = list(set(sum(list(google_ipmap.values()), [])))
+            if len(google_iplist) < 10 or len(set(x.split('.', 1)[0] for x in google_iplist)) == 1:
+                logging.warning('local google_iplist=%s is too short, try remote_resolve', google_iplist)
+                need_resolve_remote += list(common.GOOGLE_HOSTS)
             for dnsserver in ('8.8.8.8', '8.8.4.4', '114.114.114.114', '114.114.115.115'):
                 for domain in need_resolve_remote:
                     logging.info('resolve remote domain=%r from dnsserver=%r', domain, dnsserver)
@@ -1464,7 +1467,7 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
                     common.GAE_FETCHSERVER = '%s://%s.appspot.com%s?' % (common.GOOGLE_MODE, common.GAE_APPIDS[0], common.GAE_PATH)
                     http_util.max_window = common.GOOGLE_WINDOW = common.CONFIG.getint('google_hk', 'window')
                     common.GOOGLE_HOSTS = list(set(x for x in common.CONFIG.get(common.GAE_PROFILE, 'hosts').split('|') if x))
-                    common.GOOGLE_WITHGAE = set(common.CONFIG.get('google_hk', 'withgae').split('|'))
+                    common.GOOGLE_WITHGAE = tuple(common.CONFIG.get('google_hk', 'withgae').split('|'))
             self._update_google_iplist()
 
     def setup(self):
@@ -1511,9 +1514,9 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
 
         """rules match algorithm, need_forward= True or False"""
         need_forward = False
-        if common.HOSTS_MATCH and any(x(self.path) for x in common.HOSTS_MATCH):
+        if common.HOSTS_MATCH and any(x(self.path) for x in common.HOSTS_MATCH) or self.command not in ('GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'PATCH'):
             need_forward = True
-        elif host.endswith(common.GOOGLE_SITES) and host not in common.GOOGLE_WITHGAE:
+        elif host.endswith(common.GOOGLE_SITES) and not host.endswith(common.GOOGLE_WITHGAE):
             if self.path.startswith(('http://www.google.com/url', 'http://www.google.com.hk/url', 'https://www.google.com/url', 'https://www.google.com.hk/url')):
                 urls = urllib.parse.parse_qs(self.parsed_url.query).get('url')
                 if urls:
@@ -1560,7 +1563,7 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
         except (socket.error, ssl.SSLError, OSError) as e:
             if e.args[0] in (errno.ECONNRESET, 10063, errno.ENAMETOOLONG):
                 logging.warn('http_util.request "%s %s" failed:%s, try addto `withgae`', self.command, self.path, e)
-                common.GOOGLE_WITHGAE.add(re.sub(r':\d+$', '', self.parsed_url.netloc))
+                common.GOOGLE_WITHGAE = tuple(list(common.GOOGLE_WITHGAE)+[re.sub(r':\d+$', '', self.parsed_url.netloc)])
             elif e.args[0] not in (errno.ECONNABORTED, errno.EPIPE):
                 raise
         except Exception as e:
@@ -1599,6 +1602,8 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
         errors = []
         headers_sent = False
         fetchserver = common.GAE_FETCHSERVER
+        if range_in_query and special_range:
+            fetchserver = re.sub(r'//\w+\.appspot\.com', '//%s.appspot.com' % random.choice(common.GAE_APPIDS), fetchserver)
         for retry in range(common.FETCHMAX_LOCAL):
             try:
                 content_length = 0
@@ -1617,13 +1622,26 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
                     common.GOOGLE_MODE = 'https'
                     common.GAE_FETCHSERVER = '%s://%s.appspot.com%s?' % (common.GOOGLE_MODE, common.GAE_APPIDS[0], common.GAE_PATH)
                     continue
+                # appid not exists, try remove it from appid
+                if response.app_status == 404:
+                    if len(common.GAE_APPIDS) > 1:
+                        appid = common.GAE_APPIDS.pop(0)
+                        common.GAE_FETCHSERVER = '%s://%s.appspot.com%s?' % (common.GOOGLE_MODE, common.GAE_APPIDS[0], common.GAE_PATH)
+                        http_util.dns[urllib.parse.urlparse(common.GAE_FETCHSERVER).netloc] = common.GOOGLE_HOSTS
+                        logging.warning('APPID %r not exists, remove it.', appid)
+                        continue
+                    else:
+                        appid = common.GAE_APPIDS[0]
+                        logging.error('APPID %r not exists, please ensure your appid in proxy.ini.', appid)
+                        html = message_html('404 Appid Not Exists', 'Appid %r Not Exists' % appid, 'appid %r not exist, please edit your proxy.ini' % appid)
+                        self.wfile.write(b'HTTP/1.0 502\r\nContent-Type: text/html\r\n\r\n' + html.encode('utf-8'))
+                        return
                 # appid over qouta, switch to next appid
                 if response.app_status == 503:
                     common.GAE_APPIDS.append(common.GAE_APPIDS.pop(0))
                     common.GAE_FETCHSERVER = '%s://%s.appspot.com%s?' % (common.GOOGLE_MODE, common.GAE_APPIDS[0], common.GAE_PATH)
                     http_util.dns[urllib.parse.urlparse(common.GAE_FETCHSERVER).netloc] = common.GOOGLE_HOSTS
                     logging.info('APPID Over Quota,Auto Switch to [%s]' % (common.GAE_APPIDS[0]))
-                    continue
                 # bad request, disable CRLF injection
                 if response.app_status in (400, 405):
                     http_util.crlf = 0
@@ -1650,8 +1668,8 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
                         return rangefetch.fetch()
                     if response.getheader('Set-Cookie'):
                         response.headers['Set-Cookie'] = self.normcookie(response.getheader('Set-Cookie'))
-                    headers_data = ('HTTP/1.1 %s\r\n%s\r\n' % (response.status, ''.join('%s: %s\r\n' % (k.title(), v) for k, v in response.getheaders() if k.title() != 'Transfer-Encoding'))).encode()
-                    self.wfile.write(headers_data)
+                    headers_data = 'HTTP/1.1 %s\r\n%s\r\n' % (response.status, ''.join('%s: %s\r\n' % (k.title(), v) for k, v in response.getheaders() if k.title() != 'Transfer-Encoding'))
+                    self.wfile.write(headers_data.encode() if bytes is not str else headers_data)
                     headers_sent = True
                 content_length = int(response.getheader('Content-Length', 0))
                 content_range = response.getheader('Content-Range', '')
@@ -1696,7 +1714,7 @@ class GAEProxyHandler(http.server.BaseHTTPRequestHandler):
         host = self.path.rpartition(':')[0]
         if common.HOSTS_CONNECT_MATCH and any(x(self.path) for x in common.HOSTS_CONNECT_MATCH):
             self.do_CONNECT_FWD()
-        elif host.endswith(common.GOOGLE_SITES) and host not in common.GOOGLE_WITHGAE:
+        elif host.endswith(common.GOOGLE_SITES) and not host.endswith(common.GOOGLE_WITHGAE):
             http_util.dns[host] = common.GOOGLE_HOSTS
             self.do_CONNECT_FWD()
         else:
@@ -1816,13 +1834,18 @@ def paas_urlfetch(method, url, headers, payload, fetchserver, **kwargs):
     if not response:
         raise socket.error(errno.ECONNRESET, 'urlfetch %r return None' % url)
     response.app_status = response.status
+    if sys.hexversion < 0x3000000:
+        response.headers = response.msg
     if response.getheader('x-status'):
         response.status = int(response.getheader('x-status'))
         del response.headers['x-status']
     response_read = response.read
     if 'xorchar' in kwargs and 200 <= response.app_status < 400:
         ordchar = ord(kwargs['xorchar'])
-        response.read = lambda n: bytes(c ^ ordchar for c in response_read(n))
+        if sys.hexversion < 0x3000000:
+            response.read = lambda n: ''.join(chr(ord(c) ^ ordchar) for c in response_read(n))
+        else:
+            response.read = lambda n: bytes(c ^ ordchar for c in response_read(n))
     return response
 
 
@@ -1901,11 +1924,11 @@ class PAASProxyHandler(GAEProxyHandler):
                 http_util.crlf = 0
 
             if response.getheader('Set-Cookie'):
-                response.headers['Set-Cookie'] = re.sub(', ([^ =]+(?:=|$))', '\\r\\nSet-Cookie: \\1', response.getheader('Set-Cookie'))
+                response.headers['Set-Cookie'] = self.normcookie(response.getheader('Set-Cookie'))
             self.wfile.write(('HTTP/1.1 %s\r\n%s\r\n' % (response.status, ''.join('%s: %s\r\n' % (k.title(), v) for k, v in response.getheaders() if k.title() != 'Transfer-Encoding'))).encode())
 
             while 1:
-                data = response.read(32768)
+                data = response.read(8192)
                 if not data:
                     break
                 self.wfile.write(data)
@@ -2029,7 +2052,10 @@ class PACServerHandler(http.server.BaseHTTPRequestHandler):
             listen_ip = common.LISTEN_IP
             if listen_ip in ('', '0.0.0.0', '::'):
                 listen_ip = Autoproxy2Pac.get_listen_ip()
-            spawn_later(1, Autoproxy2Pac.update_filename, self.pacfile, common.PAC_GFWLIST, '%s:%s' % (listen_ip, common.LISTEN_PORT), default)
+            if 'gevent.monkey' in sys.modules and hasattr(gevent.get_hub(), 'threadpool'):
+                gevent.get_hub().threadpool.spawn(Autoproxy2Pac.update_filename, self.pacfile, common.PAC_GFWLIST, '%s:%s' % (listen_ip, common.LISTEN_PORT), default)
+            else:
+                threading._start_new_thread(Autoproxy2Pac.update_filename, (self.pacfile, common.PAC_GFWLIST, '%s:%s' % (listen_ip, common.LISTEN_PORT), default))
         return True
 
     def do_GET(self):
@@ -2109,7 +2135,8 @@ def pre_start():
         except ValueError:
             pass
     if ctypes and os.name == 'nt':
-        ctypes.windll.kernel32.SetConsoleTitleW(u'GoAgent v%s' % __version__)
+        UnicodeType = type(b''.decode())
+        ctypes.windll.kernel32.SetConsoleTitleW(UnicodeType('GoAgent v%s' % __version__))
         if not common.LISTEN_VISIBLE:
             ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
         else:
@@ -2125,8 +2152,9 @@ def pre_start():
             tasklist = os.popen('tasklist').read().lower()
             softwares = [x for x in softwares if x.lower()in tasklist]
             if softwares:
-                error = u'某些安全软件(如 %s)可能和本软件存在冲突，造成 CPU 占用过高。\n如有此现象建议暂时退出此安全软件来继续运行GoAgent' % ','.join(softwares)
-                ctypes.windll.user32.MessageBoxW(None, error, u'GoAgent 建议', 0)
+                title = UnicodeType('GoAgent 建议')
+                error = UnicodeType('某些安全软件(如 %s)可能和本软件存在冲突，造成 CPU 占用过高。\n如有此现象建议暂时退出此安全软件来继续运行GoAgent' % ','.join(softwares))
+                ctypes.windll.user32.MessageBoxW(None, error, title, 0)
                 #sys.exit(0)
     if common.GAE_APPIDS[0] == 'goagent':
         logging.critical('please edit %s to add your appid to [gae] !', common.CONFIG_FILENAME)

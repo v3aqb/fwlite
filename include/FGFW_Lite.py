@@ -988,7 +988,7 @@ class shadowsocksabs(FGFWProxyAbs):
                          ]
         self.cmd = PYTHON2 + ' d:/FGFW_Lite/shadowsocks/local.py'
         self.cwd = 'd:/FGFW_Lite/shadowsocks'
-        if sys.platform.startswith('win'):
+        if sys.platform.startswith('win') and os.path.isfile('./shadowsocks/shadowsocks-local.exe'):
             self.cmd = 'd:/FGFW_Lite/shadowsocks/shadowsocks-local.exe'
         self.enable = conf.getconfbool('shadowsocks', 'enable', False)
         if self.enable:
@@ -997,14 +997,12 @@ class shadowsocksabs(FGFWProxyAbs):
         server = conf.getconf('shadowsocks', 'server', '')
         server_port = conf.getconf('shadowsocks', 'server_port', '')
         password = conf.getconf('shadowsocks', 'password', 'barfoo!')
-        method = conf.getconf('shadowsocks', 'method', 'null')
-        self.cmd = PYTHON2 + ' d:/FGFW_Lite/shadowsocks/local.py -s %s -p %s -l 1080 -k %s'\
-            % (server, server_port, password)
-        if method != 'null':
-            self.cmd += ' -m %s' % method.strip('"')
+        method = conf.getconf('shadowsocks', 'method', 'table')
+        self.cmd += ' -s %s -p %s -l 1080 -k %s -m %s'\
+            % (server, server_port, password, method.strip('"'))
 
 
-class gsnovaabs(FGFWProxyAbs):  # Need more work on this
+class gsnovaabs(FGFWProxyAbs):
     """docstring for ClassName"""
     def __init__(self):
         FGFWProxyAbs.__init__(self)
