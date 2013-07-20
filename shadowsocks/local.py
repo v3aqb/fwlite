@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright (c) 2012 clowwindy
+# Copyright (c) 2013 clowwindy
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -43,6 +43,7 @@ import os
 import logging
 import getopt
 import encrypt
+import utils
 
 
 def send_all(sock, data):
@@ -131,15 +132,7 @@ class Socks5Server(SocketServer.StreamRequestHandler):
                 reply += socket.inet_aton('0.0.0.0') + struct.pack(">H", 2222)
                 self.wfile.write(reply)
                 # reply immediately
-                if '-6' in sys.argv[1:]:
-                    remote = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-                    remote.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                    remote.connect((SERVER, REMOTE_PORT, 0, 0))
-                else:
-                    remote = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    remote.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                    remote.connect((SERVER, REMOTE_PORT))
-
+                remote = socket.create_connection((SERVER, REMOTE_PORT))
                 self.send_encrypt(remote, addr_to_send)
                 logging.info('connecting %s:%d' % (addr, port[0]))
             except socket.error, e:
@@ -150,46 +143,83 @@ class Socks5Server(SocketServer.StreamRequestHandler):
             logging.warn(e)
 
 
-if __name__ == '__main__':
-    os.chdir(os.path.dirname(__file__) or '.')
-    print 'shadowsocks v1.2.1'
+def main():
+    global SERVER, REMOTE_PORT, PORT, KEY, METHOD, LOCAL, IPv6
+    
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s %(levelname)-8s %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S', filemode='a+')
 
-    with open('config.json', 'rb') as f:
-        config = json.load(f)
+    # fix py2exe
+    if hasattr(sys, "frozen") and sys.frozen in \
+            ("windows_exe", "console_exe"):
+        p = os.path.dirname(os.path.abspath(sys.executable))
+        os.chdir(p)
+    version = ''
+    try:
+        import pkg_resources
+        version = pkg_resources.get_distribution('shadowsocks').version
+    except:
+        pass
+    print 'shadowsocks %s' % version
+
+    KEY = None
+    METHOD = None
+    LOCAL = ''
+    IPv6 = False
+    
+    config_path = utils.find_config()
+    optlist, args = getopt.getopt(sys.argv[1:], 's:b:p:k:l:m:c:6')
+    for key, value in optlist:
+        if key == '-c':
+            config_path = value
+
+    if config_path:
+        logging.info('loading config from %s' % config_path)
+        with open(config_path, 'rb') as f:
+            config = json.load(f)
+    optlist, args = getopt.getopt(sys.argv[1:], 's:b:p:k:l:m:c:6')
+    for key, value in optlist:
+        if key == '-p':
+            config['server_port'] = int(value)
+        elif key == '-k':
+            config['password'] = value
+        elif key == '-l':
+            config['local_port'] = int(value)
+        elif key == '-s':
+            config['server'] = value
+        elif key == '-m':
+            config['method'] = value
+        elif key == '-b':
+            config['local'] = value
+        elif key == '-6':
+            IPv6 = True
+
     SERVER = config['server']
     REMOTE_PORT = config['server_port']
     PORT = config['local_port']
     KEY = config['password']
     METHOD = config.get('method', None)
+    LOCAL = config.get('local', '')
 
-    argv = sys.argv[1:]
-    if '-6' in sys.argv[1:]:
-        argv.remove('-6')
+    if not KEY and not config_path:
+        sys.exit('config not specified, please read https://github.com/clowwindy/shadowsocks')
 
-    optlist, args = getopt.getopt(argv, 's:p:k:l:m:')
-    for key, value in optlist:
-        if key == '-p':
-            REMOTE_PORT = int(value)
-        elif key == '-k':
-            KEY = value
-        elif key == '-l':
-            PORT = int(value)
-        elif key == '-s':
-            SERVER = value
-        elif key == '-m':
-            METHOD = value
-
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)-8s %(message)s',
-                        datefmt='%Y-%m-%d %H:%M:%S', filemode='a+')
-
+    utils.check_config(config)
+        
     encrypt.init_table(KEY, METHOD)
 
     try:
-        server = ThreadingTCPServer(('', PORT), Socks5Server)
-        logging.info("starting server at port %d ..." % PORT)
+        if IPv6:
+            ThreadingTCPServer.address_family = socket.AF_INET6
+        server = ThreadingTCPServer((LOCAL, PORT), Socks5Server)
+        logging.info("starting local at %s:%d" % tuple(server.server_address[:2]))
         server.serve_forever()
     except socket.error, e:
         logging.error(e)
     except KeyboardInterrupt:
         server.shutdown()
         sys.exit(0)
+        
+if __name__ == '__main__':
+    main()

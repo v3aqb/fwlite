@@ -9,6 +9,8 @@ requirements under openSUSE:
     gcc gcc-c++ make autoconf python3-devel libopenssl-devel mozilla-nss-tools
     pip-3.3 install pyOpenSSL
 
+to work with shadowsocks, require python2.7 and M2Crypto installed, or on windows machines, copy shadowsocks-go binary to ./shadowsocks/shadowsocks-local.exe.
+
 goagent https://code.google.com/p/goagent/
 
 gsnova https://code.google.com/p/snova/
