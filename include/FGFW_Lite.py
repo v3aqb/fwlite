@@ -82,10 +82,16 @@ if not os.path.isfile('./include/redirector.txt'):
     with open('./include/redirector.txt', 'w') as f:
         f.write(REDIRECTOR)
 
+UPSTREAM_POOL = {}
+
 
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT']
-    UPSTREAM_POOL = {}
+
+    def getparent(self, uri, host):
+        self.ppname, pp = fgfwproxy.parentproxy(uri, host)
+        self.pptype, self.pphost, self.ppport, self.ppusername,\
+            self.pppassword = pp
 
     def prepare(self):
         uri = self.request.uri
@@ -108,10 +114,8 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.requestport = int(urisplit[2].split(':')[1])
         else:
             self.requestport = 443 if uri.startswith('https://') else 80
+        self.getparent(uri, host)
 
-        self.ppname, pp = fgfwproxy.parentproxy(uri, host)
-        self.pptype, self.pphost, self.ppport, self.ppusername,\
-            self.pppassword = pp
         if self.pptype == 'socks5':
             self.upstream_name = '%s-%s-%s' % (self.ppname, self.request.host, str(self.requestport))
         else:
@@ -202,7 +206,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                     client.write(b'HTTP/1.1 501 %s proxy not supported.\r\n\r\n' % self.pptype)
                     client.close()
 
-            lst = self.UPSTREAM_POOL.get(self.upstream_name)
+            lst = UPSTREAM_POOL.get(self.upstream_name)
             self.upstream = None
             if isinstance(lst, list):
                 for item in lst:
@@ -283,9 +287,9 @@ class ProxyHandler(tornado.web.RequestHandler):
                 _finish()
 
         def _finish(data=None):
-            if self.upstream_name not in self.UPSTREAM_POOL:
-                self.UPSTREAM_POOL[self.upstream_name] = []
-            lst = self.UPSTREAM_POOL.get(self.upstream_name)
+            if self.upstream_name not in UPSTREAM_POOL:
+                UPSTREAM_POOL[self.upstream_name] = []
+            lst = UPSTREAM_POOL.get(self.upstream_name)
             for item in lst:
                 if item.closed():
                     lst.remove(item)
@@ -475,6 +479,13 @@ class ProxyHandler(tornado.web.RequestHandler):
             client.close()
 
 
+class PProxyHandler(ProxyHandler):
+    def getparent(self, uri, host):
+        self.ppname, pp = fgfwproxy.parentproxy(uri, host, forceproxy=True)
+        self.pptype, self.pphost, self.ppport, self.ppusername,\
+            self.pppassword = pp
+
+
 class autoproxy_rule(object):
     """docstring for autoproxy_rule
         (type,pattern)
@@ -647,9 +658,11 @@ def run_proxy(port, start_ioloop=True):
     Run proxy on the specified port. If start_ioloop is True (default),
     the tornado IOLoop will be started immediately.
     """
-    print ("Starting HTTP proxy on port %s" % port)
+    print ("Starting HTTP proxy on port %s and %s" % (port, str(int(port)+1)))
     app = tornado.web.Application([(r'.*', ProxyHandler), ])
     app.listen(port)
+    app2 = tornado.web.Application([(r'.*', PProxyHandler), ])
+    app2.listen(int(port)+1)
     ioloop = tornado.ioloop.IOLoop.instance()
     if start_ioloop:
         ioloop.start()
@@ -1129,7 +1142,7 @@ class fgfwproxy(FGFWProxyAbs):
         cls.parentdict[name] = proxy
 
     @classmethod
-    def parentproxy(cls, uri=None, domain=None):
+    def parentproxy(cls, uri, domain=None, forceproxy=False):
         '''
             decide which parentproxy to use.
             url:  'https://www.google.com'
@@ -1176,14 +1189,13 @@ class fgfwproxy(FGFWProxyAbs):
         parentlist = list(cls.parentdictalive.keys())
         if ifhost_in_china():
             return ('direct', cls.parentdictalive.get('direct'))
-        if uri is None or ifgfwlist():
+        if forceproxy or ifgfwlist():
             parentlist.remove('direct')
             if uri.startswith('ftp://'):
-                try:
+                if 'goagent' in parentlist:
                     parentlist.remove('goagent')
+                if 'gsnova-gae' in parentlist:
                     parentlist.remove('gsnova-gae')
-                except Exception:
-                    pass
             if parentlist:
                 ppname = random.choice(parentlist)
                 return (ppname, cls.parentdictalive.get(ppname))
