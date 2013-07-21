@@ -409,7 +409,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             def conn_upstream(data=None):
                 # try:
                 #     ip = socket.inet_aton(self.request.host)  # guess ipv4
-                # except socket.error:
+                # except Exception:
                 #     try:  # guess ipv6
                 #         ip = socket.inet_pton(socket.AF_INET6, self.request.host)
                 #     except Exception:  # got to be domain name
@@ -1015,57 +1015,6 @@ class shadowsocksabs(FGFWProxyAbs):
             % (server, server_port, password, method.strip('"'))
 
 
-class gsnovaabs(FGFWProxyAbs):
-    """docstring for ClassName"""
-    def __init__(self):
-        FGFWProxyAbs.__init__(self)
-
-    def _config(self):
-        self.cmd = 'd:/FGFW_Lite/gsnova/gsnova.exe'
-        self.cwd = 'd:/FGFW_Lite/gsnova'
-        self.filelist = []
-        self.enable = conf.getconfbool('gsnova', 'enable', False)
-        if self.enable:
-            fgfwproxy.addparentproxy('gsnova-gae', ('http', '127.0.0.1', 48101, None, None))
-        self.enableupdate = conf.getconfbool('gsnova', 'update', False)
-        proxy = SConfigParser()
-        proxy.optionxform = str
-        proxy.read('./gsnova/gsnova.conf')
-
-        worknodes = conf.getconf('gsnova', 'GAEworknodes')
-        if worknodes:
-            worknodes = worknodes.split('|')
-            for i in range(len(worknodes)):
-                proxy.set('GAE', 'WorkerNode[' + str(i) + ']', worknodes[i])
-            proxy.set('GAE', 'Enable', '1')
-
-        worknodes = conf.getconf('gsnova', 'C4worknodes')
-        if worknodes:
-            worknodes = worknodes.split('|')
-            for i in range(len(worknodes)):
-                proxy.set('C4', 'WorkerNode[' + str(i) + ']', worknodes[i])
-            proxy.set('C4', 'Enable', '1')
-            if self.enable:
-                fgfwproxy.addparentproxy('gsnova-c4', ('http', '127.0.0.1', 48102, None, None))
-        else:
-            proxy.set('C4', 'Enable', '0')
-
-        proxy.set('SPAC', 'Enable', '0')
-        proxy.set('Misc', 'AutoOpenWebUI', 'false')
-        proxy.set('Misc', 'RC4Key', conf.getconf('gsnova', 'RC4Key', '8976501f8451f03c5c4067b47882f2e5'))
-        with open('./gsnova/gsnova.conf', 'w') as configfile:
-            proxy.write(configfile)
-
-        cert = open('./goagent/CA.crt').read()
-        with open('./gsnova/cert/Fake-ACRoot-Certificate.cer', 'wb') as certfile:
-            certfile.write(cert[:cert.find('-----BEGIN RSA PRIVATE KEY-----')])
-        with open('./gsnova/cert/Fake-ACRoot-Key.pem', 'wb') as certfile:
-            certfile.write(cert[cert.find('-----BEGIN RSA PRIVATE KEY-----'):])
-        import shutil
-        if os.path.isdir('./gsnova/cert/host'):
-            shutil.rmtree('./gsnova/cert/host')
-
-
 class fgfwproxy(FGFWProxyAbs):
     """docstring for ClassName"""
     def __init__(self, arg=''):
@@ -1172,12 +1121,6 @@ class fgfwproxy(FGFWProxyAbs):
                 cls.inchinadict[domain] = result
             return result
 
-        def ifgsnova():
-            return False
-
-        def ifgoagent():
-            return False
-
         def ifgfwlist():
             for rule in cls.gfwlist:
                 if rule.match(uri, domain):
@@ -1194,8 +1137,6 @@ class fgfwproxy(FGFWProxyAbs):
             if uri.startswith('ftp://'):
                 if 'goagent' in parentlist:
                     parentlist.remove('goagent')
-                if 'gsnova-gae' in parentlist:
-                    parentlist.remove('gsnova-gae')
             if parentlist:
                 ppname = random.choice(parentlist)
                 return (ppname, cls.parentdictalive.get(ppname))
@@ -1317,8 +1258,6 @@ def main():
         fgfwproxy()
     if conf.getconfbool('goagent', 'enable', True):
         goagentabs()
-    if conf.getconfbool('gsnova', 'enable', False):
-        gsnovaabs()
     if conf.getconfbool('shadowsocks', 'enable', False):
         shadowsocksabs()
     if conf.getconfbool('https', 'enable', False):
