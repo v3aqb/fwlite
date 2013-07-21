@@ -9,4 +9,4 @@
 ||googleusercontent.com
 ||gstatic.com
 ||feedly.com
-||rhcloud.com
+|https://codeload.github.com

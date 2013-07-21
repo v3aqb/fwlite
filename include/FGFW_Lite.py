@@ -82,10 +82,16 @@ if not os.path.isfile('./include/redirector.txt'):
     with open('./include/redirector.txt', 'w') as f:
         f.write(REDIRECTOR)
 
+UPSTREAM_POOL = {}
+
 
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT']
-    UPSTREAM_POOL = {}
+
+    def getparent(self, uri, host):
+        self.ppname, pp = fgfwproxy.parentproxy(uri, host)
+        self.pptype, self.pphost, self.ppport, self.ppusername,\
+            self.pppassword = pp
 
     def prepare(self):
         uri = self.request.uri
@@ -108,10 +114,8 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.requestport = int(urisplit[2].split(':')[1])
         else:
             self.requestport = 443 if uri.startswith('https://') else 80
+        self.getparent(uri, host)
 
-        self.ppname, pp = fgfwproxy.parentproxy(uri, host)
-        self.pptype, self.pphost, self.ppport, self.ppusername,\
-            self.pppassword = pp
         if self.pptype == 'socks5':
             self.upstream_name = '%s-%s-%s' % (self.ppname, self.request.host, str(self.requestport))
         else:
@@ -202,7 +206,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                     client.write(b'HTTP/1.1 501 %s proxy not supported.\r\n\r\n' % self.pptype)
                     client.close()
 
-            lst = self.UPSTREAM_POOL.get(self.upstream_name)
+            lst = UPSTREAM_POOL.get(self.upstream_name)
             self.upstream = None
             if isinstance(lst, list):
                 for item in lst:
@@ -283,9 +287,9 @@ class ProxyHandler(tornado.web.RequestHandler):
                 _finish()
 
         def _finish(data=None):
-            if self.upstream_name not in self.UPSTREAM_POOL:
-                self.UPSTREAM_POOL[self.upstream_name] = []
-            lst = self.UPSTREAM_POOL.get(self.upstream_name)
+            if self.upstream_name not in UPSTREAM_POOL:
+                UPSTREAM_POOL[self.upstream_name] = []
+            lst = UPSTREAM_POOL.get(self.upstream_name)
             for item in lst:
                 if item.closed():
                     lst.remove(item)
@@ -405,7 +409,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             def conn_upstream(data=None):
                 # try:
                 #     ip = socket.inet_aton(self.request.host)  # guess ipv4
-                # except socket.error:
+                # except Exception:
                 #     try:  # guess ipv6
                 #         ip = socket.inet_pton(socket.AF_INET6, self.request.host)
                 #     except Exception:  # got to be domain name
@@ -473,6 +477,13 @@ class ProxyHandler(tornado.web.RequestHandler):
         else:
             client.write(b'HTTP/1.1 501 %s proxy not supported.\r\n\r\n' % self.pptype)
             client.close()
+
+
+class PProxyHandler(ProxyHandler):
+    def getparent(self, uri, host):
+        self.ppname, pp = fgfwproxy.parentproxy(uri, host, forceproxy=True)
+        self.pptype, self.pphost, self.ppport, self.ppusername,\
+            self.pppassword = pp
 
 
 class autoproxy_rule(object):
@@ -647,9 +658,11 @@ def run_proxy(port, start_ioloop=True):
     Run proxy on the specified port. If start_ioloop is True (default),
     the tornado IOLoop will be started immediately.
     """
-    print ("Starting HTTP proxy on port %s" % port)
+    print ("Starting HTTP proxy on port %s and %s" % (port, str(int(port)+1)))
     app = tornado.web.Application([(r'.*', ProxyHandler), ])
     app.listen(port)
+    app2 = tornado.web.Application([(r'.*', PProxyHandler), ])
+    app2.listen(int(port)+1)
     ioloop = tornado.ioloop.IOLoop.instance()
     if start_ioloop:
         ioloop.start()
@@ -1002,57 +1015,6 @@ class shadowsocksabs(FGFWProxyAbs):
             % (server, server_port, password, method.strip('"'))
 
 
-class gsnovaabs(FGFWProxyAbs):
-    """docstring for ClassName"""
-    def __init__(self):
-        FGFWProxyAbs.__init__(self)
-
-    def _config(self):
-        self.cmd = 'd:/FGFW_Lite/gsnova/gsnova.exe'
-        self.cwd = 'd:/FGFW_Lite/gsnova'
-        self.filelist = []
-        self.enable = conf.getconfbool('gsnova', 'enable', False)
-        if self.enable:
-            fgfwproxy.addparentproxy('gsnova-gae', ('http', '127.0.0.1', 48101, None, None))
-        self.enableupdate = conf.getconfbool('gsnova', 'update', False)
-        proxy = SConfigParser()
-        proxy.optionxform = str
-        proxy.read('./gsnova/gsnova.conf')
-
-        worknodes = conf.getconf('gsnova', 'GAEworknodes')
-        if worknodes:
-            worknodes = worknodes.split('|')
-            for i in range(len(worknodes)):
-                proxy.set('GAE', 'WorkerNode[' + str(i) + ']', worknodes[i])
-            proxy.set('GAE', 'Enable', '1')
-
-        worknodes = conf.getconf('gsnova', 'C4worknodes')
-        if worknodes:
-            worknodes = worknodes.split('|')
-            for i in range(len(worknodes)):
-                proxy.set('C4', 'WorkerNode[' + str(i) + ']', worknodes[i])
-            proxy.set('C4', 'Enable', '1')
-            if self.enable:
-                fgfwproxy.addparentproxy('gsnova-c4', ('http', '127.0.0.1', 48102, None, None))
-        else:
-            proxy.set('C4', 'Enable', '0')
-
-        proxy.set('SPAC', 'Enable', '0')
-        proxy.set('Misc', 'AutoOpenWebUI', 'false')
-        proxy.set('Misc', 'RC4Key', conf.getconf('gsnova', 'RC4Key', '8976501f8451f03c5c4067b47882f2e5'))
-        with open('./gsnova/gsnova.conf', 'w') as configfile:
-            proxy.write(configfile)
-
-        cert = open('./goagent/CA.crt').read()
-        with open('./gsnova/cert/Fake-ACRoot-Certificate.cer', 'wb') as certfile:
-            certfile.write(cert[:cert.find('-----BEGIN RSA PRIVATE KEY-----')])
-        with open('./gsnova/cert/Fake-ACRoot-Key.pem', 'wb') as certfile:
-            certfile.write(cert[cert.find('-----BEGIN RSA PRIVATE KEY-----'):])
-        import shutil
-        if os.path.isdir('./gsnova/cert/host'):
-            shutil.rmtree('./gsnova/cert/host')
-
-
 class fgfwproxy(FGFWProxyAbs):
     """docstring for ClassName"""
     def __init__(self, arg=''):
@@ -1129,7 +1091,7 @@ class fgfwproxy(FGFWProxyAbs):
         cls.parentdict[name] = proxy
 
     @classmethod
-    def parentproxy(cls, uri=None, domain=None):
+    def parentproxy(cls, uri, domain=None, forceproxy=False):
         '''
             decide which parentproxy to use.
             url:  'https://www.google.com'
@@ -1159,12 +1121,6 @@ class fgfwproxy(FGFWProxyAbs):
                 cls.inchinadict[domain] = result
             return result
 
-        def ifgsnova():
-            return False
-
-        def ifgoagent():
-            return False
-
         def ifgfwlist():
             for rule in cls.gfwlist:
                 if rule.match(uri, domain):
@@ -1176,14 +1132,11 @@ class fgfwproxy(FGFWProxyAbs):
         parentlist = list(cls.parentdictalive.keys())
         if ifhost_in_china():
             return ('direct', cls.parentdictalive.get('direct'))
-        if uri is None or ifgfwlist():
+        if forceproxy or ifgfwlist():
             parentlist.remove('direct')
             if uri.startswith('ftp://'):
-                try:
+                if 'goagent' in parentlist:
                     parentlist.remove('goagent')
-                    parentlist.remove('gsnova-gae')
-                except Exception:
-                    pass
             if parentlist:
                 ppname = random.choice(parentlist)
                 return (ppname, cls.parentdictalive.get(ppname))
@@ -1305,8 +1258,6 @@ def main():
         fgfwproxy()
     if conf.getconfbool('goagent', 'enable', True):
         goagentabs()
-    if conf.getconfbool('gsnova', 'enable', False):
-        gsnovaabs()
     if conf.getconfbool('shadowsocks', 'enable', False):
         shadowsocksabs()
     if conf.getconfbool('https', 'enable', False):
