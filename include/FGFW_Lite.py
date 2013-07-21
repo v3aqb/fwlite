@@ -999,7 +999,7 @@ class shadowsocksabs(FGFWProxyAbs):
                          ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/encrypt.py', './shadowsocks/encrypt.py'],
                          ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/utils.py', './shadowsocks/utils.py'],
                          ]
-        self.cmd = PYTHON2 + ' d:/FGFW_Lite/shadowsocks/local.py'
+        self.cmd = PYTHON2 + ' -B d:/FGFW_Lite/shadowsocks/local.py'
         self.cwd = 'd:/FGFW_Lite/shadowsocks'
         if sys.platform.startswith('win') and os.path.isfile('./shadowsocks/shadowsocks-local.exe'):
             self.cmd = 'd:/FGFW_Lite/shadowsocks/shadowsocks-local.exe'
