@@ -40,11 +40,11 @@ Func setTray()
 
 	$trayMenuSetProxy = TrayCreateMenu("设置代理")
 
-	TrayCreateItem("全局代理", $trayMenuSetProxy)
-	TrayItemSetOnEvent(-1, "setProxyOverall")
-
-	TrayCreateItem("智能代理", $trayMenuSetProxy)
+	TrayCreateItem("智能代理8118", $trayMenuSetProxy)
 	TrayItemSetOnEvent(-1, "setProxyAuto")
+
+	TrayCreateItem("全局代理8119", $trayMenuSetProxy)
+	TrayItemSetOnEvent(-1, "setProxyOverall")
 
 	TrayCreateItem("直接连接", $trayMenuSetProxy)
 	TrayItemSetOnEvent(-1, "setProxyDirect")
@@ -93,7 +93,7 @@ Func showHideConsole()
 EndFunc   ;==>showHideConsole
 
 Func setProxyOverall()
-	_setIEProxy(1, "127.0.0.1:8087", "<local>")
+	_setIEProxy(1, "127.0.0.1:8119", "<local>")
 EndFunc   ;==>setProxyOverall
 
 Func setProxyAuto()
