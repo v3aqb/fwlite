@@ -218,7 +218,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                 _create_upstream()
 
         def read_from_upstream(data):
-            client.write(data)
+            if not client.closed():
+                client.write(data)
 
         def _sent_request():
             if self.pphost and self.pptype != 'socks5':
@@ -274,13 +275,13 @@ class ProxyHandler(tornado.web.RequestHandler):
                 _finish()
 
         def _on_chunk_lenth(data):
-            client.write(data)
+            read_from_upstream(data)
             length = int(data.strip(), 16)
             self.upstream.read_bytes(length + 2,  # chunk ends with \r\n
                                      _on_chunk_data)
 
         def _on_chunk_data(data):
-            client.write(data)
+            read_from_upstream(data)
             if len(data) != 2:
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             else:
@@ -299,8 +300,9 @@ class ProxyHandler(tornado.web.RequestHandler):
                 else:
                     lst.append(self.upstream)
             if data is not None:
-                client.write(data)
-            client.close()
+                read_from_upstream(data)
+            if not client.closed():
+                client.close()
 
         _get_upstream()
         try:
