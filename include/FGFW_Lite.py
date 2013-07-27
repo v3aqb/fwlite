@@ -218,7 +218,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                 _create_upstream()
 
         def read_from_upstream(data):
-            client.write(data)
+            if not client.closed():
+                client.write(data)
 
         def _sent_request():
             if self.pphost and self.pptype != 'socks5':
@@ -274,13 +275,13 @@ class ProxyHandler(tornado.web.RequestHandler):
                 _finish()
 
         def _on_chunk_lenth(data):
-            client.write(data)
+            read_from_upstream(data)
             length = int(data.strip(), 16)
             self.upstream.read_bytes(length + 2,  # chunk ends with \r\n
                                      _on_chunk_data)
 
         def _on_chunk_data(data):
-            client.write(data)
+            read_from_upstream(data)
             if len(data) != 2:
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             else:
@@ -299,8 +300,9 @@ class ProxyHandler(tornado.web.RequestHandler):
                 else:
                     lst.append(self.upstream)
             if data is not None:
-                client.write(data)
-            client.close()
+                read_from_upstream(data)
+            if not client.closed():
+                client.close()
 
         _get_upstream()
         try:
@@ -999,7 +1001,7 @@ class shadowsocksabs(FGFWProxyAbs):
                          ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/encrypt.py', './shadowsocks/encrypt.py'],
                          ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/utils.py', './shadowsocks/utils.py'],
                          ]
-        self.cmd = PYTHON2 + ' d:/FGFW_Lite/shadowsocks/local.py'
+        self.cmd = PYTHON2 + ' -B d:/FGFW_Lite/shadowsocks/local.py'
         self.cwd = 'd:/FGFW_Lite/shadowsocks'
         if sys.platform.startswith('win') and os.path.isfile('./shadowsocks/shadowsocks-local.exe'):
             self.cmd = 'd:/FGFW_Lite/shadowsocks/shadowsocks-local.exe'
