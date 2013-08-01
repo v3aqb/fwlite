@@ -85,6 +85,20 @@ if not os.path.isfile('./include/redirector.txt'):
 UPSTREAM_POOL = {}
 
 
+def crlf():
+    filelist = ['./include/redirector.txt',
+                './userconf.ini',
+                './include/local.txt'
+    ]
+    for item in filelist:
+        with open(item) as f:
+            data = open(item).read()
+        with open(item, 'w') as f:
+            f.write(data)
+
+crlf()
+
+
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT']
 
