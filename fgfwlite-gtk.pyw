@@ -143,8 +143,10 @@ class GoAgentGTK:
 
     def __init__(self, window, terminal):
         self.window = window
+        self.window.set_size_request(652, 447)
+        self.window.set_position(gtk.WIN_POS_CENTER)
+        self.window.connect('delete-event', self.delete_event)
         self.terminal = terminal
-
         if os.system('which python3') == 0:
             self.command[1] = 'python3'
 
@@ -248,6 +250,11 @@ class GoAgentGTK:
 
     def on_quit(self, widget, data=None):
         gtk.main_quit()
+
+    def delete_event(self, widget, data=None):
+        self.on_hide(widget, data)
+        # 默认最小化至托盘
+        return True
 
 
 def main():

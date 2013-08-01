@@ -85,6 +85,20 @@ if not os.path.isfile('./include/redirector.txt'):
 UPSTREAM_POOL = {}
 
 
+def crlf():
+    filelist = ['./include/redirector.txt',
+                './userconf.ini',
+                './include/local.txt'
+    ]
+    for item in filelist:
+        with open(item) as f:
+            data = open(item).read()
+        with open(item, 'w') as f:
+            f.write(data)
+
+crlf()
+
+
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT']
 
@@ -129,79 +143,20 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        if sys.platform.startswith('win') and self.pphost is None:
+        if self.pphost is None or self.pptype == 'socks5':
             return self.connect()
-        if self.pptype == 'socks5':
-            return self.connect()
+
         client = self.request.connection.stream
 
         def _get_upstream():
-            def socks5_handshake(data=None):
-                def get_server_auth_method(data=None):
-                    self.upstream.read_bytes(2, socks5_auth)
-
-                def socks5_auth(data=None):
-                    if data == b'\x05\00':  # no auth needed
-                        conn_upstream()
-                    elif data == b'\x05\02':  # basic auth
-                        self.upstream.write(b"\x01" +
-                                            chr(len(self.ppusername)).encode() + self.ppusername.encode() +
-                                            chr(len(self.pppassword)).encode() + self.pppassword.encode())
-                        self.upstream.read_bytes(2, socks5_auth_finish)
-                    else:  # bad day, something is wrong
-                        fail()
-
-                def socks5_auth_finish(data=None):
-                    if data == b'\x01\x00':  # auth passed
-                        conn_upstream()
-                    else:
-                        fail()
-
-                def conn_upstream(data=None):
-                    req = b"\x05\x01\x00\x03" + chr(len(self.request.host)).encode() + self.request.host.encode()
-                    req += struct.pack(">H", self.requestport)
-                    self.upstream.write(req, post_conn_upstream)
-
-                def post_conn_upstream(data=None):
-                    self.upstream.read_bytes(4, read_upstream_data)
-
-                def read_upstream_data(data=None):
-                    if data.startswith(b'\x05\x00\x00\x01'):
-                        self.upstream.read_bytes(6, _go)
-                    elif data.startswith(b'\x05\x00\x00\x03'):
-                        self.upstream.read_bytes(3, readhost)
-                    else:
-                        fail()
-
-                def readhost(data=None):
-                    self.upstream.read_bytes(data[0], _go)
-
-                def _go(data=None):
-                    pass
-
-                def fail():
-                    client.write(b'HTTP/1.1 500 socks5 proxy Connection Failed.\r\n\r\n')
-                    self.upstream.close()
-                    client.close()
-
-                if self.ppusername:
-                    authmethod = b"\x05\x02\x00\x02"
-                else:
-                    authmethod = b"\x05\x01\x00"
-                self.upstream.write(authmethod, get_server_auth_method)
-
             def _create_upstream():
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
                 self.upstream = tornado.iostream.IOStream(s)
-                if self.pphost is None:
-                    self.upstream.connect((self.request.host.split(':')[0], int(self.requestport)))
-                elif self.pptype == 'http':
+                if self.pptype == 'http':
                     self.upstream.connect((self.pphost, int(self.ppport)))
                 elif self.pptype == 'https':
                     self.upstream = tornado.iostream.SSLIOStream(s)
                     self.upstream.connect((self.pphost, int(self.ppport)))
-                elif self.pptype == 'socks5':
-                    self.upstream.connect((self.pphost, int(self.ppport)), socks5_handshake)
                 else:
                     client.write(b'HTTP/1.1 501 %s proxy not supported.\r\n\r\n' % self.pptype)
                     client.close()
@@ -222,7 +177,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 client.write(data)
 
         def _sent_request():
-            if self.pphost and self.pptype != 'socks5':
+            if self.pptype == 'http' or self.pptype == 'https':
                 s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
                 if self.ppusername and 'Proxy-Authorization' not in self.request.headers:
                     a = '%s:%s' % (self.ppusername, self.pppassword)
