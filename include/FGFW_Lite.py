@@ -1013,39 +1013,36 @@ class fgfwproxy(FGFWProxyAbs):
         cls.addparentproxy('direct', (None, None, None, None, None))
 
         cls.gfwlist = []
+        cls.gfwlist_force = []
+
+        def add_rule(line, force=False):
+            try:
+                o = autoproxy_rule(line)
+            except Exception:
+                pass
+            else:
+                if force is True:
+                    cls.gfwlist_force.append(o)
+                else:
+                    cls.gfwlist.append(o)
 
         if os.path.isfile('./include/local.txt'):
             with open('./include/local.txt') as f:
                 for line in f:
-                    try:
-                        o = autoproxy_rule(line)
-                    except Exception:
-                        pass
-                    else:
-                        cls.gfwlist.append(o)
+                    add_rule(line, force=True)
         else:
             with open('./include/local.txt', 'w') as f:
                 f.write('! local gfwlist config\n! rules: http://t.cn/zTeBinu\n')
 
         with open('./include/cloud.txt') as f:
             for line in f:
-                try:
-                    o = autoproxy_rule(line)
-                except Exception:
-                    pass
-                else:
-                    cls.gfwlist.append(o)
+                add_rule(line, force=True)
 
         with open('./include/gfwlist.txt') as f:
             data = f.read()
         data = base64.b64decode(data)
         for line in io.BytesIO(data):
-            try:
-                o = autoproxy_rule(line)
-            except Exception:
-                pass
-            else:
-                cls.gfwlist.append(o)
+            add_rule(line)
 
     @classmethod
     def addparentproxy(cls, name, proxy):
@@ -1070,6 +1067,13 @@ class fgfwproxy(FGFWProxyAbs):
             domain = uri.split('/')[2].split(':')[0]
 
         cls.inchinadict = {}
+
+        def ifgfwlist_force():
+            for rule in cls.gfwlist_force:
+                if rule.match(uri, domain):
+                    logger.info('Autoproxy Rule match %s' % rule.rule)
+                    return not rule.override
+            return False
 
         def ifhost_in_china():
             if domain is None:
@@ -1097,6 +1101,14 @@ class fgfwproxy(FGFWProxyAbs):
 
         # select parent via uri
         parentlist = list(cls.parentdictalive.keys())
+        if ifgfwlist_force():
+            parentlist.remove('direct')
+            if uri.startswith('ftp://'):
+                if 'goagent' in parentlist:
+                    parentlist.remove('goagent')
+            if parentlist:
+                ppname = random.choice(parentlist)
+                return (ppname, cls.parentdictalive.get(ppname))
         if ifhost_in_china():
             return ('direct', cls.parentdictalive.get('direct'))
         if forceproxy or ifgfwlist():
