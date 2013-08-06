@@ -1,13 +1,23 @@
 #!/usr/bin/env python
 #-*- coding: UTF-8 -*-
-#-------------------------------------------------------------------------------
-# Name:        FGFW_Lite.py
-# Purpose:     Fuck the Great Firewall of China
 #
-# Contributer: Jiang Chao <sgzz.cj@gmail.com>
+# FGFW_Lite.py A Proxy Server help go around the Great Firewall
 #
-# License:     The GPLv2 License
-#-------------------------------------------------------------------------------
+# Copyright (C) 2012-2013 Jiang Chao <sgzz.cj@gmail.com>
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation; either version 2 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, see <http://www.gnu.org/licenses>.
+
 from __future__ import print_function
 from __future__ import unicode_literals
 
@@ -1003,39 +1013,36 @@ class fgfwproxy(FGFWProxyAbs):
         cls.addparentproxy('direct', (None, None, None, None, None))
 
         cls.gfwlist = []
+        cls.gfwlist_force = []
+
+        def add_rule(line, force=False):
+            try:
+                o = autoproxy_rule(line)
+            except Exception:
+                pass
+            else:
+                if force is True:
+                    cls.gfwlist_force.append(o)
+                else:
+                    cls.gfwlist.append(o)
 
         if os.path.isfile('./include/local.txt'):
             with open('./include/local.txt') as f:
                 for line in f:
-                    try:
-                        o = autoproxy_rule(line)
-                    except Exception:
-                        pass
-                    else:
-                        cls.gfwlist.append(o)
+                    add_rule(line, force=True)
         else:
             with open('./include/local.txt', 'w') as f:
                 f.write('! local gfwlist config\n! rules: http://t.cn/zTeBinu\n')
 
         with open('./include/cloud.txt') as f:
             for line in f:
-                try:
-                    o = autoproxy_rule(line)
-                except Exception:
-                    pass
-                else:
-                    cls.gfwlist.append(o)
+                add_rule(line, force=True)
 
         with open('./include/gfwlist.txt') as f:
             data = f.read()
         data = base64.b64decode(data)
         for line in io.BytesIO(data):
-            try:
-                o = autoproxy_rule(line)
-            except Exception:
-                pass
-            else:
-                cls.gfwlist.append(o)
+            add_rule(line)
 
     @classmethod
     def addparentproxy(cls, name, proxy):
@@ -1060,6 +1067,13 @@ class fgfwproxy(FGFWProxyAbs):
             domain = uri.split('/')[2].split(':')[0]
 
         cls.inchinadict = {}
+
+        def ifgfwlist_force():
+            for rule in cls.gfwlist_force:
+                if rule.match(uri, domain):
+                    logger.info('Autoproxy Rule match %s' % rule.rule)
+                    return not rule.override
+            return False
 
         def ifhost_in_china():
             if domain is None:
@@ -1087,6 +1101,14 @@ class fgfwproxy(FGFWProxyAbs):
 
         # select parent via uri
         parentlist = list(cls.parentdictalive.keys())
+        if ifgfwlist_force():
+            parentlist.remove('direct')
+            if uri.startswith('ftp://'):
+                if 'goagent' in parentlist:
+                    parentlist.remove('goagent')
+            if parentlist:
+                ppname = random.choice(parentlist)
+                return (ppname, cls.parentdictalive.get(ppname))
         if ifhost_in_china():
             return ('direct', cls.parentdictalive.get('direct'))
         if forceproxy or ifgfwlist():
