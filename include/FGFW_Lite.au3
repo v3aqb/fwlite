@@ -201,7 +201,7 @@ Func daemon()
 	$SILENT = 1
 	While True
 		Sleep(3000)
-		$SUB_PID = Run("./include/Python33/python33.exe ./include/FGFW_Lite.py", @ScriptDir, @SW_HIDE)
+		$SUB_PID = Run("./include/Python27/python27.exe ./include/FGFW_Lite.py", @ScriptDir, @SW_HIDE)
 		If Not $SILENT Then TrayTip("FGFW_Lite", 'FGFW_Lite Restarting...', 0)
 		While ProcessExists($SUB_PID)
 			Sleep(100)
@@ -237,8 +237,6 @@ Func _setIEProxy($ProxyEnable = 1, $ProxyServer = "127.0.0.1:8118", $ProxyOverri
 EndFunc   ;==>_setIEProxy
 
 Func _GetConf($section, $key, $default)
-	Local $value = IniRead("presets.ini", $section, $key, $default)
 	Local $value2 = IniRead("userconf.ini", $section, $key, $value)
-	If $value2 = "" Then Return $value
 	Return $value2
 EndFunc   ;==>_GetConf

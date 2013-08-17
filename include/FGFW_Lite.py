@@ -62,7 +62,7 @@ if ' ' in WORKINGDIR:
 os.chdir(WORKINGDIR)
 
 if sys.platform.startswith('win'):
-    PYTHON2 = 'c:/python27/python.exe'
+    PYTHON2 = 'd:/FGFW_Lite/include/Python27/python27.exe'
     PYTHON3 = 'd:/FGFW_Lite/include/Python33/python33.exe'
 else:
     PYTHON2 = '/usr/bin/env python2'
@@ -627,9 +627,9 @@ def run_proxy(port, start_ioloop=True):
     """
     print ("Starting HTTP proxy on port %s and %s" % (port, str(int(port)+1)))
     app = tornado.web.Application([(r'.*', ProxyHandler), ])
-    app.listen(port)
+    app.listen(8118)
     app2 = tornado.web.Application([(r'.*', PProxyHandler), ])
-    app2.listen(int(port)+1)
+    app2.listen(8119)
     ioloop = tornado.ioloop.IOLoop.instance()
     if start_ioloop:
         ioloop.start()
@@ -1151,7 +1151,7 @@ class fgfwproxy(FGFWProxyAbs):
 class SConfigParser(configparser.ConfigParser):
     """docstring for SSafeConfigParser"""
     def __init__(self):
-        super(SConfigParser, self).__init__()
+        configparser.ConfigParser.__init__(self)
 
     def dget(self, section, option, default=None):
         value = self.get(section, option)
