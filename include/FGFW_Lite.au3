@@ -237,6 +237,6 @@ Func _setIEProxy($ProxyEnable = 1, $ProxyServer = "127.0.0.1:8118", $ProxyOverri
 EndFunc   ;==>_setIEProxy
 
 Func _GetConf($section, $key, $default)
-	Local $value2 = IniRead("userconf.ini", $section, $key, $value)
+	Local $value2 = IniRead("userconf.ini", $section, $key, $default)
 	Return $value2
 EndFunc   ;==>_GetConf
