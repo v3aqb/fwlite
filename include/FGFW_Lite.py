@@ -828,7 +828,7 @@ class goagentabs(FGFWProxyAbs):
                          ['https://wwqgtxx-goagent.googlecode.com/git/Appid.txt', './include/Appid.txt'],
                          ]
         self.cwd = 'd:/FGFW_Lite/goagent'
-        self.cmd = PYTHON3 + ' d:/FGFW_Lite/goagent/proxy.py'
+        self.cmd = PYTHON2 + ' d:/FGFW_Lite/goagent/proxy.py'
         self.enable = conf.getconfbool('goagent', 'enable', True)
 
         self.enableupdate = conf.getconfbool('goagent', 'update', True)
@@ -857,8 +857,8 @@ class goagentabs(FGFWProxyAbs):
 
         proxy.set("gae", "password", conf.getconf('goagent', 'goagentGAEpassword', ''))
         proxy.set('gae', 'obfuscate', conf.getconf('goagent', 'obfuscate', '0'))
-        proxy.set('gae', 'validate', conf.getconf('goagent', 'validate', '1'))
-        proxy.set("google_hk", "hosts", conf.getconf('goagent', 'gaehkhosts', 'www.google.com|mail.google.com'))
+        proxy.set('gae', 'validate', conf.getconf('goagent', 'validate', '0'))
+        proxy.set("google_hk", "hosts", conf.getconf('goagent', 'gaehkhosts', 'www.google.com|mail.google.com|www.l.google.com|mail.l.google.com|www.google.com.hk'))
         proxy.set('pac', 'enable', '0')
         proxy.set('paas', 'fetchserver', conf.getconf('goagent', 'paasfetchserver', ''))
         if conf.getconf('goagent', 'paasfetchserver'):
