@@ -828,7 +828,7 @@ class goagentabs(FGFWProxyAbs):
                          ['https://wwqgtxx-goagent.googlecode.com/git/Appid.txt', './include/Appid.txt'],
                          ]
         self.cwd = 'd:/FGFW_Lite/goagent'
-        self.cmd = PYTHON3 + ' d:/FGFW_Lite/goagent/proxy.py'
+        self.cmd = PYTHON2 + ' d:/FGFW_Lite/goagent/proxy.py'
         self.enable = conf.getconfbool('goagent', 'enable', True)
 
         self.enableupdate = conf.getconfbool('goagent', 'update', True)
