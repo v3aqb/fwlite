@@ -663,7 +663,7 @@ def ifupdate():
     if conf.getconfbool('FGFW_Lite', 'autoupdate'):
         lastupdate = conf.presets.dgetfloat('Update', 'LastUpdate', 0)
         if time.time() - lastupdate > conf.UPDATE_INTV * 60 * 60:
-            fgfw2Liteupdate()
+            update(auto=True)
 
 
 def ifbackup():
@@ -672,17 +672,17 @@ def ifbackup():
         Thread(target=backup).start()
 
 
-def fgfw2Liteupdate(auto=True):
+def update(auto=False):
     if auto:
         open("./include/dummy", 'w').close()
     conf.presets.set('Update', 'LastUpdate', str(time.time()))
     for item in FGFWProxyAbs.ITEMS:
         if item.enableupdate:
             item.update()
-    Timer(4, fgfw2Literestart).start()
+    Timer(4, restart).start()
 
 
-def fgfw2Literestart():
+def restart():
     conf.confsave()
     REDIRECTOR.config()
     for item in FGFWProxyAbs.ITEMS:
@@ -1250,16 +1250,10 @@ def main():
     updatedaemon.daemon = True
     updatedaemon.start()
     while True:
-        line = input()
-        if 'update' in line:
-            fgfw2Liteupdate(auto=False)
-        elif 'backup'in line:
-            backup()
-        elif 'restart'in line:
-            fgfw2Literestart()
-        else:
-            print(line)
-
+        try:
+            exec(raw_input().strip())
+        except Exception as e:
+            print(repr(e))
 
 if __name__ == "__main__":
     try:
