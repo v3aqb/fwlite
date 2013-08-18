@@ -7,6 +7,8 @@ requirements under openSUSE:
 
     zypper install python-requests python-tornado python-gevent python-pyOpenSSL
 
+to work with shadowsocks, python2.7 and M2Crypto is required, or on windows, copy shadowsocks-go binary to ./shadowsocks/shadowsocks-local.exe.
+
 goagent https://code.google.com/p/goagent/
 
 gsnova https://code.google.com/p/snova/
