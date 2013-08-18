@@ -147,8 +147,10 @@ class GoAgentGTK:
         self.window.set_position(gtk.WIN_POS_CENTER)
         self.window.connect('delete-event', self.delete_event)
         self.terminal = terminal
-        if os.system('which python3') == 0:
-            self.command[1] = 'python3'
+        for cmd in ('python2.7', 'python27', 'python2'):
+            if os.system('which %s' % cmd) == 0:
+                self.command[1] = cmd
+                break 
 
         self.window.add(terminal)
         self.childpid = self.terminal.fork_command(self.command[0], self.command, os.getcwd())
