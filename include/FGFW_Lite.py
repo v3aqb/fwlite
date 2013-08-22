@@ -979,14 +979,13 @@ class shadowsocksabs(FGFWProxyAbs):
         if self.enable:
             fgfwproxy.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
         self.enableupdate = conf.userconf.dgetbool('shadowsocks', 'update', False)
-        if cmd.endswith('shadowsocks.exe'):
-            return
-        server = conf.userconf.dget('shadowsocks', 'server', '')
-        server_port = conf.userconf.dget('shadowsocks', 'server_port', '')
-        password = conf.userconf.dget('shadowsocks', 'password', 'barfoo!')
-        method = conf.userconf.dget('shadowsocks', 'method', 'table')
-        self.cmd += ' -s %s -p %s -l 1080 -k %s -m %s'\
-            % (server, server_port, password, method.strip('"'))
+        if not self.cmd.endswith('shadowsocks.exe'):
+            server = conf.userconf.dget('shadowsocks', 'server', '')
+            server_port = conf.userconf.dget('shadowsocks', 'server_port', '')
+            password = conf.userconf.dget('shadowsocks', 'password', 'barfoo!')
+            method = conf.userconf.dget('shadowsocks', 'method', 'table')
+            self.cmd += ' -s %s -p %s -l 1080 -k %s -m %s'\
+                % (server, server_port, password, method.strip('"'))
 
 
 class fgfwproxy(FGFWProxyAbs):
@@ -1174,7 +1173,7 @@ class SConfigParser(configparser.ConfigParser):
 
     def dgetbool(self, section, option, default=False):
         try:
-            value = self.userconf.getboolean(section, option)
+            value = self.getboolean(section, option)
         except Exception:
             value = bool(default)
         return value
