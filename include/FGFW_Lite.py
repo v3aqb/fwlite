@@ -63,10 +63,8 @@ os.chdir(WORKINGDIR)
 
 if sys.platform.startswith('win'):
     PYTHON2 = 'd:/FGFW_Lite/include/Python27/python27.exe'
-    PYTHON3 = 'd:/FGFW_Lite/include/Python33/python33.exe'
 else:
     PYTHON2 = '/usr/bin/env python2'
-    PYTHON3 = '/usr/bin/env python3'
 
 if not os.path.isfile('./userconf.ini'):
     import shutil
@@ -966,14 +964,23 @@ class shadowsocksabs(FGFWProxyAbs):
                          ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/encrypt.py', './shadowsocks/encrypt.py'],
                          ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/utils.py', './shadowsocks/utils.py'],
                          ]
-        self.cmd = 'c:/python27/python.exe -B d:/FGFW_Lite/shadowsocks/local.py'
+        self.cmd = PYTHON2 + ' -B d:/FGFW_Lite/shadowsocks/local.py'
         self.cwd = 'd:/FGFW_Lite/shadowsocks'
-        if sys.platform.startswith('win') and os.path.isfile('./shadowsocks/shadowsocks-local.exe'):
-            self.cmd = 'd:/FGFW_Lite/shadowsocks/shadowsocks-local.exe'
+        if sys.platform.startswith('win'):
+            self.cmd = 'c:/python27/python.exe -B d:/FGFW_Lite/shadowsocks/local.py'
+            lst = ['./shadowsocks/shadowsocks-local.exe',
+                   './shadowsocks/shadowsocks.exe',
+            ]
+            for f in lst:
+                if os.path.isfile(f):
+                    self.cmd = WORKINGDIR + f[1:]
+                    break
         self.enable = conf.getconfbool('shadowsocks', 'enable', False)
         if self.enable:
             fgfwproxy.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
         self.enableupdate = conf.getconfbool('shadowsocks', 'update', False)
+        if cmd.endswith('shadowsocks.exe'):
+            return
         server = conf.getconf('shadowsocks', 'server', '')
         server_port = conf.getconf('shadowsocks', 'server_port', '')
         password = conf.getconf('shadowsocks', 'password', 'barfoo!')
