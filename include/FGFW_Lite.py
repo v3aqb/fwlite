@@ -63,10 +63,8 @@ os.chdir(WORKINGDIR)
 
 if sys.platform.startswith('win'):
     PYTHON2 = 'd:/FGFW_Lite/include/Python27/python27.exe'
-    PYTHON3 = 'd:/FGFW_Lite/include/Python33/python33.exe'
 else:
     PYTHON2 = '/usr/bin/env python2'
-    PYTHON3 = '/usr/bin/env python3'
 
 if not os.path.isfile('./userconf.ini'):
     import shutil
@@ -640,7 +638,7 @@ def updateNbackup():
         time.sleep(90)
         chkproxy()
         ifupdate()
-        if conf.getconfbool('AutoBackupConf', 'enable', False):
+        if conf.userconf.dgetbool('AutoBackupConf', 'enable', False):
             ifbackup()
 
 
@@ -660,7 +658,7 @@ def chkproxy():
 
 
 def ifupdate():
-    if conf.getconfbool('FGFW_Lite', 'autoupdate'):
+    if conf.userconf.dgetbool('FGFW_Lite', 'autoupdate'):
         lastupdate = conf.presets.dgetfloat('Update', 'LastUpdate', 0)
         if time.time() - lastupdate > conf.UPDATE_INTV * 60 * 60:
             update(auto=True)
@@ -829,10 +827,10 @@ class goagentabs(FGFWProxyAbs):
                          ]
         self.cwd = 'd:/FGFW_Lite/goagent'
         self.cmd = PYTHON2 + ' d:/FGFW_Lite/goagent/proxy.py'
-        self.enable = conf.getconfbool('goagent', 'enable', True)
+        self.enable = conf.userconf.dgetbool('goagent', 'enable', True)
 
-        self.enableupdate = conf.getconfbool('goagent', 'update', True)
-        listen = conf.getconf('goagent', 'listen', '127.0.0.1:8087')
+        self.enableupdate = conf.userconf.dgetbool('goagent', 'update', True)
+        listen = conf.userconf.dget('goagent', 'listen', '127.0.0.1:8087')
         if ':' in listen:
             listen_ip, listen_port = listen.split(':')
         else:
@@ -847,21 +845,21 @@ class goagentabs(FGFWProxyAbs):
         if self.enable:
             fgfwproxy.addparentproxy('goagnet', ('http', '127.0.0.1', int(listen_port), None, None))
 
-        proxy.set('gae', 'profile', conf.getconf('goagent', 'profile', 'google_cn'))
+        proxy.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_cn'))
 
         appid = 'ippotsukobeta|smartladderchina'
         if os.path.isfile('./include/Appid.txt'):
             with open('./include/Appid.txt') as f:
                 appid = f.read().strip()
-        proxy.set('gae', 'appid', conf.getconf('goagent', 'goagentGAEAppid', appid))
+        proxy.set('gae', 'appid', conf.userconf.dget('goagent', 'goagentGAEAppid', appid))
 
-        proxy.set("gae", "password", conf.getconf('goagent', 'goagentGAEpassword', ''))
-        proxy.set('gae', 'obfuscate', conf.getconf('goagent', 'obfuscate', '0'))
-        proxy.set('gae', 'validate', conf.getconf('goagent', 'validate', '0'))
-        proxy.set("google_hk", "hosts", conf.getconf('goagent', 'gaehkhosts', 'www.google.com|mail.google.com|www.l.google.com|mail.l.google.com|www.google.com.hk'))
+        proxy.set("gae", "password", conf.userconf.dget('goagent', 'goagentGAEpassword', ''))
+        proxy.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
+        proxy.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
+        proxy.set("google_hk", "hosts", conf.userconf.dget('goagent', 'gaehkhosts', 'www.google.com|mail.google.com|www.l.google.com|mail.l.google.com|www.google.com.hk'))
         proxy.set('pac', 'enable', '0')
-        proxy.set('paas', 'fetchserver', conf.getconf('goagent', 'paasfetchserver', ''))
-        if conf.getconf('goagent', 'paasfetchserver'):
+        proxy.set('paas', 'fetchserver', conf.userconf.dget('goagent', 'paasfetchserver', ''))
+        if conf.userconf.dget('goagent', 'paasfetchserver'):
             proxy.set('paas', 'enable', '1')
             if self.enable:
                 fgfwproxy.addparentproxy('goagnet-paas', ('http', '127.0.0.1', 8088, None, None))
@@ -966,20 +964,28 @@ class shadowsocksabs(FGFWProxyAbs):
                          ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/encrypt.py', './shadowsocks/encrypt.py'],
                          ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/utils.py', './shadowsocks/utils.py'],
                          ]
-        self.cmd = 'c:/python27/python.exe -B d:/FGFW_Lite/shadowsocks/local.py'
+        self.cmd = PYTHON2 + ' -B d:/FGFW_Lite/shadowsocks/local.py'
         self.cwd = 'd:/FGFW_Lite/shadowsocks'
-        if sys.platform.startswith('win') and os.path.isfile('./shadowsocks/shadowsocks-local.exe'):
-            self.cmd = 'd:/FGFW_Lite/shadowsocks/shadowsocks-local.exe'
-        self.enable = conf.getconfbool('shadowsocks', 'enable', False)
+        if sys.platform.startswith('win'):
+            self.cmd = 'c:/python27/python.exe -B d:/FGFW_Lite/shadowsocks/local.py'
+            lst = ['./shadowsocks/shadowsocks-local.exe',
+                   './shadowsocks/shadowsocks.exe',
+            ]
+            for f in lst:
+                if os.path.isfile(f):
+                    self.cmd = WORKINGDIR + f[1:]
+                    break
+        self.enable = conf.userconf.dgetbool('shadowsocks', 'enable', False)
         if self.enable:
             fgfwproxy.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
-        self.enableupdate = conf.getconfbool('shadowsocks', 'update', False)
-        server = conf.getconf('shadowsocks', 'server', '')
-        server_port = conf.getconf('shadowsocks', 'server_port', '')
-        password = conf.getconf('shadowsocks', 'password', 'barfoo!')
-        method = conf.getconf('shadowsocks', 'method', 'table')
-        self.cmd += ' -s %s -p %s -l 1080 -k %s -m %s'\
-            % (server, server_port, password, method.strip('"'))
+        self.enableupdate = conf.userconf.dgetbool('shadowsocks', 'update', False)
+        if not self.cmd.endswith('shadowsocks.exe'):
+            server = conf.userconf.dget('shadowsocks', 'server', '')
+            server_port = conf.userconf.dget('shadowsocks', 'server_port', '')
+            password = conf.userconf.dget('shadowsocks', 'password', 'barfoo!')
+            method = conf.userconf.dget('shadowsocks', 'method', 'table')
+            self.cmd += ' -s %s -p %s -l 1080 -k %s -m %s'\
+                % (server, server_port, password, method.strip('"'))
 
 
 class fgfwproxy(FGFWProxyAbs):
@@ -994,9 +1000,9 @@ class fgfwproxy(FGFWProxyAbs):
                          ['https://github.com/v3aqb/fgfw-lite/raw/master/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
                          ['https://github.com/v3aqb/fgfw-lite/raw/master/include/cloud.txt', './include/cloud.txt'],
                          ]
-        self.enable = conf.getconfbool('fgfwproxy', 'enable', True)
-        self.enableupdate = conf.getconfbool('fgfwproxy', 'update', True)
-        self.listen = conf.getconf('fgfwproxy', 'listen', '8118')
+        self.enable = conf.userconf.dgetbool('fgfwproxy', 'enable', True)
+        self.enableupdate = conf.userconf.dgetbool('fgfwproxy', 'update', True)
+        self.listen = conf.userconf.dget('fgfwproxy', 'listen', '8118')
         self.chinaroute()
         self.conf()
 
@@ -1063,7 +1069,7 @@ class fgfwproxy(FGFWProxyAbs):
         '''
         # return cls.parentdict.get('https')
 
-        if uri is not None and domain is None:
+        if uri and domain is None:
             domain = uri.split('/')[2].split(':')[0]
 
         cls.inchinadict = {}
@@ -1154,24 +1160,33 @@ class SConfigParser(configparser.ConfigParser):
         configparser.ConfigParser.__init__(self)
 
     def dget(self, section, option, default=None):
+        if default is None:
+            default = ''
         value = self.get(section, option)
-        if value is None:
+        if not value:
             value = default
         return value
 
-    def dgetfloat(self, section, option, default=None):
+    def dgetfloat(self, section, option, default=0):
         return float(self.dget(section, option, default))
 
-    def dgetint(self, section, option, default=None):
+    def dgetint(self, section, option, default=0):
         return int(self.dget(section, option, default))
+
+    def dgetbool(self, section, option, default=False):
+        try:
+            value = self.getboolean(section, option)
+        except Exception:
+            value = bool(default)
+        return value
 
     def get(self, section, option, raw=False, vars=None):
         try:
             value = configparser.ConfigParser.get(self, section, option, raw=False, vars=None)
-            if value == '' or value is None:
+            if value is None:
                 raise Exception
         except Exception:
-            return None
+            return ''
         else:
             return value
 
@@ -1188,33 +1203,6 @@ class Config(object):
     def reload(self):
         self.presets.read('presets.ini')
         self.userconf.read('userconf.ini')
-
-    def getconf(self, section, option=None, default=None):
-        if option is None:
-            try:
-                value = self.userconf.items(section)
-                if value == [] or value is None:
-                    raise Exception
-            except Exception:
-                try:
-                    value = self.presets.items(section)
-                except Exception:
-                    value = []
-        else:
-            value = self.userconf.get(section, option)
-            if value is None:
-                value = self.presets.dget(section, option, default)
-        return value
-
-    def getconfbool(self, section, option, default=True):
-        try:
-            value = self.userconf.getboolean(section, option)
-        except Exception:
-            try:
-                value = self.presets.getboolean(section, option)
-            except Exception:
-                value = default
-        return value
 
     def confsave(self):
         self.presets.write(open('presets.ini', 'w'))
@@ -1233,17 +1221,17 @@ def function():
 
 
 def main():
-    if conf.getconfbool('fgfwproxy', 'enable', True):
+    if conf.userconf.dgetbool('fgfwproxy', 'enable', True):
         fgfwproxy()
-    if conf.getconfbool('goagent', 'enable', True):
+    if conf.userconf.dgetbool('goagent', 'enable', True):
         goagentabs()
-    if conf.getconfbool('shadowsocks', 'enable', False):
+    if conf.userconf.dgetbool('shadowsocks', 'enable', False):
         shadowsocksabs()
-    if conf.getconfbool('https', 'enable', False):
-        host = conf.getconf('https', 'host', '')
-        port = conf.getconf('https', 'port', '443')
-        user = conf.getconf('https', 'user', None)
-        passwd = conf.getconf('https', 'passwd', None)
+    if conf.userconf.dgetbool('https', 'enable', False):
+        host = conf.userconf.dget('https', 'host', '')
+        port = conf.userconf.dget('https', 'port', '443')
+        user = conf.userconf.dget('https', 'user', None)
+        passwd = conf.userconf.dget('https', 'passwd', None)
         fgfwproxy.addparentproxy('https', ('https', host, int(port), user, passwd))
     fgfwproxy.parentdictalive = fgfwproxy.parentdict.copy()
     updatedaemon = Thread(target=updateNbackup)
