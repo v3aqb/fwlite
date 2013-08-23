@@ -1069,7 +1069,7 @@ class fgfwproxy(FGFWProxyAbs):
         '''
         # return cls.parentdict.get('https')
 
-        if uri is not None and domain is None:
+        if uri and domain is None:
             domain = uri.split('/')[2].split(':')[0]
 
         cls.inchinadict = {}
@@ -1160,15 +1160,17 @@ class SConfigParser(configparser.ConfigParser):
         configparser.ConfigParser.__init__(self)
 
     def dget(self, section, option, default=None):
+        if default is None:
+            default = ''
         value = self.get(section, option)
-        if value is None:
+        if not value:
             value = default
         return value
 
-    def dgetfloat(self, section, option, default=None):
+    def dgetfloat(self, section, option, default=0):
         return float(self.dget(section, option, default))
 
-    def dgetint(self, section, option, default=None):
+    def dgetint(self, section, option, default=0):
         return int(self.dget(section, option, default))
 
     def dgetbool(self, section, option, default=False):
@@ -1181,10 +1183,10 @@ class SConfigParser(configparser.ConfigParser):
     def get(self, section, option, raw=False, vars=None):
         try:
             value = configparser.ConfigParser.get(self, section, option, raw=False, vars=None)
-            if value == '':
+            if value is None:
                 raise Exception
         except Exception:
-            return None
+            return ''
         else:
             return value
 
