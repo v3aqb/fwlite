@@ -1,17 +1,15 @@
 fgfw-lite
 ============
 
-fgfw-lite is a proxy server based on tornado framework, automatically select parent proxy based on Autoproxy rules.
+fgfw-lite is a proxy server based on tornado framework, select parent proxy automatically based on ip address and Autoproxy rules.
 
 requirements under openSUSE:
 
     zypper install python-requests python-tornado python-gevent python-pyOpenSSL
 
-to work with shadowsocks, python2.7 and M2Crypto is required, or on windows, copy shadowsocks-go binary to ./shadowsocks/shadowsocks-local.exe.
+to work with shadowsocks, python2.7 and M2Crypto is required.
 
 goagent https://code.google.com/p/goagent/
-
-gsnova https://code.google.com/p/snova/
 
 shadowsocks https://github.com/clowwindy/shadowsocks
 
