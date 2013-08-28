@@ -19,7 +19,7 @@
 # with this program; if not, see <http://www.gnu.org/licenses>.
 
 from __future__ import print_function
-from __future__ import unicode_literals
+# from __future__ import unicode_literals
 
 __version__ = '0.3.2.1'
 
