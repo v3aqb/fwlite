@@ -19,7 +19,6 @@
 # with this program; if not, see <http://www.gnu.org/licenses>.
 
 from __future__ import print_function
-# from __future__ import unicode_literals
 
 __version__ = '0.3.2.1'
 
@@ -302,35 +301,35 @@ class ProxyHandler(tornado.web.RequestHandler):
         client = self.request.connection.stream
 
         def read_from_client(data):
-            upstream.write(data)
+            if not upstream.closed():
+                upstream.write(data)
 
         def read_from_upstream(data):
-            client.write(data)
+            if not client.closed():
+                client.write(data)
 
         def client_close(data=None):
-            if upstream.closed():
-                return
-            if data:
-                upstream.write(data)
-            upstream.close()
+            if not upstream.closed():
+                if data:
+                    upstream.write(data)
+                upstream.close()
 
         def upstream_close(data=None):
-            if client.closed():
-                return
-            if data:
-                client.write(data)
-            client.close()
+            if not client.closed():
+                if data:
+                    client.write(data)
+                client.close()
 
         def start_tunnel(data=None):
             client.read_until_close(client_close, read_from_client)
             upstream.read_until_close(upstream_close, read_from_upstream)
             if data:
-                upstream.write(data)
+                read_from_client(data)
 
         def start_ssltunnel(data=None):
             client.read_until_close(client_close, read_from_client)
             upstream.read_until_close(upstream_close, read_from_upstream)
-            client.write(b'HTTP/1.1 200 Connection established\r\n\r\n')
+            read_from_upstream(b'HTTP/1.1 200 Connection established\r\n\r\n')
 
         def http_conntgt(data=None):
             if self.pptype == 'http' or self.pptype == 'https':
