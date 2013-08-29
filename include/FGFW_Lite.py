@@ -1163,10 +1163,18 @@ class SConfigParser(configparser.ConfigParser):
         return value
 
     def dgetfloat(self, section, option, default=0):
-        return float(self.dget(section, option, default))
+        try:
+            value = self.getfloat(section, option)
+        except Exception:
+            value = float(default)
+        return value
 
     def dgetint(self, section, option, default=0):
-        return int(self.dget(section, option, default))
+        try:
+            value = self.getint(section, option)
+        except Exception:
+            value = int(default)
+        return value
 
     def dgetbool(self, section, option, default=False):
         try:
@@ -1177,14 +1185,17 @@ class SConfigParser(configparser.ConfigParser):
 
     def get(self, section, option, raw=False, vars=None):
         try:
-            value = configparser.ConfigParser.get(self, section, option, raw=False, vars=None)
+            value = configparser.ConfigParser.get(self, section, option, raw, vars)
             if value is None:
                 raise Exception
         except Exception:
-            return ''
-        else:
-            return value
+            value = ''
+        return value
 
+    def set(self, section, option, value):
+        if not self.has_section(section):
+            self.add_section(section)
+        configparser.ConfigParser.set(self, section, option, value)
 
 class Config(object):
     def __init__(self):
