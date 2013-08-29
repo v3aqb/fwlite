@@ -823,7 +823,6 @@ class goagentabs(FGFWProxyAbs):
         self.filelist = [['https://github.com/goagent/goagent/raw/3.0/local/proxy.py', './goagent/proxy.py'],
                          ['https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.ini'],
                          ['https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'],
-                         ['https://wwqgtxx-goagent.googlecode.com/git/Appid.txt', './include/Appid.txt'],
                          ]
         self.cwd = 'd:/FGFW_Lite/goagent'
         self.cmd = PYTHON2 + ' d:/FGFW_Lite/goagent/proxy.py'
@@ -847,10 +846,7 @@ class goagentabs(FGFWProxyAbs):
 
         proxy.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_cn'))
 
-        appid = 'ippotsukobeta|smartladderchina'
-        if os.path.isfile('./include/Appid.txt'):
-            with open('./include/Appid.txt') as f:
-                appid = f.read().strip()
+        appid = 'mzu5gx1heh2beebo2'
         proxy.set('gae', 'appid', conf.userconf.dget('goagent', 'goagentGAEAppid', appid))
 
         proxy.set("gae", "password", conf.userconf.dget('goagent', 'goagentGAEpassword', ''))
