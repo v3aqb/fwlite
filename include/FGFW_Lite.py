@@ -61,7 +61,7 @@ if ' ' in WORKINGDIR:
 os.chdir(WORKINGDIR)
 
 if sys.platform.startswith('win'):
-    PYTHON2 = 'd:/FGFW_Lite/include/Python27/python27.exe'
+    PYTHON2 = '%s/include/Python27/python27.exe' % WORKINGDIR
 else:
     PYTHON2 = '/usr/bin/env python2'
 
@@ -74,7 +74,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('FGFW-Lite')
 
 REDIRECTOR = '''\
-|http://www.google.com/reader forcehttps
 |http://www.google.com/search forcehttps
 |http://www.google.com/url forcehttps
 |http://news.google.com forcehttps
@@ -117,7 +116,7 @@ class ProxyHandler(tornado.web.RequestHandler):
     def prepare(self):
         uri = self.request.uri
         if '//' not in uri:
-            uri = 'https://' + uri
+            uri = 'https://%s' % uri
         host = self.request.host.split(':')[0]
         # redirector
         new_url = REDIRECTOR.get(uri, host)
@@ -371,17 +370,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                     fail()
 
             def conn_upstream(data=None):
-                # try:
-                #     ip = socket.inet_aton(self.request.host)  # guess ipv4
-                # except Exception:
-                #     try:  # guess ipv6
-                #         ip = socket.inet_pton(socket.AF_INET6, self.request.host)
-                #     except Exception:  # got to be domain name
-                #         req = b"\x05\x01\x00\x03" + chr(len(self.request.host)).encode() + self.request.host.encode()
-                #     else:
-                #         req = b"\x05\x01\x00\x04" + ip
-                # else:
-                #     req = b"\x05\x01\x00\x01" + ip
                 req = b"\x05\x01\x00\x03" + chr(len(self.request.host)).encode() + self.request.host.encode()
                 req += struct.pack(">H", self.requestport)
                 upstream.write(req, post_conn_upstream)
@@ -443,7 +431,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             client.close()
 
 
-class PProxyHandler(ProxyHandler):
+class ForceProxyHandler(ProxyHandler):
     def getparent(self, uri, host):
         self.ppname, pp = fgfwproxy.parentproxy(uri, host, forceproxy=True)
         self.pptype, self.pphost, self.ppport, self.ppusername,\
@@ -487,13 +475,13 @@ class autoproxy_rule(object):
                 self.rule.startswith('!') or\
                 self.rule.startswith('['):
             raise ValueError("invalid autoproxy_rule")
-        self.__type, self.__ptrnlst = self.__autopxy_rule_parse(self.rule)
-        if self.__type >= self.OVERRIDE_DOMAIN:
+        self._type, self._ptrnlst = self._autopxy_rule_parse(self.rule)
+        if self._type >= self.OVERRIDE_DOMAIN:
             self.override = True
         else:
             self.override = False
 
-    def __autopxy_rule_parse(self, rule):
+    def _autopxy_rule_parse(self, rule):
         def parse(rule):
             if rule.startswith('||'):
                 result = rule.replace('||', '').replace('/', '')
@@ -522,7 +510,7 @@ class autoproxy_rule(object):
 
     def match(self, url, domain=None):
         # url must be something like https://www.google.com
-        ptrnlst = self.__ptrnlst[:]
+        ptrnlst = self._ptrnlst[:]
 
         def _match_domain():
             if domain.endswith(ptrnlst.pop()):
@@ -557,28 +545,28 @@ class autoproxy_rule(object):
         if domain is None:
             domain = url.split('/')[2].split(':')[0]
 
-        if self.__type is self.DOMAIN:
+        if self._type is self.DOMAIN:
             return _match_domain()
-        elif self.__type is self.URI:
+        elif self._type is self.URI:
             if url.startswith('https://'):
                 if self.rule.startswith('|https://'):
                     return _match_uri()
                 return False
             return _match_uri()
-        elif self.__type is self.KEYWORD:
+        elif self._type is self.KEYWORD:
             if url.startswith('https://'):
                 return False
             return _match_keyword()
-        elif self.__type is self.REGEX:
+        elif self._type is self.REGEX:
             return _match_regex()
 
-        elif self.__type is self.OVERRIDE_DOMAIN:
+        elif self._type is self.OVERRIDE_DOMAIN:
             return _match_domain()
-        elif self.__type is self.OVERRIDE_URI:
+        elif self._type is self.OVERRIDE_URI:
             return _match_uri()
-        elif self.__type is self.OVERRIDE_KEYWORD:
+        elif self._type is self.OVERRIDE_KEYWORD:
             return _match_keyword()
-        elif self.__type is self.OVERRIDE_REGEX:
+        elif self._type is self.OVERRIDE_REGEX:
             return _match_regex()
 
 
@@ -604,7 +592,7 @@ class redirector(object):
         with open('./include/redirector.txt') as f:
             for line in f:
                 line = line.strip()
-                if len(line.split()) == 2:
+                if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
                     try:
                         o = autoproxy_rule(line.split()[0])
                         if o.override:
@@ -625,7 +613,7 @@ def run_proxy(port, start_ioloop=True):
     print ("Starting HTTP proxy on port %s and %s" % (port, str(int(port)+1)))
     app = tornado.web.Application([(r'.*', ProxyHandler), ])
     app.listen(8118)
-    app2 = tornado.web.Application([(r'.*', PProxyHandler), ])
+    app2 = tornado.web.Application([(r'.*', ForceProxyHandler), ])
     app2.listen(8119)
     ioloop = tornado.ioloop.IOLoop.instance()
     if start_ioloop:
@@ -702,7 +690,7 @@ def backup():
             try:
                 os.makedirs(backupPath)
             except:
-                logger.error('create dir ' + backupPath + ' failed!')
+                logger.error('create dir %s failed!' % backupPath)
         if len(backuplist) > 0:
             logger.info("start packing")
             for i in range(len(backuplist)):
@@ -730,7 +718,7 @@ def backup():
                 if filename.split('-')[0] == surname:
                     group.append(filename)
                     if len(group) > rotation:
-                        os.remove(backupPath + '/' + group.pop(0))
+                        os.remove('%s/%s' % (backupPath, group.pop(0)))
                 else:
                     group = []
                     group.append(filename)
@@ -763,8 +751,8 @@ class FGFWProxyAbs(object):
         while True:
             if self.enable:
                 if self.cwd:
-                    os.chdir(self.cwd.replace('d:/FGFW_Lite', WORKINGDIR))
-                self.subpobj = Popen(shlex.split(self.cmd.replace('d:/FGFW_Lite', WORKINGDIR)))
+                    os.chdir(self.cwd)
+                self.subpobj = Popen(shlex.split(self.cmd))
                 os.chdir(WORKINGDIR)
                 self.subpobj.wait()
             time.sleep(3)
@@ -775,12 +763,12 @@ class FGFWProxyAbs(object):
         except Exception:
             pass
 
-    def __update(self):
+    def _update(self):
         self._listfileupdate()
 
     def update(self):
         if self.enable and self.enableupdate:
-            self.__update()
+            self._update()
 
     def _listfileupdate(self):
         if len(self.filelist) > 0:
@@ -800,7 +788,7 @@ class FGFWProxyAbs(object):
         try:
             r = requests.get(url, proxies=proxy, headers=header, timeout=5, verify=cafile)
         except Exception as e:
-            logger.info(path + ' Not modified ' + str(e))
+            logger.info('%s NOT updated. Reason: %s' % (path, str(e)))
         else:
             if r.status_code == 200:
                 with open(path, 'wb') as localfile:
@@ -808,9 +796,9 @@ class FGFWProxyAbs(object):
                 with conf.iolock:
                     conf.presets.set('Update', path.replace('./', '').replace('/', '-'), str(r.headers.get('etag')))
                 with consoleLock:
-                    logger.info(path + ' Updated.')
+                    logger.info('%s Updated.' % path)
             else:
-                logger.info(path + ' Not modified ' + str(r.status_code))
+                logger.info('%s NOT updated. Reason: %s' % (path, str(r.status_code)))
 
 
 class goagentabs(FGFWProxyAbs):
@@ -823,8 +811,8 @@ class goagentabs(FGFWProxyAbs):
                          ['https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.ini'],
                          ['https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'],
                          ]
-        self.cwd = 'd:/FGFW_Lite/goagent'
-        self.cmd = PYTHON2 + ' d:/FGFW_Lite/goagent/proxy.py'
+        self.cwd = '%s/goagent' % WORKINGDIR
+        self.cmd = '%s %s/goagent/proxy.py' % (PYTHON2, WORKINGDIR)
         self.enable = conf.userconf.dgetbool('goagent', 'enable', True)
 
         self.enableupdate = conf.userconf.dgetbool('goagent', 'update', True)
@@ -959,10 +947,10 @@ class shadowsocksabs(FGFWProxyAbs):
                          ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/encrypt.py', './shadowsocks/encrypt.py'],
                          ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/utils.py', './shadowsocks/utils.py'],
                          ]
-        self.cmd = PYTHON2 + ' -B d:/FGFW_Lite/shadowsocks/local.py'
-        self.cwd = 'd:/FGFW_Lite/shadowsocks'
+        self.cmd = '%s -B %s/shadowsocks/local.py' % (PYTHON2, WORKINGDIR)
+        self.cwd = '%s/shadowsocks' % WORKINGDIR
         if sys.platform.startswith('win'):
-            self.cmd = 'c:/python27/python.exe -B d:/FGFW_Lite/shadowsocks/local.py'
+            self.cmd = 'c:/python27/python.exe -B %s/shadowsocks/local.py' % WORKINGDIR
             lst = ['./shadowsocks/shadowsocks-local.exe',
                    './shadowsocks/shadowsocks.exe',
             ]
