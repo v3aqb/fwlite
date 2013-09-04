@@ -94,8 +94,7 @@ UPSTREAM_POOL = {}
 def crlf():
     filelist = ['./include/redirector.txt',
                 './userconf.ini',
-                './include/local.txt'
-    ]
+                './include/local.txt']
     for item in filelist:
         with open(item) as f:
             data = open(item).read()
@@ -116,7 +115,7 @@ class ProxyHandler(tornado.web.RequestHandler):
     def prepare(self):
         uri = self.request.uri
         if '//' not in uri:
-            uri = 'https://%s' % uri
+            uri = 'https://{}'.format(uri)
         host = self.request.host.split(':')[0]
         # redirector
         new_url = REDIRECTOR.get(uri, host)
@@ -137,19 +136,15 @@ class ProxyHandler(tornado.web.RequestHandler):
         self.getparent(uri, host)
 
         if self.pptype == 'socks5':
-            self.upstream_name = '%s-%s-%s' % (self.ppname, self.request.host, str(self.requestport))
+            self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
         else:
             self.upstream_name = self.ppname if self.pphost else self.request.host
-        s = '%s %s' % (self.request.method, self.request.uri.split('?')[0])
-        if self.pphost:
-            s += ' via %s://%s:%s' % (self.pptype, self.pphost, self.ppport)
-        else:
-            s += ' via direct'
+        s = '{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname)
         logger.info(s)
 
     @tornado.web.asynchronous
     def get(self):
-        if self.pphost is None or self.pptype == 'socks5':
+        if self.pptype == 'socks5':
             return self.connect()
 
         client = self.request.connection.stream
@@ -163,6 +158,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                 elif self.pptype == 'https':
                     self.upstream = tornado.iostream.SSLIOStream(s)
                     self.upstream.connect((self.pphost, int(self.ppport)))
+                elif self.pptype is None:
+                    self.upstream.connect((self.request.host.split(':')[0], int(self.requestport)))
                 else:
                     client.write(b'HTTP/1.1 501 %s proxy not supported.\r\n\r\n' % self.pptype)
                     client.close()
@@ -203,7 +200,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.upstream.write(data)
 
         def _on_headers(data=None):
-            client.write(data.replace(b'Connection: keep-alive', b'Connection: close'))
+            client.write(data)
             data = data.decode()
             first_line, _, header_data = data.partition("\n")
             status_code = int(first_line.split()[1])
@@ -580,7 +577,7 @@ class redirector(object):
     def get(self, uri, host=None):
         for rule, result in self.list:
             if rule.match(uri, host):
-                logger.info('Match redirect rule %s, %s' % (rule.rule, result))
+                logger.info('Match redirect rule {}, {}'.format(rule.rule, result))
                 if result == 'forcehttps':
                     return uri.replace('http://', 'https://', 1)
                 return result
@@ -610,7 +607,7 @@ def run_proxy(port, start_ioloop=True):
     Run proxy on the specified port. If start_ioloop is True (default),
     the tornado IOLoop will be started immediately.
     """
-    print ("Starting HTTP proxy on port %s and %s" % (port, str(int(port)+1)))
+    print("Starting HTTP proxy on port {} and {}".format(port, str(int(port)+1)))
     app = tornado.web.Application([(r'.*', ProxyHandler), ])
     app.listen(8118)
     app2 = tornado.web.Application([(r'.*', ForceProxyHandler), ])
@@ -788,7 +785,7 @@ class FGFWProxyAbs(object):
         try:
             r = requests.get(url, proxies=proxy, headers=header, timeout=5, verify=cafile)
         except Exception as e:
-            logger.info('%s NOT updated. Reason: %s' % (path, str(e)))
+            logger.info('{} NOT updated. Reason: {}'.format(path, repr(e)))
         else:
             if r.status_code == 200:
                 with open(path, 'wb') as localfile:
@@ -798,7 +795,7 @@ class FGFWProxyAbs(object):
                 with consoleLock:
                     logger.info('%s Updated.' % path)
             else:
-                logger.info('%s NOT updated. Reason: %s' % (path, str(r.status_code)))
+                logger.info('{} NOT updated. Reason: {}'.format(path, str(r.status_code)))
 
 
 class goagentabs(FGFWProxyAbs):
@@ -812,7 +809,7 @@ class goagentabs(FGFWProxyAbs):
                          ['https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'],
                          ]
         self.cwd = '%s/goagent' % WORKINGDIR
-        self.cmd = '%s %s/goagent/proxy.py' % (PYTHON2, WORKINGDIR)
+        self.cmd = '{} {}/goagent/proxy.py'.format(PYTHON2, WORKINGDIR)
         self.enable = conf.userconf.dgetbool('goagent', 'enable', True)
 
         self.enableupdate = conf.userconf.dgetbool('goagent', 'update', True)
@@ -945,15 +942,13 @@ class shadowsocksabs(FGFWProxyAbs):
     def _config(self):
         self.filelist = [['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/local.py', './shadowsocks/local.py'],
                          ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/encrypt.py', './shadowsocks/encrypt.py'],
-                         ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/utils.py', './shadowsocks/utils.py'],
-                         ]
-        self.cmd = '%s -B %s/shadowsocks/local.py' % (PYTHON2, WORKINGDIR)
+                         ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/utils.py', './shadowsocks/utils.py']]
+        self.cmd = '{} -B {}/shadowsocks/local.py'.format(PYTHON2, WORKINGDIR)
         self.cwd = '%s/shadowsocks' % WORKINGDIR
         if sys.platform.startswith('win'):
             self.cmd = 'c:/python27/python.exe -B %s/shadowsocks/local.py' % WORKINGDIR
             lst = ['./shadowsocks/shadowsocks-local.exe',
-                   './shadowsocks/shadowsocks.exe',
-            ]
+                   './shadowsocks/shadowsocks.exe']
             for f in lst:
                 if os.path.isfile(f):
                     self.cmd = WORKINGDIR + f[1:]
@@ -967,8 +962,7 @@ class shadowsocksabs(FGFWProxyAbs):
             server_port = conf.userconf.dget('shadowsocks', 'server_port', '')
             password = conf.userconf.dget('shadowsocks', 'password', 'barfoo!')
             method = conf.userconf.dget('shadowsocks', 'method', 'table')
-            self.cmd += ' -s %s -p %s -l 1080 -k %s -m %s'\
-                % (server, server_port, password, method.strip('"'))
+            self.cmd += ' -s {} -p {} -l 1080 -k {} -m {}'.format(server, server_port, password, method.strip('"'))
 
 
 class fgfwproxy(FGFWProxyAbs):
@@ -1060,7 +1054,7 @@ class fgfwproxy(FGFWProxyAbs):
         def ifgfwlist_force():
             for rule in cls.gfwlist_force:
                 if rule.match(uri, domain):
-                    logger.info('Autoproxy Rule match %s' % rule.rule)
+                    logger.info('Autoproxy Rule match {}'.format(rule.rule))
                     return not rule.override
             return False
 
@@ -1084,7 +1078,7 @@ class fgfwproxy(FGFWProxyAbs):
         def ifgfwlist():
             for rule in cls.gfwlist:
                 if rule.match(uri, domain):
-                    logger.info('Autoproxy Rule match %s' % rule.rule)
+                    logger.info('Autoproxy Rule match {}'.format(rule.rule))
                     return not rule.override
             return False
 
@@ -1134,7 +1128,7 @@ class fgfwproxy(FGFWProxyAbs):
             #mask in *nix format
             mask2 = 32 - int(math.log(num_ip, 2))
 
-            cls.chinanet.append(ip_network('%s/%s' % (starting_ip, mask2)))
+            cls.chinanet.append(ip_network('{}/{}'.format(starting_ip, mask2)))
 
 
 class SConfigParser(configparser.ConfigParser):
@@ -1184,6 +1178,7 @@ class SConfigParser(configparser.ConfigParser):
         if not self.has_section(section):
             self.add_section(section)
         configparser.ConfigParser.set(self, section, option, value)
+
 
 class Config(object):
     def __init__(self):
