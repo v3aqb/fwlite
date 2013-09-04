@@ -76,7 +76,7 @@ Func setTray()
 	TrayCreateItem("Exit")
 	TrayItemSetOnEvent(-1, "ExitScript")
 
-	TraySetOnEvent($TRAY_EVENT_PRIMARYDOUBLE, "showHideConsole")
+	TraySetOnEvent($TRAY_EVENT_PRIMARYUP, "showHideConsole")
 	TraySetState()
 	TraySetToolTip("FGFW_Lite Internet Unleashed")
 	TraySetClick(16)
@@ -135,6 +135,10 @@ Func _showHidePID($PID)
 		_WinAPI_ShowWindow($WinHandle, @SW_HIDE)
 	Else
 		_WinAPI_ShowWindow($WinHandle, @SW_SHOWNORMAL)
+		$txt = _WinAPI_GetWindowText($WinHandle)
+		If Not WinActive($txt) Then
+			WinActivate($txt)
+		EndIf
 	EndIf
 EndFunc   ;==>_showHidePID
 
