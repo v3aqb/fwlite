@@ -146,7 +146,8 @@ class ProxyHandler(tornado.web.RequestHandler):
     def get(self):
         if self.pptype == 'socks5':
             return self.connect()
-
+        if self.pptype is None and sys.platform.startswith('win'):
+            return self.connect()
         client = self.request.connection.stream
 
         def _get_upstream():
