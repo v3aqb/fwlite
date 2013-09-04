@@ -94,8 +94,7 @@ UPSTREAM_POOL = {}
 def crlf():
     filelist = ['./include/redirector.txt',
                 './userconf.ini',
-                './include/local.txt'
-    ]
+                './include/local.txt']
     for item in filelist:
         with open(item) as f:
             data = open(item).read()
@@ -145,7 +144,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        if self.pphost is None or self.pptype == 'socks5':
+        if self.pptype == 'socks5':
             return self.connect()
 
         client = self.request.connection.stream
@@ -159,6 +158,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                 elif self.pptype == 'https':
                     self.upstream = tornado.iostream.SSLIOStream(s)
                     self.upstream.connect((self.pphost, int(self.ppport)))
+                elif self.pptype is None:
+                    self.upstream.connect((self.request.host.split(':')[0], int(self.requestport)))
                 else:
                     client.write(b'HTTP/1.1 501 %s proxy not supported.\r\n\r\n' % self.pptype)
                     client.close()
@@ -199,7 +200,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.upstream.write(data)
 
         def _on_headers(data=None):
-            client.write(data.replace(b'Connection: keep-alive', b'Connection: close'))
+            client.write(data)
             data = data.decode()
             first_line, _, header_data = data.partition("\n")
             status_code = int(first_line.split()[1])
@@ -941,15 +942,13 @@ class shadowsocksabs(FGFWProxyAbs):
     def _config(self):
         self.filelist = [['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/local.py', './shadowsocks/local.py'],
                          ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/encrypt.py', './shadowsocks/encrypt.py'],
-                         ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/utils.py', './shadowsocks/utils.py'],
-                         ]
+                         ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/utils.py', './shadowsocks/utils.py']]
         self.cmd = '{} -B {}/shadowsocks/local.py'.format(PYTHON2, WORKINGDIR)
         self.cwd = '%s/shadowsocks' % WORKINGDIR
         if sys.platform.startswith('win'):
             self.cmd = 'c:/python27/python.exe -B %s/shadowsocks/local.py' % WORKINGDIR
             lst = ['./shadowsocks/shadowsocks-local.exe',
-                   './shadowsocks/shadowsocks.exe',
-            ]
+                   './shadowsocks/shadowsocks.exe']
             for f in lst:
                 if os.path.isfile(f):
                     self.cmd = WORKINGDIR + f[1:]
