@@ -54,6 +54,10 @@ except ImportError:
     ip_address = ipaddr.IPAddress
     ip_network = ipaddr.IPNetwork
 
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('FGFW-Lite')
+
 WORKINGDIR = '/'.join(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')).split('/')[:-1])
 if ' ' in WORKINGDIR:
     print('no spacebar allowed in path')
@@ -69,10 +73,6 @@ if not os.path.isfile('./userconf.ini'):
     import shutil
     shutil.copy2('./userconf.sample.ini', './userconf.ini')
 
-import logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('FGFW-Lite')
-
 REDIRECTOR = '''\
 |http://www.google.com/search forcehttps
 |http://www.google.com/url forcehttps
@@ -87,6 +87,9 @@ REDIRECTOR = '''\
 if not os.path.isfile('./include/redirector.txt'):
     with open('./include/redirector.txt', 'w') as f:
         f.write(REDIRECTOR)
+if not os.path.isfile('./include/local.txt'):
+    with open('./include/local.txt', 'w') as f:
+        f.write('! local gfwlist config\n! rules: http://t.cn/zTeBinu\n')
 
 UPSTREAM_POOL = {}
 
@@ -1003,13 +1006,9 @@ class fgfwproxy(FGFWProxyAbs):
                 else:
                     cls.gfwlist.append(o)
 
-        if os.path.isfile('./include/local.txt'):
-            with open('./include/local.txt') as f:
-                for line in f:
-                    add_rule(line, force=True)
-        else:
-            with open('./include/local.txt', 'w') as f:
-                f.write('! local gfwlist config\n! rules: http://t.cn/zTeBinu\n')
+        with open('./include/local.txt') as f:
+            for line in f:
+                add_rule(line, force=True)
 
         with open('./include/cloud.txt') as f:
             for line in f:
