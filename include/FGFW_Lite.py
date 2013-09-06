@@ -154,12 +154,12 @@ class ProxyHandler(tornado.web.RequestHandler):
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
                 self.upstream = tornado.iostream.IOStream(s)
                 if self.pptype == 'http':
-                    self.upstream.connect((self.pphost, int(self.ppport)))
+                    self.upstream.connect((self.pphost, int(self.ppport)), _sent_request)
                 elif self.pptype == 'https':
                     self.upstream = tornado.iostream.SSLIOStream(s)
-                    self.upstream.connect((self.pphost, int(self.ppport)))
+                    self.upstream.connect((self.pphost, int(self.ppport)), _sent_request)
                 elif self.pptype is None:
-                    self.upstream.connect((self.request.host.split(':')[0], int(self.requestport)))
+                    self.upstream.connect((self.request.host.split(':')[0], int(self.requestport)), _sent_request)
                 else:
                     client.write(b'HTTP/1.1 501 %s proxy not supported.\r\n\r\n' % self.pptype)
                     client.close()
@@ -174,6 +174,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                         break
             if self.upstream is None:
                 _create_upstream()
+            else:
+                _sent_request()
 
         def read_from_upstream(data):
             if not client.closed():
@@ -263,14 +265,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                 client.close()
 
         _get_upstream()
-        try:
-            _sent_request()
-        except Exception as e:
-            logger.info(str(e))
-            if not self.upstream.closed():
-                self.upstream.close()
-            if not client.closed():
-                client.close()
 
     @tornado.web.asynchronous
     def post(self):
