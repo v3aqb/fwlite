@@ -206,11 +206,12 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         def _on_headers(data=None):
             client.write(data)
+            self._headers_written = True
             data = data.decode()
             first_line, _, header_data = data.partition("\n")
             status_code = int(first_line.split()[1])
             headers = HTTPHeaders.parse(header_data)
-            self.close_flag = True if headers.get('Connection') == 'close' else False
+            self._close_flag = True if headers.get('Connection') == 'close' else False
 
             if "Content-Length" in headers:
                 if "," in headers["Content-Length"]:
@@ -258,14 +259,11 @@ class ProxyHandler(tornado.web.RequestHandler):
                 if item.closed():
                     lst.remove(item)
             if not self.upstream.closed():
-                if self.close_flag:
+                if self._close_flag:
                     self.upstream.close()
                 else:
                     lst.append(self.upstream)
-            if data is not None:
-                read_from_upstream(data)
-            if not client.closed():
-                client.close()
+            self.finish(data)
 
         _get_upstream()
 
