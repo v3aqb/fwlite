@@ -24,7 +24,6 @@ __version__ = '0.3.3.0'
 
 import sys
 import os
-import io
 from subprocess import Popen
 import shlex
 import time
@@ -69,8 +68,8 @@ else:
     PYTHON2 = '/usr/bin/env python2'
 
 if not os.path.isfile('./userconf.ini'):
-    import shutil
-    shutil.copy2('./userconf.sample.ini', './userconf.ini')
+    with open('./userconf.ini', 'w') as f:
+        f.write(open('./userconf.sample.ini').read())
 
 if not os.path.isfile('./include/redirector.txt'):
     with open('./include/redirector.txt', 'w') as f:
@@ -114,8 +113,8 @@ class ProxyHandler(tornado.web.RequestHandler):
         # redirector
         new_url = REDIRECTOR.get(uri, host)
         if new_url:
-            if new_url.startswith('401'):
-                self.send_error(status_code=401)
+            if new_url.startswith('403'):
+                self.send_error(status_code=403)
             else:
                 self.redirect(new_url)
             return
@@ -852,8 +851,8 @@ class goagentabs(FGFWProxyAbs):
         self.cwd = '%s/goagent' % WORKINGDIR
         self.cmd = '{} {}/goagent/proxy.py'.format(PYTHON2, WORKINGDIR)
         self.enable = conf.userconf.dgetbool('goagent', 'enable', True)
-
         self.enableupdate = conf.userconf.dgetbool('goagent', 'update', True)
+
         listen = conf.userconf.dget('goagent', 'listen', '127.0.0.1:8087')
         if ':' in listen:
             listen_ip, listen_port = listen.split(':')
@@ -870,10 +869,7 @@ class goagentabs(FGFWProxyAbs):
             fgfwproxy.addparentproxy('goagnet', ('http', '127.0.0.1', int(listen_port), None, None))
 
         proxy.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_cn'))
-
-        appid = 'mzu5gx1heh2beebo2'
-        proxy.set('gae', 'appid', conf.userconf.dget('goagent', 'goagentGAEAppid', appid))
-
+        proxy.set('gae', 'appid', conf.userconf.dget('goagent', 'goagentGAEAppid', 'mzu5gx1heh2beebo2'))
         proxy.set("gae", "password", conf.userconf.dget('goagent', 'goagentGAEpassword', ''))
         proxy.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
         proxy.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
@@ -1059,10 +1055,8 @@ class fgfwproxy(FGFWProxyAbs):
                 add_rule(line, force=True)
 
         with open('./include/gfwlist.txt') as f:
-            data = f.read()
-        data = base64.b64decode(data)
-        for line in io.BytesIO(data):
-            add_rule(line)
+            for line in base64.b64decode(f.read()).split():
+                add_rule(line)
 
     @classmethod
     def addparentproxy(cls, name, proxy):
