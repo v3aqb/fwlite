@@ -20,7 +20,7 @@
 
 from __future__ import print_function
 
-__version__ = '0.3.2.1'
+__version__ = '0.3.3.0'
 
 import sys
 import os
@@ -72,7 +72,9 @@ if not os.path.isfile('./userconf.ini'):
     import shutil
     shutil.copy2('./userconf.sample.ini', './userconf.ini')
 
-REDIRECTOR = '''\
+if not os.path.isfile('./include/redirector.txt'):
+    with open('./include/redirector.txt', 'w') as f:
+        f.write('''\
 |http://www.google.com/search forcehttps
 |http://www.google.com/url forcehttps
 |http://news.google.com forcehttps
@@ -82,28 +84,18 @@ REDIRECTOR = '''\
 /^http://www\.google\.com/?$/ forcehttps
 |http://*.googlecode.com forcehttps
 |http://*.wikipedia.org forcehttps
-'''
-if not os.path.isfile('./include/redirector.txt'):
-    with open('./include/redirector.txt', 'w') as f:
-        f.write(REDIRECTOR)
+''')
 if not os.path.isfile('./include/local.txt'):
     with open('./include/local.txt', 'w') as f:
         f.write('! local gfwlist config\n! rules: http://t.cn/zTeBinu\n')
 
+for item in ['./include/redirector.txt', './userconf.ini', './include/local.txt']:
+    with open(item) as f:
+        data = open(item).read()
+    with open(item, 'w') as f:
+        f.write(data)
+
 UPSTREAM_POOL = {}
-
-
-def crlf():
-    filelist = ['./include/redirector.txt',
-                './userconf.ini',
-                './include/local.txt']
-    for item in filelist:
-        with open(item) as f:
-            data = open(item).read()
-        with open(item, 'w') as f:
-            f.write(data)
-
-crlf()
 
 
 class ProxyHandler(tornado.web.RequestHandler):
