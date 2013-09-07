@@ -142,8 +142,8 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
         else:
             self.upstream_name = self.ppname if self.pphost else self.request.host
-        s = '{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname)
-        logger.info(s)
+
+        logger.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
 
     @tornado.web.asynchronous
     def get(self):
@@ -162,7 +162,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.upstream = tornado.iostream.SSLIOStream(s)
                     self.upstream.connect((self.pphost, int(self.ppport)), _sent_request)
                 elif self.pptype is None:
-                    self.upstream.connect((self.request.host.split(':')[0], int(self.requestport)), _sent_request)
+                    self.upstream.connect((self.request.host.split(':')[0], self.requestport), _sent_request)
                 else:
                     client.write(b'HTTP/1.1 501 %s proxy not supported.\r\n\r\n' % self.pptype)
                     client.close()
@@ -205,7 +205,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.upstream.write(data)
 
         def _on_headers(data=None):
-            client.write(data)
+            read_from_upstream(data)
             self._headers_written = True
             data = data.decode()
             first_line, _, header_data = data.partition("\n")
@@ -401,11 +401,11 @@ class ProxyHandler(tornado.web.RequestHandler):
             if self.request.method == 'CONNECT':
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
                 upstream = tornado.iostream.IOStream(s)
-                upstream.connect((self.request.host.split(':')[0], int(self.requestport)), start_ssltunnel)
+                upstream.connect((self.request.host.split(':')[0], self.requestport), start_ssltunnel)
             else:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
                 upstream = tornado.iostream.IOStream(s)
-                upstream.connect((self.request.host.split(':')[0], int(self.requestport)), http_conntgt)
+                upstream.connect((self.request.host.split(':')[0], self.requestport), http_conntgt)
         elif self.pptype == 'http':
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             upstream = tornado.iostream.IOStream(s)
