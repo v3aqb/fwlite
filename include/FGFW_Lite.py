@@ -1002,6 +1002,36 @@ class shadowsocksabs(FGFWProxyAbs):
             self.cmd += ' -s {} -p {} -l 1080 -k {} -m {}'.format(server, server_port, password, method.strip('"'))
 
 
+class cow_abs(FGFWProxyAbs):
+    """docstring for cow_abs"""
+    def __init__(self):
+        FGFWProxyAbs.__init__(self)
+
+    def _config(self):
+        self.filelist = []
+        self.cwd = '%s/cow' % WORKINGDIR
+        if sys.platform.startswith('win'):
+            self.cmd = '%s/cow/cow.exe' % WORKINGDIR
+        else:
+            self.cmd = '%s/cow/cow' % WORKINGDIR
+
+        self.enable = conf.userconf.dgetbool('cow', 'enable', False)
+        self.enableupdate = False
+        configfile = []
+        configfile.append('listen = %s' % conf.userconf.dget('cow', 'listen', '127.0.0.1:8118'))
+        for key, item in fgfwproxy.parentdict.items():
+            pptype, pphost, ppport, ppusername, pppassword = item
+            if key == 'direct':
+                continue
+            if pptype == 'http':
+                configfile.append('httpParent = %s:%s' % (pphost, ppport))
+            if pptype == 'socks5':
+                configfile.append('socksParent = %s:%s' % (pphost, ppport))
+        filepath = './cow/rc.txt' if sys.platform.startswith('win') else ''.join([os.path.expanduser('~'), '/.cow/rc'])
+        with open(filepath, 'w') as f:
+            f.write('\n'.join(configfile))
+
+
 class fgfwproxy(FGFWProxyAbs):
     """docstring for ClassName"""
     def __init__(self, arg=''):
@@ -1241,8 +1271,7 @@ def function():
 
 
 def main():
-    if conf.userconf.dgetbool('fgfwproxy', 'enable', True):
-        fgfwproxy()
+    fgfwproxy()
     if conf.userconf.dgetbool('goagent', 'enable', True):
         goagentabs()
     if conf.userconf.dgetbool('shadowsocks', 'enable', False):
@@ -1253,6 +1282,8 @@ def main():
         user = conf.userconf.dget('https', 'user', None)
         passwd = conf.userconf.dget('https', 'passwd', None)
         fgfwproxy.addparentproxy('https', ('https', host, int(port), user, passwd))
+    if conf.userconf.dgetbool('cow', 'enable', False):
+        cow_abs()
     fgfwproxy.parentdictalive = fgfwproxy.parentdict.copy()
     updatedaemon = Thread(target=updateNbackup)
     updatedaemon.daemon = True
@@ -1268,5 +1299,3 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         sys.exit(0)
-    except Exception as e:
-        logger.error(str(e))
