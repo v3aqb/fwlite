@@ -1,11 +1,11 @@
 fgfw-lite
 ============
 
-fgfw-lite is a proxy server based on tornado framework, select parent proxy automatically based on ip address and Autoproxy rules.
+fgfw-lite is a proxy server based on tornado framework, select parent proxy automatically based on Autoproxy rules.
 
 requirements under openSUSE:
 
-    zypper install python-requests python-tornado python-gevent python-pyOpenSSL
+    zypper install python-requests python-tornado python-pyOpenSSL
 
 to work with shadowsocks, python2.7 and M2Crypto is required.
 
