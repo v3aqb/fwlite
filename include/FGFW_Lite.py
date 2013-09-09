@@ -508,40 +508,25 @@ class autoproxy_rule(object):
             else:
                 raise TypeError("invalid type: must be a string(or bytes)")
         self.rule = arg.strip()
-        if self.rule == '' or len(self.rule) < 3 or\
-                self.rule.startswith('!') or\
-                self.rule.startswith('['):
-            raise ValueError("invalid autoproxy_rule")
+        if self.rule == '' or len(self.rule) < 3 or self.rule.startswith('!') or self.rule.startswith('['):
+            raise ValueError("invalid autoproxy_rule: %s" % self.rule)
         self._type, self._ptrnlst = self._autopxy_rule_parse(self.rule)
-        if self._type >= self.OVERRIDE_DOMAIN:
-            self.override = True
-        else:
-            self.override = False
+        self.override = True if self._type >= self.OVERRIDE_DOMAIN else False
 
     def _autopxy_rule_parse(self, rule):
         def parse(rule):
             if rule.startswith('||'):
-                result = rule.replace('||', '').replace('/', '')
-                return (self.DOMAIN, result.split('*'))
-
+                return (self.DOMAIN, rule.replace('||', '').replace('/', '').split('*'))
             elif rule.startswith('|'):
-                result = rule.replace('|', '')
-                return (self.URI, result.split('*'))
-
+                return (self.URI, rule.replace('|', '').split('*'))
             elif rule.startswith('/') and rule.endswith('/'):
                 return (self.REGEX, [re.compile(rule[1:-1]), ])
-
             else:
                 return (self.KEYWORD, rule.split('*'))
 
-        if rule.startswith('@@||'):
-            return (self.OVERRIDE_DOMAIN, parse(rule.replace('@@', ''))[1])
-        elif rule.startswith('@@|'):
-            return (self.OVERRIDE_URI, parse(rule.replace('@@', ''))[1])
-        elif rule.startswith('@@/') and rule.endswith('/'):
-            return (self.OVERRIDE_REGEX, parse(rule.replace('@@', ''))[1])
-        elif rule.startswith('@@'):
-            return (self.OVERRIDE_KEYWORD, parse(rule.replace('@@', ''))[1])
+        if rule.startswith('@@'):
+            a, b = parse(rule.replace('@@', ''))
+            return (a+self.OVERRIDE_DOMAIN, b)
         else:
             return parse(rule)
 
