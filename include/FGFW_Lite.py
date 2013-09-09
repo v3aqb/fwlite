@@ -667,7 +667,7 @@ def updateNbackup():
 
 
 def chkproxy():
-    dit = fgfwproxy.parentdict.copy()
+    dit = conf.parentdict.copy()
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
     for k, v in dit.items():
         if v[1] is None:
@@ -678,7 +678,7 @@ def chkproxy():
             del dit[k]
         else:
             s.close()
-    fgfwproxy.parentdictalive = dit
+    conf.parentdictalive = dit
 
 
 def ifupdate():
@@ -866,7 +866,7 @@ class goagentabs(FGFWProxyAbs):
         proxy.set('listen', 'port', listen_port)
 
         if self.enable:
-            fgfwproxy.addparentproxy('goagnet', ('http', '127.0.0.1', int(listen_port), None, None))
+            conf.addparentproxy('goagnet', ('http', '127.0.0.1', int(listen_port), None, None))
 
         proxy.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_cn'))
         proxy.set('gae', 'appid', conf.userconf.dget('goagent', 'goagentGAEAppid', 'mzu5gx1heh2beebo2'))
@@ -879,7 +879,7 @@ class goagentabs(FGFWProxyAbs):
         if conf.userconf.dget('goagent', 'paasfetchserver'):
             proxy.set('paas', 'enable', '1')
             if self.enable:
-                fgfwproxy.addparentproxy('goagnet-paas', ('http', '127.0.0.1', 8088, None, None))
+                conf.addparentproxy('goagnet-paas', ('http', '127.0.0.1', 8088, None, None))
 
         if os.path.isfile("./include/dummy"):
             proxy.set('listen', 'visible', '0')
@@ -992,7 +992,7 @@ class shadowsocksabs(FGFWProxyAbs):
                     break
         self.enable = conf.userconf.dgetbool('shadowsocks', 'enable', False)
         if self.enable:
-            fgfwproxy.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
+            conf.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
         self.enableupdate = conf.userconf.dgetbool('shadowsocks', 'update', False)
         if not self.cmd.endswith('shadowsocks.exe'):
             server = conf.userconf.dget('shadowsocks', 'server', '')
@@ -1019,7 +1019,7 @@ class cow_abs(FGFWProxyAbs):
         self.enableupdate = False
         configfile = []
         configfile.append('listen = %s' % conf.userconf.dget('cow', 'listen', '127.0.0.1:8118'))
-        for key, item in fgfwproxy.parentdict.items():
+        for key, item in conf.parentdict.items():
             pptype, pphost, ppport, ppusername, pppassword = item
             if key == 'direct':
                 continue
@@ -1047,8 +1047,9 @@ class fgfwproxy(FGFWProxyAbs):
         self.enable = conf.userconf.dgetbool('fgfwproxy', 'enable', True)
         self.enableupdate = conf.userconf.dgetbool('fgfwproxy', 'update', True)
         self.listen = conf.userconf.dget('fgfwproxy', 'listen', '8118')
-        self.chinaroute()
-        self.conf()
+        if self.enable:
+            self.chinaroute()
+            self.conf()
 
     def start(self):
         if self.enable:
@@ -1059,8 +1060,8 @@ class fgfwproxy(FGFWProxyAbs):
 
     @classmethod
     def conf(cls):
-        cls.parentdict = {}
-        cls.addparentproxy('direct', (None, None, None, None, None))
+        conf.parentdict = {}
+        conf.addparentproxy('direct', (None, None, None, None, None))
 
         cls.gfwlist = []
         cls.gfwlist_force = []
@@ -1089,23 +1090,12 @@ class fgfwproxy(FGFWProxyAbs):
                 add_rule(line)
 
     @classmethod
-    def addparentproxy(cls, name, proxy):
-        '''
-        {
-            'direct': (None, None, None, None, None),
-            'goagent': ('http', '127.0.0.1', 8087, None, None)
-        }  # type, host, port, username, password
-        '''
-        cls.parentdict[name] = proxy
-
-    @classmethod
     def parentproxy(cls, uri, domain=None, forceproxy=False):
         '''
             decide which parentproxy to use.
             url:  'https://www.google.com'
             domain: 'www.google.com'
         '''
-        # return cls.parentdict.get('https')
 
         if uri and domain is None:
             domain = uri.split('/')[2].split(':')[0]
@@ -1144,7 +1134,7 @@ class fgfwproxy(FGFWProxyAbs):
             return False
 
         # select parent via uri
-        parentlist = list(cls.parentdictalive.keys())
+        parentlist = list(conf.parentdictalive.keys())
         if ifgfwlist_force():
             parentlist.remove('direct')
             if uri.startswith('ftp://'):
@@ -1152,9 +1142,9 @@ class fgfwproxy(FGFWProxyAbs):
                     parentlist.remove('goagent')
             if parentlist:
                 ppname = random.choice(parentlist)
-                return (ppname, cls.parentdictalive.get(ppname))
+                return (ppname, conf.parentdictalive.get(ppname))
         if ifhost_in_china():
-            return ('direct', cls.parentdictalive.get('direct'))
+            return ('direct', conf.parentdictalive.get('direct'))
         if forceproxy or ifgfwlist():
             parentlist.remove('direct')
             if uri.startswith('ftp://'):
@@ -1162,8 +1152,8 @@ class fgfwproxy(FGFWProxyAbs):
                     parentlist.remove('goagent')
             if parentlist:
                 ppname = random.choice(parentlist)
-                return (ppname, cls.parentdictalive.get(ppname))
-        return ('direct', cls.parentdictalive.get('direct'))
+                return (ppname, conf.parentdictalive.get(ppname))
+        return ('direct', conf.parentdictalive.get('direct'))
 
     @classmethod
     def chinaroute(cls):
@@ -1249,6 +1239,7 @@ class Config(object):
         self.reload()
         self.UPDATE_INTV = 6
         self.BACKUP_INTV = 24
+        self.parentdict = {}
 
     def reload(self):
         self.presets.read('presets.ini')
@@ -1258,12 +1249,21 @@ class Config(object):
         self.presets.write(open('presets.ini', 'w'))
         self.userconf.write(open('userconf.ini', 'w'))
 
+    def addparentproxy(self, name, proxy):
+        '''
+        {
+            'direct': (None, None, None, None, None),
+            'goagent': ('http', '127.0.0.1', 8087, None, None)
+        }  # type, host, port, username, password
+        '''
+        self.parentdict[name] = proxy
+
 conf = Config()
 consoleLock = RLock()
 
 
 @atexit.register
-def function():
+def atexit_do():
     for item in FGFWProxyAbs.ITEMS:
         item.enable = False
         item.restart()
@@ -1271,7 +1271,8 @@ def function():
 
 
 def main():
-    fgfwproxy()
+    if conf.userconf.dgetbool('fgfwproxy', 'enable', True):
+        fgfwproxy()
     if conf.userconf.dgetbool('goagent', 'enable', True):
         goagentabs()
     if conf.userconf.dgetbool('shadowsocks', 'enable', False):
@@ -1281,10 +1282,10 @@ def main():
         port = conf.userconf.dget('https', 'port', '443')
         user = conf.userconf.dget('https', 'user', None)
         passwd = conf.userconf.dget('https', 'passwd', None)
-        fgfwproxy.addparentproxy('https', ('https', host, int(port), user, passwd))
+        conf.addparentproxy('https', ('https', host, int(port), user, passwd))
     if conf.userconf.dgetbool('cow', 'enable', False):
         cow_abs()
-    fgfwproxy.parentdictalive = fgfwproxy.parentdict.copy()
+    conf.parentdictalive = conf.parentdict.copy()
     updatedaemon = Thread(target=updateNbackup)
     updatedaemon.daemon = True
     updatedaemon.start()
