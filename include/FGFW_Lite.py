@@ -150,9 +150,11 @@ class ProxyHandler(tornado.web.RequestHandler):
                     if data == b'\x05\00':  # no auth needed
                         conn_upstream()
                     elif data == b'\x05\02':  # basic auth
-                        self.upstream.write(b"\x01" +
-                                            chr(len(self.ppusername)).encode() + self.ppusername.encode() +
-                                            chr(len(self.pppassword)).encode() + self.pppassword.encode())
+                        self.upstream.write(b''.join([b"\x01",
+                                            chr(len(self.ppusername)).encode(),
+                                            self.ppusername.encode(),
+                                            chr(len(self.pppassword)).encode(),
+                                            self.pppassword.encode()]))
                         self.upstream.read_bytes(2, socks5_auth_finish)
                     else:  # bad day, something is wrong
                         fail()
@@ -164,8 +166,10 @@ class ProxyHandler(tornado.web.RequestHandler):
                         fail()
 
                 def conn_upstream(data=None):
-                    req = b"\x05\x01\x00\x03" + chr(len(self.request.host)).encode() + self.request.host.encode()
-                    req += struct.pack(">H", self.requestport)
+                    req = b''.join([b"\x05\x01\x00\x03",
+                                   chr(len(self.request.host)).encode(),
+                                   self.request.host.encode(),
+                                   struct.pack(">H", self.requestport)])
                     self.upstream.write(req, post_conn_upstream)
 
                 def post_conn_upstream(data=None):
@@ -393,9 +397,11 @@ class ProxyHandler(tornado.web.RequestHandler):
                 if data == b'\x05\00':  # no auth needed
                     conn_upstream()
                 elif data == b'\x05\02':  # basic auth
-                    upstream.write(b"\x01" +
-                                   chr(len(self.ppusername)).encode() + self.ppusername.encode() +
-                                   chr(len(self.pppassword)).encode() + self.pppassword.encode())
+                    upstream.write(b''.join([b"\x01",
+                                   chr(len(self.ppusername)).encode(),
+                                   self.ppusername.encode(),
+                                   chr(len(self.pppassword)).encode(),
+                                   self.pppassword.encode()]))
                     upstream.read_bytes(2, socks5_auth_finish)
                 else:  # bad day, something is wrong
                     fail()
@@ -407,8 +413,10 @@ class ProxyHandler(tornado.web.RequestHandler):
                     fail()
 
             def conn_upstream(data=None):
-                req = b"\x05\x01\x00\x03" + chr(len(self.request.host)).encode() + self.request.host.encode()
-                req += struct.pack(">H", self.requestport)
+                req = b''.join([b"\x05\x01\x00\x03",
+                               chr(len(self.request.host)).encode(),
+                               self.request.host.encode(),
+                               struct.pack(">H", self.requestport)])
                 upstream.write(req, post_conn_upstream)
 
             def post_conn_upstream(data=None):
@@ -876,9 +884,9 @@ class goagentabs(FGFWProxyAbs):
             proxy.write(configfile)
 
         if not os.path.isfile('./goagent/CA.crt'):
-            self.createCert()
+            self.createCA()
 
-    def createCert(self):
+    def createCA(self):
         '''
         ripped from goagent 2.1.14
         '''
@@ -896,7 +904,7 @@ class goagentabs(FGFWProxyAbs):
         subj.localityName = 'Cernet'
         subj.organizationName = ca_vendor
         subj.organizationalUnitName = '%s Root' % ca_vendor
-        subj.commonName = '%s CA' % ca_vendor
+        subj.commonName = '%s Root CA' % ca_vendor
         ca.gmtime_adj_notBefore(0)
         ca.gmtime_adj_notAfter(24 * 60 * 60 * 3652)
         ca.set_issuer(ca.get_subject())
@@ -973,7 +981,7 @@ class shadowsocksabs(FGFWProxyAbs):
                    './shadowsocks/shadowsocks.exe']
             for f in lst:
                 if os.path.isfile(f):
-                    self.cmd = WORKINGDIR + f[1:]
+                    self.cmd = ''.join([WORKINGDIR, f[1:]])
                     break
         self.enable = conf.userconf.dgetbool('shadowsocks', 'enable', False)
         if self.enable:
