@@ -1048,9 +1048,11 @@ class fgfwproxy(FGFWProxyAbs):
                          # ['https://fgfw-lite.googlecode.com/git/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
                          # ['https://fgfw-lite.googlecode.com/git/include/cloud.txt', './include/cloud.txt'],
                          # ['https://fgfw-lite.googlecode.com/git/userconf.sample.ini', './userconf.sample.ini'],
+                         # ['https://fgfw-lite.googlecode.com/git/README.md', './README.md'],
                          ['https://github.com/v3aqb/fgfw-lite/raw/master/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
                          ['https://github.com/v3aqb/fgfw-lite/raw/master/include/cloud.txt', './include/cloud.txt'],
                          ['https://github.com/v3aqb/fgfw-lite/raw/master/userconf.sample.ini', './userconf.sample.ini'],
+                         ['https://github.com/v3aqb/fgfw-lite/raw/master/README.md', './README.md'],
                          ]
         self.enable = conf.userconf.dgetbool('fgfwproxy', 'enable', True)
         self.enableupdate = conf.userconf.dgetbool('fgfwproxy', 'update', True)
