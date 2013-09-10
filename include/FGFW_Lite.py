@@ -28,7 +28,7 @@ from subprocess import Popen
 import shlex
 import time
 import re
-from threading import Thread, RLock, Timer
+from threading import Thread, Timer
 import atexit
 import base64
 import socket
@@ -707,9 +707,8 @@ def restart():
 
 def backup():
     import tarfile
-    with conf.iolock:
-        conf.userconf.set('AutoBackupConf', 'LastBackup', str(time.time()))
-        conf.confsave()
+    conf.userconf.set('AutoBackupConf', 'LastBackup', str(time.time()))
+    conf.confsave()
     try:
         backuplist = conf.userconf.items('AutoBackup', raw=True)
         backupPath = conf.userconf.get('AutoBackupConf', 'BackupPath', raw=True)
@@ -823,10 +822,8 @@ class FGFWProxyAbs(object):
             if r.status_code == 200:
                 with open(path, 'wb') as localfile:
                     localfile.write(r.content)
-                with conf.iolock:
-                    conf.presets.set('Update', path.replace('./', '').replace('/', '-'), str(r.headers.get('etag')))
-                with consoleLock:
-                    logger.info('%s Updated.' % path)
+                conf.presets.set('Update', path.replace('./', '').replace('/', '-'), str(r.headers.get('etag')))
+                logger.info('%s Updated.' % path)
             else:
                 logger.info('{} NOT updated. Reason: {}'.format(path, str(r.status_code)))
 
@@ -859,7 +856,7 @@ class goagentabs(FGFWProxyAbs):
         proxy.set('listen', 'port', listen_port)
 
         if self.enable:
-            conf.addparentproxy('goagent', ('http', '127.0.0.1', int(listen_port), None, None))
+            conf.addparentproxy('GoAgent', ('http', '127.0.0.1', int(listen_port), None, None))
 
         proxy.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_cn'))
         proxy.set('gae', 'appid', conf.userconf.dget('goagent', 'goagentGAEAppid', 'mzu5gx1heh2beebo2'))
@@ -872,7 +869,7 @@ class goagentabs(FGFWProxyAbs):
         if conf.userconf.dget('goagent', 'paasfetchserver'):
             proxy.set('paas', 'enable', '1')
             if self.enable:
-                conf.addparentproxy('goagnet-paas', ('http', '127.0.0.1', 8088, None, None))
+                conf.addparentproxy('GoAgent-PAAS', ('http', '127.0.0.1', 8088, None, None))
 
         if os.path.isfile("./include/dummy"):
             proxy.set('listen', 'visible', '0')
@@ -1243,7 +1240,6 @@ class SConfigParser(configparser.ConfigParser):
 
 class Config(object):
     def __init__(self):
-        self.iolock = RLock()
         self.presets = SConfigParser()
         self.userconf = SConfigParser()
         self.reload()
@@ -1269,7 +1265,6 @@ class Config(object):
         self.parentdict[name] = proxy
 
 conf = Config()
-consoleLock = RLock()
 
 
 @atexit.register
