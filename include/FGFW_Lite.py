@@ -1013,18 +1013,21 @@ class cow_abs(FGFWProxyAbs):
     def _config(self):
         self.filelist = []
         self.cwd = '%s/cow' % WORKINGDIR
+
+        self.enable = conf.userconf.dgetbool('cow', 'enable', False)
         if sys.platform.startswith('win'):
             self.cmd = '%s/cow/cow.exe' % WORKINGDIR
         else:
             self.cmd = '%s/cow/cow' % WORKINGDIR
-
-        self.enable = conf.userconf.dgetbool('cow', 'enable', False)
+        if not os.path.isfile(self.cmd):
+            self.enable = False
         self.enableupdate = False
+
         configfile = []
         configfile.append('listen = %s' % conf.userconf.dget('cow', 'listen', '127.0.0.1:8117'))
         for key, item in conf.parentdict.items():
             pptype, pphost, ppport, ppusername, pppassword = item
-            if key == 'direct':
+            if key == 'direct' or key == 'cow':
                 continue
             if pptype == 'http':
                 configfile.append('httpParent = %s:%s' % (pphost, ppport))
