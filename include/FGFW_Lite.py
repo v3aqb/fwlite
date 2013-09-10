@@ -1018,10 +1018,10 @@ class cow_abs(FGFWProxyAbs):
             self.cmd = '%s/cow/cow.exe' % WORKINGDIR
         else:
             self.cmd = '%s/cow/cow' % WORKINGDIR
+        self.enableupdate = False
         if not os.path.isfile(self.cmd):
             self.enable = False
-        self.enableupdate = False
-
+            return
         configfile = []
         configfile.append('listen = %s' % conf.userconf.dget('cow', 'listen', '127.0.0.1:8117'))
         for key, item in conf.parentdict.items():
@@ -1032,7 +1032,10 @@ class cow_abs(FGFWProxyAbs):
                 configfile.append('httpParent = %s:%s' % (pphost, ppport))
             if pptype == 'socks5':
                 configfile.append('socksParent = %s:%s' % (pphost, ppport))
-        filepath = './cow/rc.txt' if sys.platform.startswith('win') else ''.join([os.path.expanduser('~'), '/.cow/rc'])
+        if sys.platform.startswith('win'):
+            filepath = '%s/cow/rc.txt' % WORKINGDIR
+        else:
+            filepath = ''.join([os.path.expanduser('~'), '/.cow/rc'])
         with open(filepath, 'w') as f:
             f.write('\n'.join(configfile))
         if self.enable:
