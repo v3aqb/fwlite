@@ -1014,7 +1014,7 @@ class cow_abs(FGFWProxyAbs):
         self.filelist = []
         self.cwd = '%s/cow' % WORKINGDIR
 
-        self.enable = conf.userconf.dgetbool('cow', 'enable', False)
+        self.enable = conf.userconf.dgetbool('cow', 'enable', True)
         if sys.platform.startswith('win'):
             self.cmd = '%s/cow/cow.exe' % WORKINGDIR
         else:
@@ -1088,7 +1088,7 @@ class fgfwproxy(FGFWProxyAbs):
             except Exception:
                 pass
             else:
-                if force is True:
+                if force:
                     cls.gfwlist_force.append(o)
                 else:
                     cls.gfwlist.append(o)
@@ -1308,7 +1308,7 @@ def main():
         user = conf.userconf.dget('https', 'user', None)
         passwd = conf.userconf.dget('https', 'passwd', None)
         conf.addparentproxy('https', ('https', host, int(port), user, passwd))
-    if conf.userconf.dgetbool('cow', 'enable', False):
+    if conf.userconf.dgetbool('cow', 'enable', True):
         cow_abs()
     conf.parentdictalive = conf.parentdict.copy()
     updatedaemon = Thread(target=updateNbackup)
