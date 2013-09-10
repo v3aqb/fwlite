@@ -808,25 +808,22 @@ class FGFWProxyAbs(object):
                 self.updateViaHTTP(url, etag, path)
 
     def updateViaHTTP(self, url, etag, path):
-        import requests
+        import urllib2
 
-        proxy = {'http': 'http://127.0.0.1:8118',
-                 }
-        header = {'If-None-Match': etag,
-                  }
-        cafile = './goagent/cacert.pem'
+        req = urllib2.Request(url)
+        req.add_header('If-None-Match', etag)
         try:
-            r = requests.get(url, proxies=proxy, headers=header, timeout=5, verify=cafile)
+            r = urllib2.urlopen(req)
         except Exception as e:
-            logger.info('{} NOT updated. Reason: {}'.format(path, repr(e)))
+            logger.info('{} NOT updated. Reason: {}'.format(path, e.reason))
         else:
-            if r.status_code == 200:
+            if r.getcode() == 200:
                 with open(path, 'wb') as localfile:
-                    localfile.write(r.content)
-                conf.presets.set('Update', path.replace('./', '').replace('/', '-'), str(r.headers.get('etag')))
+                    localfile.write(r.read())
+                conf.presets.set('Update', path.replace('./', '').replace('/', '-'), r.info().getheader('ETag'))
                 logger.info('%s Updated.' % path)
             else:
-                logger.info('{} NOT updated. Reason: {}'.format(path, str(r.status_code)))
+                logger.info('{} NOT updated. Reason: {}'.format(path, str(r.getcode())))
 
 
 class goagentabs(FGFWProxyAbs):
@@ -1051,10 +1048,10 @@ class fgfwproxy(FGFWProxyAbs):
     def _config(self):
         self.filelist = [['https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './include/gfwlist.txt'],
                          ['http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './include/delegated-apnic-latest'],
-                         ['https://fgfw-lite.googlecode.com/git/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
-                         ['https://fgfw-lite.googlecode.com/git/include/cloud.txt', './include/cloud.txt'],
-                         ['https://fgfw-lite.googlecode.com/git/userconf.sample.ini', './userconf.sample.ini'],
-                         ['https://fgfw-lite.googlecode.com/git/README.md', './README.md'],
+                         ['https://fgfw-lite.googlecode.com/git-history/master/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
+                         ['https://fgfw-lite.googlecode.com/git-history/master/include/cloud.txt', './include/cloud.txt'],
+                         ['https://fgfw-lite.googlecode.com/git-history/master/userconf.sample.ini', './userconf.sample.ini'],
+                         ['https://fgfw-lite.googlecode.com/git-history/master/README.md', './README.md'],
                          # ['https://github.com/v3aqb/fgfw-lite/raw/master/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
                          # ['https://github.com/v3aqb/fgfw-lite/raw/master/include/cloud.txt', './include/cloud.txt'],
                          # ['https://github.com/v3aqb/fgfw-lite/raw/master/userconf.sample.ini', './userconf.sample.ini'],
