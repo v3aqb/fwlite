@@ -1019,7 +1019,7 @@ class cow_abs(FGFWProxyAbs):
         self.enable = conf.userconf.dgetbool('cow', 'enable', False)
         self.enableupdate = False
         configfile = []
-        configfile.append('listen = %s' % conf.userconf.dget('cow', 'listen', '127.0.0.1:8118'))
+        configfile.append('listen = %s' % conf.userconf.dget('cow', 'listen', '127.0.0.1:8117'))
         for key, item in conf.parentdict.items():
             pptype, pphost, ppport, ppusername, pppassword = item
             if key == 'direct':
@@ -1031,6 +1031,8 @@ class cow_abs(FGFWProxyAbs):
         filepath = './cow/rc.txt' if sys.platform.startswith('win') else ''.join([os.path.expanduser('~'), '/.cow/rc'])
         with open(filepath, 'w') as f:
             f.write('\n'.join(configfile))
+        if self.enable:
+            conf.addparentproxy('cow', ('http', '127.0.0.1', 8117, None, None))
 
 
 class fgfwproxy(FGFWProxyAbs):
@@ -1103,7 +1105,6 @@ class fgfwproxy(FGFWProxyAbs):
             url:  'https://www.google.com'
             domain: 'www.google.com'
         '''
-
         if uri and domain is None:
             domain = uri.split('/')[2].split(':')[0]
 
@@ -1142,24 +1143,27 @@ class fgfwproxy(FGFWProxyAbs):
 
         # select parent via uri
         parentlist = list(conf.parentdictalive.keys())
+        if uri.startswith('ftp://'):
+            if 'GoAgent' in parentlist:
+                parentlist.remove('GoAgent')
+        if 'cow' in parentlist:
+            parentlist.remove('cow')
         if ifgfwlist_force():
             parentlist.remove('direct')
-            if uri.startswith('ftp://'):
-                if 'goagent' in parentlist:
-                    parentlist.remove('goagent')
             if parentlist:
                 ppname = random.choice(parentlist)
                 return (ppname, conf.parentdictalive.get(ppname))
         if ifhost_in_china():
+            if 'cow' in conf.parentdictalive.keys():
+                return ('cow', conf.parentdictalive.get('cow'))
             return ('direct', conf.parentdictalive.get('direct'))
         if forceproxy or ifgfwlist():
             parentlist.remove('direct')
-            if uri.startswith('ftp://'):
-                if 'goagent' in parentlist:
-                    parentlist.remove('goagent')
             if parentlist:
                 ppname = random.choice(parentlist)
                 return (ppname, conf.parentdictalive.get(ppname))
+        if 'cow' in conf.parentdictalive.keys():
+            return ('cow', conf.parentdictalive.get('cow'))
         return ('direct', conf.parentdictalive.get('direct'))
 
     @classmethod
