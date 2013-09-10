@@ -1019,10 +1019,10 @@ class cow_abs(FGFWProxyAbs):
             self.cmd = '%s/cow/cow.exe' % WORKINGDIR
         else:
             self.cmd = '%s/cow/cow' % WORKINGDIR
+        self.enableupdate = False
         if not os.path.isfile(self.cmd):
             self.enable = False
-        self.enableupdate = False
-
+            return
         configfile = []
         configfile.append('listen = %s' % conf.userconf.dget('cow', 'listen', '127.0.0.1:8117'))
         for key, item in conf.parentdict.items():
