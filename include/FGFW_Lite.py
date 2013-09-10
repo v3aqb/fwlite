@@ -31,6 +31,7 @@ import re
 from threading import Thread, Timer
 import atexit
 import base64
+import hashlib
 import socket
 import struct
 import random
@@ -1074,6 +1075,8 @@ class fgfwproxy(FGFWProxyAbs):
 
         cls.gfwlist = []
         cls.gfwlist_force = []
+        cls.inchinadict = {}
+        cls.hosthash = {}
 
         def add_rule(line, force=False):
             try:
@@ -1108,8 +1111,6 @@ class fgfwproxy(FGFWProxyAbs):
         if uri and domain is None:
             domain = uri.split('/')[2].split(':')[0]
 
-        cls.inchinadict = {}
-
         def ifgfwlist_force():
             for rule in cls.gfwlist_force:
                 if rule.match(uri, domain):
@@ -1120,7 +1121,7 @@ class fgfwproxy(FGFWProxyAbs):
         def ifhost_in_china():
             if domain is None:
                 return False
-            result = cls.inchinadict.get('domain')
+            result = cls.inchinadict.get(domain)
             if result is None:
                 try:
                     ipo = ip_address(socket.gethostbyname(domain))
@@ -1151,8 +1152,15 @@ class fgfwproxy(FGFWProxyAbs):
         if ifgfwlist_force():
             parentlist.remove('direct')
             if parentlist:
-                ppname = random.choice(parentlist)
-                return (ppname, conf.parentdictalive.get(ppname))
+                if len(parentlist) == 1:
+                    return (parentlist[0], conf.parentdictalive.get(parentlist[0]))
+                else:
+                    hosthash = cls.hosthash.get(domain)
+                    if hosthash is None:
+                        hosthash = hashlib.md5(domain).hexdigest()
+                        cls.hosthash[domain] = hosthash
+                    ppname = parentlist[int(hosthash, 16) % len(parentlist)]
+                    return (ppname, conf.parentdictalive.get(ppname))
         if ifhost_in_china():
             if 'cow' in conf.parentdictalive.keys():
                 return ('cow', conf.parentdictalive.get('cow'))
@@ -1160,8 +1168,15 @@ class fgfwproxy(FGFWProxyAbs):
         if forceproxy or ifgfwlist():
             parentlist.remove('direct')
             if parentlist:
-                ppname = random.choice(parentlist)
-                return (ppname, conf.parentdictalive.get(ppname))
+                if len(parentlist) == 1:
+                    return (parentlist[0], conf.parentdictalive.get(parentlist[0]))
+                else:
+                    hosthash = cls.hosthash.get(domain)
+                    if hosthash is None:
+                        hosthash = hashlib.md5(domain).hexdigest()
+                        cls.hosthash[domain] = hosthash
+                    ppname = parentlist[int(hosthash, 16) % len(parentlist)]
+                    return (ppname, conf.parentdictalive.get(ppname))
         if 'cow' in conf.parentdictalive.keys():
             return ('cow', conf.parentdictalive.get('cow'))
         return ('direct', conf.parentdictalive.get('direct'))
