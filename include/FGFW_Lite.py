@@ -138,8 +138,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
-        if self.pptype is None and sys.platform.startswith('win'):
-            return self.connect()
+
         client = self.request.connection.stream
 
         def _get_upstream():
@@ -1033,7 +1032,10 @@ class cow_abs(FGFWProxyAbs):
                 configfile.append('httpParent = %s:%s' % (pphost, ppport))
             if pptype == 'socks5':
                 configfile.append('socksParent = %s:%s' % (pphost, ppport))
-        filepath = './cow/rc.txt' if sys.platform.startswith('win') else ''.join([os.path.expanduser('~'), '/.cow/rc'])
+        if sys.platform.startswith('win'):
+            filepath = '%s/cow/rc.txt' % WORKINGDIR
+        else:
+            filepath = ''.join([os.path.expanduser('~'), '/.cow/rc'])
         with open(filepath, 'w') as f:
             f.write('\n'.join(configfile))
         if self.enable:
