@@ -147,9 +147,9 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.upstream.read_bytes(2, socks5_auth)
 
                 def socks5_auth(data=None):
-                    if data == b'\x05\00':  # no auth needed
+                    if data == b'\x05\x00':  # no auth needed
                         conn_upstream()
-                    elif data == b'\x05\02':  # basic auth
+                    elif data == b'\x05\x02':  # basic auth
                         self.upstream.write(b''.join([b"\x01",
                                             chr(len(self.ppusername)).encode(),
                                             self.ppusername.encode(),
@@ -394,9 +394,9 @@ class ProxyHandler(tornado.web.RequestHandler):
                 upstream.read_bytes(2, socks5_auth)
 
             def socks5_auth(data=None):
-                if data == b'\x05\00':  # no auth needed
+                if data == b'\x05\x00':  # no auth needed
                     conn_upstream()
-                elif data == b'\x05\02':  # basic auth
+                elif data == b'\x05\x02':  # basic auth
                     upstream.write(b''.join([b"\x01",
                                    chr(len(self.ppusername)).encode(),
                                    self.ppusername.encode(),
@@ -859,7 +859,7 @@ class goagentabs(FGFWProxyAbs):
         proxy.set('listen', 'port', listen_port)
 
         if self.enable:
-            conf.addparentproxy('goagnet', ('http', '127.0.0.1', int(listen_port), None, None))
+            conf.addparentproxy('goagent', ('http', '127.0.0.1', int(listen_port), None, None))
 
         proxy.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_cn'))
         proxy.set('gae', 'appid', conf.userconf.dget('goagent', 'goagentGAEAppid', 'mzu5gx1heh2beebo2'))
