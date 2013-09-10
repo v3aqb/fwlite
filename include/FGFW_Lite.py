@@ -1142,15 +1142,15 @@ class fgfwproxy(FGFWProxyAbs):
                     return not rule.override
             return False
 
-        # select parent via uri
         parentlist = list(conf.parentdictalive.keys())
         if uri.startswith('ftp://'):
             if 'GoAgent' in parentlist:
                 parentlist.remove('GoAgent')
         if 'cow' in parentlist:
             parentlist.remove('cow')
+        parentlist.remove('direct')
+        # select parent via uri
         if ifgfwlist_force():
-            parentlist.remove('direct')
             if parentlist:
                 if len(parentlist) == 1:
                     return (parentlist[0], conf.parentdictalive.get(parentlist[0]))
@@ -1162,11 +1162,8 @@ class fgfwproxy(FGFWProxyAbs):
                     ppname = parentlist[int(hosthash, 16) % len(parentlist)]
                     return (ppname, conf.parentdictalive.get(ppname))
         if ifhost_in_china():
-            if 'cow' in conf.parentdictalive.keys():
-                return ('cow', conf.parentdictalive.get('cow'))
-            return ('direct', conf.parentdictalive.get('direct'))
-        if forceproxy or ifgfwlist():
-            parentlist.remove('direct')
+            pass
+        elif forceproxy or ifgfwlist():
             if parentlist:
                 if len(parentlist) == 1:
                     return (parentlist[0], conf.parentdictalive.get(parentlist[0]))
