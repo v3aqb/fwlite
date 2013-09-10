@@ -664,7 +664,7 @@ def chkproxy():
     dit = conf.parentdict.copy()
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
     for k, v in dit.items():
-        if v[1] is None:
+        if v[1] is None or k == 'cow':
             continue
         try:
             s.connect((v[1], v[2]))
