@@ -16,3 +16,5 @@ shadowsocks https://github.com/clowwindy/shadowsocks
 pybuild https://github.com/goagent/pybuild
 
 chnroutes.py https://github.com/fivesheep/chnroutes
+
+cow https://github.com/cyfdecyf/cow

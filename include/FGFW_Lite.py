@@ -28,9 +28,10 @@ from subprocess import Popen
 import shlex
 import time
 import re
-from threading import Thread, RLock, Timer
+from threading import Thread, Timer
 import atexit
 import base64
+import hashlib
 import socket
 import struct
 import random
@@ -148,12 +149,14 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.upstream.read_bytes(2, socks5_auth)
 
                 def socks5_auth(data=None):
-                    if data == b'\x05\00':  # no auth needed
+                    if data == b'\x05\x00':  # no auth needed
                         conn_upstream()
-                    elif data == b'\x05\02':  # basic auth
-                        self.upstream.write(b"\x01" +
-                                            chr(len(self.ppusername)).encode() + self.ppusername.encode() +
-                                            chr(len(self.pppassword)).encode() + self.pppassword.encode())
+                    elif data == b'\x05\x02':  # basic auth
+                        self.upstream.write(b''.join([b"\x01",
+                                            chr(len(self.ppusername)).encode(),
+                                            self.ppusername.encode(),
+                                            chr(len(self.pppassword)).encode(),
+                                            self.pppassword.encode()]))
                         self.upstream.read_bytes(2, socks5_auth_finish)
                     else:  # bad day, something is wrong
                         fail()
@@ -165,8 +168,10 @@ class ProxyHandler(tornado.web.RequestHandler):
                         fail()
 
                 def conn_upstream(data=None):
-                    req = b"\x05\x01\x00\x03" + chr(len(self.request.host)).encode() + self.request.host.encode()
-                    req += struct.pack(">H", self.requestport)
+                    req = b''.join([b"\x05\x01\x00\x03",
+                                   chr(len(self.request.host)).encode(),
+                                   self.request.host.encode(),
+                                   struct.pack(">H", self.requestport)])
                     self.upstream.write(req, post_conn_upstream)
 
                 def post_conn_upstream(data=None):
@@ -391,12 +396,14 @@ class ProxyHandler(tornado.web.RequestHandler):
                 upstream.read_bytes(2, socks5_auth)
 
             def socks5_auth(data=None):
-                if data == b'\x05\00':  # no auth needed
+                if data == b'\x05\x00':  # no auth needed
                     conn_upstream()
-                elif data == b'\x05\02':  # basic auth
-                    upstream.write(b"\x01" +
-                                   chr(len(self.ppusername)).encode() + self.ppusername.encode() +
-                                   chr(len(self.pppassword)).encode() + self.pppassword.encode())
+                elif data == b'\x05\x02':  # basic auth
+                    upstream.write(b''.join([b"\x01",
+                                   chr(len(self.ppusername)).encode(),
+                                   self.ppusername.encode(),
+                                   chr(len(self.pppassword)).encode(),
+                                   self.pppassword.encode()]))
                     upstream.read_bytes(2, socks5_auth_finish)
                 else:  # bad day, something is wrong
                     fail()
@@ -408,8 +415,10 @@ class ProxyHandler(tornado.web.RequestHandler):
                     fail()
 
             def conn_upstream(data=None):
-                req = b"\x05\x01\x00\x03" + chr(len(self.request.host)).encode() + self.request.host.encode()
-                req += struct.pack(">H", self.requestport)
+                req = b''.join([b"\x05\x01\x00\x03",
+                               chr(len(self.request.host)).encode(),
+                               self.request.host.encode(),
+                               struct.pack(">H", self.requestport)])
                 upstream.write(req, post_conn_upstream)
 
             def post_conn_upstream(data=None):
@@ -656,7 +665,7 @@ def chkproxy():
     dit = conf.parentdict.copy()
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
     for k, v in dit.items():
-        if v[1] is None:
+        if v[1] is None or k == 'cow':
             continue
         try:
             s.connect((v[1], v[2]))
@@ -700,9 +709,8 @@ def restart():
 
 def backup():
     import tarfile
-    with conf.iolock:
-        conf.userconf.set('AutoBackupConf', 'LastBackup', str(time.time()))
-        conf.confsave()
+    conf.userconf.set('AutoBackupConf', 'LastBackup', str(time.time()))
+    conf.confsave()
     try:
         backuplist = conf.userconf.items('AutoBackup', raw=True)
         backupPath = conf.userconf.get('AutoBackupConf', 'BackupPath', raw=True)
@@ -816,10 +824,8 @@ class FGFWProxyAbs(object):
             if r.status_code == 200:
                 with open(path, 'wb') as localfile:
                     localfile.write(r.content)
-                with conf.iolock:
-                    conf.presets.set('Update', path.replace('./', '').replace('/', '-'), str(r.headers.get('etag')))
-                with consoleLock:
-                    logger.info('%s Updated.' % path)
+                conf.presets.set('Update', path.replace('./', '').replace('/', '-'), str(r.headers.get('etag')))
+                logger.info('%s Updated.' % path)
             else:
                 logger.info('{} NOT updated. Reason: {}'.format(path, str(r.status_code)))
 
@@ -852,7 +858,7 @@ class goagentabs(FGFWProxyAbs):
         proxy.set('listen', 'port', listen_port)
 
         if self.enable:
-            conf.addparentproxy('goagnet', ('http', '127.0.0.1', int(listen_port), None, None))
+            conf.addparentproxy('GoAgent', ('http', '127.0.0.1', int(listen_port), None, None))
 
         proxy.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_cn'))
         proxy.set('gae', 'appid', conf.userconf.dget('goagent', 'goagentGAEAppid', 'mzu5gx1heh2beebo2'))
@@ -865,7 +871,7 @@ class goagentabs(FGFWProxyAbs):
         if conf.userconf.dget('goagent', 'paasfetchserver'):
             proxy.set('paas', 'enable', '1')
             if self.enable:
-                conf.addparentproxy('goagnet-paas', ('http', '127.0.0.1', 8088, None, None))
+                conf.addparentproxy('GoAgent-PAAS', ('http', '127.0.0.1', 8088, None, None))
 
         if os.path.isfile("./include/dummy"):
             proxy.set('listen', 'visible', '0')
@@ -877,9 +883,9 @@ class goagentabs(FGFWProxyAbs):
             proxy.write(configfile)
 
         if not os.path.isfile('./goagent/CA.crt'):
-            self.createCert()
+            self.createCA()
 
-    def createCert(self):
+    def createCA(self):
         '''
         ripped from goagent 2.1.14
         '''
@@ -897,7 +903,7 @@ class goagentabs(FGFWProxyAbs):
         subj.localityName = 'Cernet'
         subj.organizationName = ca_vendor
         subj.organizationalUnitName = '%s Root' % ca_vendor
-        subj.commonName = '%s CA' % ca_vendor
+        subj.commonName = '%s Root CA' % ca_vendor
         ca.gmtime_adj_notBefore(0)
         ca.gmtime_adj_notAfter(24 * 60 * 60 * 3652)
         ca.set_issuer(ca.get_subject())
@@ -974,7 +980,7 @@ class shadowsocksabs(FGFWProxyAbs):
                    './shadowsocks/shadowsocks.exe']
             for f in lst:
                 if os.path.isfile(f):
-                    self.cmd = WORKINGDIR + f[1:]
+                    self.cmd = ''.join([WORKINGDIR, f[1:]])
                     break
         self.enable = conf.userconf.dgetbool('shadowsocks', 'enable', False)
         if self.enable:
@@ -983,6 +989,17 @@ class shadowsocksabs(FGFWProxyAbs):
         if not self.cmd.endswith('shadowsocks.exe'):
             server = conf.userconf.dget('shadowsocks', 'server', '')
             server_port = conf.userconf.dget('shadowsocks', 'server_port', '')
+            if not server_port.isdigit():
+                portlst = []
+                for item in server_port.split(','):
+                    if item.strip().isdigit():
+                        portlst.append(item.strip())
+                    else:
+                        a, b = item.strip().split('-')
+                        for i in range(int(a), int(b)+1):
+                            portlst.append(str(i))
+                server_port = random.choice(portlst)
+
             password = conf.userconf.dget('shadowsocks', 'password', 'barfoo!')
             method = conf.userconf.dget('shadowsocks', 'method', 'table')
             self.cmd += ' -s {} -p {} -l 1080 -k {} -m {}'.format(server, server_port, password, method.strip('"'))
@@ -1004,7 +1021,7 @@ class cow_abs(FGFWProxyAbs):
         self.enable = conf.userconf.dgetbool('cow', 'enable', False)
         self.enableupdate = False
         configfile = []
-        configfile.append('listen = %s' % conf.userconf.dget('cow', 'listen', '127.0.0.1:8118'))
+        configfile.append('listen = %s' % conf.userconf.dget('cow', 'listen', '127.0.0.1:8117'))
         for key, item in conf.parentdict.items():
             pptype, pphost, ppport, ppusername, pppassword = item
             if key == 'direct':
@@ -1016,6 +1033,8 @@ class cow_abs(FGFWProxyAbs):
         filepath = './cow/rc.txt' if sys.platform.startswith('win') else ''.join([os.path.expanduser('~'), '/.cow/rc'])
         with open(filepath, 'w') as f:
             f.write('\n'.join(configfile))
+        if self.enable:
+            conf.addparentproxy('cow', ('http', '127.0.0.1', 8117, None, None))
 
 
 class fgfwproxy(FGFWProxyAbs):
@@ -1027,12 +1046,14 @@ class fgfwproxy(FGFWProxyAbs):
     def _config(self):
         self.filelist = [['https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './include/gfwlist.txt'],
                          ['http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './include/delegated-apnic-latest'],
-                         # ['https://fgfw-lite.googlecode.com/git/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
-                         # ['https://fgfw-lite.googlecode.com/git/include/cloud.txt', './include/cloud.txt'],
-                         # ['https://fgfw-lite.googlecode.com/git/userconf.sample.ini', './userconf.sample.ini'],
-                         ['https://github.com/v3aqb/fgfw-lite/raw/master/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
-                         ['https://github.com/v3aqb/fgfw-lite/raw/master/include/cloud.txt', './include/cloud.txt'],
-                         ['https://github.com/v3aqb/fgfw-lite/raw/master/userconf.sample.ini', './userconf.sample.ini'],
+                         ['https://fgfw-lite.googlecode.com/git/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
+                         ['https://fgfw-lite.googlecode.com/git/include/cloud.txt', './include/cloud.txt'],
+                         ['https://fgfw-lite.googlecode.com/git/userconf.sample.ini', './userconf.sample.ini'],
+                         ['https://fgfw-lite.googlecode.com/git/README.md', './README.md'],
+                         # ['https://github.com/v3aqb/fgfw-lite/raw/master/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
+                         # ['https://github.com/v3aqb/fgfw-lite/raw/master/include/cloud.txt', './include/cloud.txt'],
+                         # ['https://github.com/v3aqb/fgfw-lite/raw/master/userconf.sample.ini', './userconf.sample.ini'],
+                         # ['https://github.com/v3aqb/fgfw-lite/raw/master/README.md', './README.md'],
                          ]
         self.enable = conf.userconf.dgetbool('fgfwproxy', 'enable', True)
         self.enableupdate = conf.userconf.dgetbool('fgfwproxy', 'update', True)
@@ -1055,6 +1076,8 @@ class fgfwproxy(FGFWProxyAbs):
 
         cls.gfwlist = []
         cls.gfwlist_force = []
+        cls.inchinadict = {}
+        cls.hosthash = {}
 
         def add_rule(line, force=False):
             try:
@@ -1086,11 +1109,8 @@ class fgfwproxy(FGFWProxyAbs):
             url:  'https://www.google.com'
             domain: 'www.google.com'
         '''
-
         if uri and domain is None:
             domain = uri.split('/')[2].split(':')[0]
-
-        cls.inchinadict = {}
 
         def ifgfwlist_force():
             for rule in cls.gfwlist_force:
@@ -1102,7 +1122,7 @@ class fgfwproxy(FGFWProxyAbs):
         def ifhost_in_china():
             if domain is None:
                 return False
-            result = cls.inchinadict.get('domain')
+            result = cls.inchinadict.get(domain)
             if result is None:
                 try:
                     ipo = ip_address(socket.gethostbyname(domain))
@@ -1123,26 +1143,40 @@ class fgfwproxy(FGFWProxyAbs):
                     return not rule.override
             return False
 
-        # select parent via uri
         parentlist = list(conf.parentdictalive.keys())
+        if uri.startswith('ftp://'):
+            if 'GoAgent' in parentlist:
+                parentlist.remove('GoAgent')
+        if 'cow' in parentlist:
+            parentlist.remove('cow')
+        parentlist.remove('direct')
+        # select parent via uri
         if ifgfwlist_force():
-            parentlist.remove('direct')
-            if uri.startswith('ftp://'):
-                if 'goagent' in parentlist:
-                    parentlist.remove('goagent')
             if parentlist:
-                ppname = random.choice(parentlist)
-                return (ppname, conf.parentdictalive.get(ppname))
+                if len(parentlist) == 1:
+                    return (parentlist[0], conf.parentdictalive.get(parentlist[0]))
+                else:
+                    hosthash = cls.hosthash.get(domain)
+                    if hosthash is None:
+                        hosthash = hashlib.md5(domain).hexdigest()
+                        cls.hosthash[domain] = hosthash
+                    ppname = parentlist[int(hosthash, 16) % len(parentlist)]
+                    return (ppname, conf.parentdictalive.get(ppname))
         if ifhost_in_china():
-            return ('direct', conf.parentdictalive.get('direct'))
-        if forceproxy or ifgfwlist():
-            parentlist.remove('direct')
-            if uri.startswith('ftp://'):
-                if 'goagent' in parentlist:
-                    parentlist.remove('goagent')
+            pass
+        elif forceproxy or ifgfwlist():
             if parentlist:
-                ppname = random.choice(parentlist)
-                return (ppname, conf.parentdictalive.get(ppname))
+                if len(parentlist) == 1:
+                    return (parentlist[0], conf.parentdictalive.get(parentlist[0]))
+                else:
+                    hosthash = cls.hosthash.get(domain)
+                    if hosthash is None:
+                        hosthash = hashlib.md5(domain).hexdigest()
+                        cls.hosthash[domain] = hosthash
+                    ppname = parentlist[int(hosthash, 16) % len(parentlist)]
+                    return (ppname, conf.parentdictalive.get(ppname))
+        if 'cow' in conf.parentdictalive.keys():
+            return ('cow', conf.parentdictalive.get('cow'))
         return ('direct', conf.parentdictalive.get('direct'))
 
     @classmethod
@@ -1223,7 +1257,6 @@ class SConfigParser(configparser.ConfigParser):
 
 class Config(object):
     def __init__(self):
-        self.iolock = RLock()
         self.presets = SConfigParser()
         self.userconf = SConfigParser()
         self.reload()
@@ -1249,7 +1282,6 @@ class Config(object):
         self.parentdict[name] = proxy
 
 conf = Config()
-consoleLock = RLock()
 
 
 @atexit.register
