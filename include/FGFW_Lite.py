@@ -235,7 +235,9 @@ class ProxyHandler(tornado.web.RequestHandler):
                 _sent_request()
 
         def read_from_upstream(data):
-            if not client.closed():
+            if client.closed():
+                self.upstream.close()
+            else:
                 client.write(data)
 
         def _sent_request():
