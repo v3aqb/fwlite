@@ -30,6 +30,7 @@ import time
 import re
 from threading import Thread, Timer
 import atexit
+import platform
 import base64
 import hashlib
 import socket
@@ -66,7 +67,10 @@ os.chdir(WORKINGDIR)
 if sys.platform.startswith('win'):
     PYTHON2 = '%s/include/Python27/python27.exe' % WORKINGDIR
 else:
-    PYTHON2 = '/usr/bin/env python2'
+    for cmd in ('python2.7', 'python27', 'python2'):
+        if os.system('which %s' % cmd) == 0:
+            PYTHON2 = cmd
+            break
 
 if not os.path.isfile('./userconf.ini'):
     with open('./userconf.ini', 'w') as f:
@@ -945,7 +949,6 @@ class goagentabs(FGFWProxyAbs):
         elif sys.platform == 'darwin':
             return os.system('security find-certificate -a -c "%s" | grep "%s" >/dev/null || security add-trusted-cert -d -r trustRoot -k "/Library/Keychains/System.keychain" "%s"' % (commonname, commonname, certfile))
         elif sys.platform.startswith('linux'):
-            import platform
             platform_distname = platform.dist()[0]
             if platform_distname == 'Ubuntu':
                 pemfile = "/etc/ssl/certs/%s.pem" % commonname
@@ -970,15 +973,32 @@ class shadowsocksabs(FGFWProxyAbs):
                          ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/utils.py', './shadowsocks/utils.py']]
         self.cmd = '{} -B {}/shadowsocks/local.py'.format(PYTHON2, WORKINGDIR)
         self.cwd = '%s/shadowsocks' % WORKINGDIR
+        self.enable = conf.userconf.dgetbool('shadowsocks', 'enable', False)
+        lst = []
         if sys.platform.startswith('win'):
             self.cmd = 'c:/python27/python.exe -B %s/shadowsocks/local.py' % WORKINGDIR
-            lst = ['./shadowsocks/shadowsocks-local.exe',
-                   './shadowsocks/shadowsocks.exe']
-            for f in lst:
-                if os.path.isfile(f):
-                    self.cmd = ''.join([WORKINGDIR, f[1:]])
+            for cmd in ('ss-local', 'sslocal'):
+                if 'XP' in platform.platform():
+                    continue
+                if os.system('where %s' % cmd) == 0:
+                    self.cmd = cmd
                     break
-        self.enable = conf.userconf.dgetbool('shadowsocks', 'enable', False)
+            else:
+                lst = ['./shadowsocks/ss-local.exe',
+                       './shadowsocks/shadowsocks-local.exe',
+                       './shadowsocks/shadowsocks.exe']
+        elif sys.platform.startswith('linux'):
+            for cmd in ('ss-local', 'sslocal'):
+                if os.system('which %s' % cmd) == 0:
+                    self.cmd = cmd
+                    break
+            else:
+                lst = ['./shadowsocks/ss-local',
+                       './shadowsocks/shadowsocks-local']
+        for f in lst:
+            if os.path.isfile(f):
+                self.cmd = ''.join([WORKINGDIR, f[1:]])
+                break
         if self.enable:
             conf.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
         self.enableupdate = conf.userconf.dgetbool('shadowsocks', 'update', False)
