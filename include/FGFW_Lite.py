@@ -642,21 +642,6 @@ class redirector(object):
 REDIRECTOR = redirector()
 
 
-def run_proxy(port, start_ioloop=True):
-    """
-    Run proxy on the specified port. If start_ioloop is True (default),
-    the tornado IOLoop will be started immediately.
-    """
-    print("Starting HTTP proxy on port {} and {}".format(port, str(int(port)+1)))
-    app = tornado.web.Application([(r'.*', ProxyHandler), ])
-    app.listen(8118)
-    app2 = tornado.web.Application([(r'.*', ForceProxyHandler), ])
-    app2.listen(8119)
-    ioloop = tornado.ioloop.IOLoop.instance()
-    if start_ioloop:
-        ioloop.start()
-
-
 def updateNbackup():
     while True:
         time.sleep(90)
@@ -1089,9 +1074,23 @@ class fgfwproxy(FGFWProxyAbs):
     def start(self):
         if self.enable:
             if ':' in self.listen:
-                run_proxy(self.listen.split(':')[1], address=self.listen.split(':')[0])
+                self.run_proxy(self.listen.split(':')[1], address=self.listen.split(':')[0])
             else:
-                run_proxy(self.listen)
+                self.run_proxy(self.listen)
+
+    def run_proxy(self, port, start_ioloop=True):
+        """
+        Run proxy on the specified port. If start_ioloop is True (default),
+        the tornado IOLoop will be started immediately.
+        """
+        print("Starting HTTP proxy on port {} and {}".format(port, str(int(port)+1)))
+        app = tornado.web.Application([(r'.*', ProxyHandler), ])
+        app.listen(8118)
+        app2 = tornado.web.Application([(r'.*', ForceProxyHandler), ])
+        app2.listen(8119)
+        ioloop = tornado.ioloop.IOLoop.instance()
+        if start_ioloop:
+            ioloop.start()
 
     @classmethod
     def conf(cls):
