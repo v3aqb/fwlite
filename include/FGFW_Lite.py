@@ -1120,9 +1120,13 @@ class fgfwproxy(FGFWProxyAbs):
 
         with open('./include/gfwlist.txt') as f:
             try:
-                for line in base64.b64decode(f.read()).split():
+                data = ''.join(f.read().split())
+                if len(data) % 4:
+                    data += '=' * (4 - len(data) % 4)
+                for line in base64.b64decode(data).split():
                     add_rule(line)
             except TypeError:
+                f.seek(0)
                 if f.readline().startswith('[AutoProxy'):
                     for line in f:
                         add_rule(line)
