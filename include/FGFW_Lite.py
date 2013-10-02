@@ -626,18 +626,17 @@ class redirector(object):
     def config(self):
         self.list = []
 
-        with open('./include/redirector.txt') as f:
-            for line in f:
-                line = line.strip()
-                if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
-                    try:
-                        o = autoproxy_rule(line.split()[0])
-                        if o.override:
-                            raise Exception
-                    except Exception:
-                        pass
-                    else:
-                        self.list.append((o, line.split()[1]))
+        for line in open('./include/redirector.txt'):
+            line = line.strip()
+            if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
+                try:
+                    o = autoproxy_rule(line.split()[0])
+                    if o.override:
+                        raise Exception
+                except Exception:
+                    pass
+                else:
+                    self.list.append((o, line.split()[1]))
 
 REDIRECTOR = redirector()
 
@@ -1113,20 +1112,22 @@ class fgfwproxy(FGFWProxyAbs):
                 else:
                     cls.gfwlist.append(o)
 
-        with open('./include/local.txt') as f:
-            for line in f:
-                add_rule(line, force=True)
+        for line in open('./include/local.txt'):
+            add_rule(line, force=True)
 
-        with open('./include/cloud.txt') as f:
-            for line in f:
-                add_rule(line, force=True)
+        for line in open('./include/cloud.txt'):
+            add_rule(line, force=True)
 
         with open('./include/gfwlist.txt') as f:
             try:
                 for line in base64.b64decode(f.read()).split():
                     add_rule(line)
             except TypeError:
-                pass
+                if f.readline().startswith('[AutoProxy'):
+                    for line in f:
+                        add_rule(line)
+                else:
+                    logger.warning('./include/gfwlist.txt is corrupted!')
 
     @classmethod
     def parentproxy(cls, uri, domain=None, forceproxy=False):
