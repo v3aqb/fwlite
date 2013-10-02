@@ -1123,8 +1123,11 @@ class fgfwproxy(FGFWProxyAbs):
                 add_rule(line, force=True)
 
         with open('./include/gfwlist.txt') as f:
-            for line in base64.b64decode(f.read()).split():
-                add_rule(line)
+            try:
+                for line in base64.b64decode(f.read()).split():
+                    add_rule(line)
+            except TypeError:
+                pass
 
     @classmethod
     def parentproxy(cls, uri, domain=None, forceproxy=False):
