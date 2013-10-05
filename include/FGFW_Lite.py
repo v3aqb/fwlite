@@ -308,8 +308,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                                      _on_chunk_data)
 
         def _on_chunk_data(data):
-            read_from_upstream(data)
             if len(data) != 2:
+                read_from_upstream(data)
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             else:
                 _finish()
