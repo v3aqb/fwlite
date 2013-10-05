@@ -85,7 +85,7 @@ Func setTray()
 EndFunc   ;==>setTray
 
 Func update()
-	TrayTip("FGFW_Lite", "打开Console，输入‘update’，回车", 0)
+	TrayTip("FGFW_Lite", "打开Console，输入 update()，回车", 0)
 EndFunc   ;==>update
 
 Func showHideConsole()
@@ -189,13 +189,13 @@ EndFunc   ;==>startSetAutorun
 Func startSetProxy()
 	Local $setIEProxy = _GetConf("FGFW_Lite", "setIEProxy", "1")
 	If $setIEProxy = 1 Then
-		If IniRead("presets.ini", "Proxy", "ProxyEnable", "10") = 10 Then
+		If IniRead("userconf.ini", "Proxy", "ProxyEnable", "10") = 10 Then
 			Local $ifproxy = RegRead("HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings", "ProxyEnable")
 			Local $proxy = RegRead("HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings", "ProxyServer")
 			Local $override = RegRead("HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings", "ProxyOverride")
-			IniWrite("presets.ini", "Proxy", "ProxyEnable", $ifproxy)
-			IniWrite("presets.ini", "Proxy", "ProxyServer", $proxy)
-			IniWrite("presets.ini", "Proxy", "ProxyOverride", $override)
+			IniWrite("userconf.ini", "Proxy", "ProxyEnable", $ifproxy)
+			IniWrite("userconf.ini", "Proxy", "ProxyServer", $proxy)
+			IniWrite("userconf.ini", "Proxy", "ProxyOverride", $override)
 			setProxyAuto()
 		EndIf
 	EndIf
@@ -219,13 +219,13 @@ Func onExit()
 	$hWnd = _GetHwndFromPID($SUB_PID)
 	$title = _WinAPI_GetWindowText($hWnd)
 	WinClose($title)
-	Local $ifproxy = IniRead("presets.ini", "Proxy", "ProxyEnable", "0")
-	Local $proxy = IniRead("presets.ini", "Proxy", "ProxyServer", "")
-	Local $override = IniRead("presets.ini", "Proxy", "ProxyOverride", "")
+	Local $ifproxy = IniRead("userconf.ini", "Proxy", "ProxyEnable", "0")
+	Local $proxy = IniRead("userconf.ini", "Proxy", "ProxyServer", "")
+	Local $override = IniRead("userconf.ini", "Proxy", "ProxyOverride", "")
 	_setIEProxy($ifproxy, $proxy, $override)
-	IniDelete("presets.ini", "Proxy", "ProxyEnable")
-	IniDelete("presets.ini", "Proxy", "ProxyServer")
-	IniDelete("presets.ini", "Proxy", "ProxyOverride")
+	IniDelete("userconf.ini", "Proxy", "ProxyEnable")
+	IniDelete("userconf.ini", "Proxy", "ProxyServer")
+	IniDelete("userconf.ini", "Proxy", "ProxyOverride")
 	FileDelete('./include/dummy')
 EndFunc   ;==>onExit
 

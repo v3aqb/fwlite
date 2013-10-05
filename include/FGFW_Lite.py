@@ -123,6 +123,13 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 self.redirect(new_url)
             return
+        searchword = re.match(r'^http://([\w-]+)/$', uri)
+        if searchword:
+            q = searchword.group(1)
+            if q.startswith('xn--'):
+                q = q[4:].decode('punycode')
+            self.redirect('https://www.google.com/search?q=%s&ie=utf-8&oe=utf-8&aq=t&rls=org.mozilla:zh-CN:official' % q)
+            return
 
         urisplit = uri.split('/')
         self.requestpath = '/'.join(urisplit[3:])
@@ -301,8 +308,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                                      _on_chunk_data)
 
         def _on_chunk_data(data):
-            read_from_upstream(data)
             if len(data) != 2:
+                read_from_upstream(data)
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             else:
                 _finish()
