@@ -123,6 +123,13 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 self.redirect(new_url)
             return
+        searchword = re.match(r'^http://([\w-]+)/$', uri)
+        if searchword:
+            q = searchword.group(1)
+            if q.startswith('xn--'):
+                q = q[4:].decode('punycode')
+            self.redirect('https://www.google.com/search?q=%s&ie=utf-8&oe=utf-8&aq=t&rls=org.mozilla:zh-CN:official' % q)
+            return
 
         urisplit = uri.split('/')
         self.requestpath = '/'.join(urisplit[3:])
