@@ -1104,7 +1104,6 @@ class fgfwproxy(FGFWProxyAbs):
         cls.gfwlist = []
         cls.gfwlist_force = []
         cls.inchinadict = {}
-        cls.hosthash = {}
 
         def add_rule(line, force=False):
             try:
@@ -1192,10 +1191,7 @@ class fgfwproxy(FGFWProxyAbs):
                 if len(parentlist) == 1:
                     return (parentlist[0], conf.parentdictalive.get(parentlist[0]))
                 else:
-                    hosthash = cls.hosthash.get(domain)
-                    if hosthash is None:
-                        hosthash = hashlib.md5(domain).hexdigest()
-                        cls.hosthash[domain] = hosthash
+                    hosthash = hashlib.md5(domain).hexdigest()
                     ppname = parentlist[int(hosthash, 16) % len(parentlist)]
                     return (ppname, conf.parentdictalive.get(ppname))
         if ifhost_in_china():
@@ -1205,10 +1201,7 @@ class fgfwproxy(FGFWProxyAbs):
                 if len(parentlist) == 1:
                     return (parentlist[0], conf.parentdictalive.get(parentlist[0]))
                 else:
-                    hosthash = cls.hosthash.get(domain)
-                    if hosthash is None:
-                        hosthash = hashlib.md5(domain).hexdigest()
-                        cls.hosthash[domain] = hosthash
+                    hosthash = hashlib.md5(domain).hexdigest()
                     ppname = parentlist[int(hosthash, 16) % len(parentlist)]
                     return (ppname, conf.parentdictalive.get(ppname))
         if 'cow' in conf.parentdictalive.keys():
