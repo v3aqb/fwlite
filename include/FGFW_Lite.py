@@ -326,7 +326,9 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.upstream.close()
                 else:
                     lst.append(self.upstream)
-            self.finish(data)
+            if data:
+                read_from_upstream(data)
+            self.finish()
 
         _get_upstream()
 
