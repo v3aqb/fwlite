@@ -262,7 +262,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             s += b'\r\n'
             if self.request.body:
                 s += self.request.body + b'\r\n\r\n'
-            _on_connect(s)
+            _on_connect(bytes(s))
 
         def _on_connect(data=None):
             self.upstream.read_until_regex(b"\r?\n\r?\n", _on_headers)
