@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 #-*- coding: UTF-8 -*-
 #
 # FGFW_Lite.py A Proxy Server help go around the Great Firewall
@@ -36,6 +36,7 @@ import hashlib
 import socket
 import struct
 import random
+import urllib2
 import tornado.ioloop
 import tornado.iostream
 import tornado.web
@@ -249,16 +250,16 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         def _sent_request():
             if self.pptype == 'http' or self.pptype == 'https':
-                s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
+                s = '%s %s %s\r\n' % (self.request.method, self.request.uri.decode('utf-8'), self.request.version)
                 if self.ppusername and 'Proxy-Authorization' not in self.request.headers:
                     a = '%s:%s' % (self.ppusername, self.pppassword)
                     self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             else:
-                s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
+                s = '%s /%s %s\r\n' % (self.request.method, self.requestpath.decode('utf-8'), self.request.version)
+            s = s.encode('latin1')
             for key, value in self.request.headers.items():
-                s += '%s: %s\r\n' % (key, value)
-            s += '\r\n'
-            s = s.encode()
+                s += b'%s: %s\r\n' % (key, value)
+            s += b'\r\n'
             if self.request.body:
                 s += self.request.body + b'\r\n\r\n'
             _on_connect(s)
@@ -275,7 +276,6 @@ class ProxyHandler(tornado.web.RequestHandler):
             status_code = int(first_line.split()[1])
             headers = HTTPHeaders.parse(header_data)
             self._close_flag = True if headers.get('Connection') == 'close' else False
-
             if "Content-Length" in headers:
                 if "," in headers["Content-Length"]:
                     # Proxies sometimes cause Content-Length headers to get
@@ -308,8 +308,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                                      _on_chunk_data)
 
         def _on_chunk_data(data):
+            read_from_upstream(data)
             if len(data) != 2:
-                read_from_upstream(data)
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             else:
                 _finish()
@@ -805,8 +805,6 @@ class FGFWProxyAbs(object):
                 self.updateViaHTTP(url, etag, path)
 
     def updateViaHTTP(self, url, etag, path):
-        import urllib2
-
         req = urllib2.Request(url)
         req.add_header('If-None-Match', etag)
         try:
@@ -1201,7 +1199,7 @@ class fgfwproxy(FGFWProxyAbs):
                     ppname = parentlist[int(hosthash, 16) % len(parentlist)]
                     return (ppname, conf.parentdictalive.get(ppname))
         if ifhost_in_china():
-            pass
+            return ('direct', conf.parentdictalive.get('direct'))
         elif forceproxy or ifgfwlist():
             if parentlist:
                 if len(parentlist) == 1:

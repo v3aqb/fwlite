@@ -9,4 +9,3 @@
 ||googleusercontent.com
 ||gstatic.com
 ||feedly.com
-|https://codeload.github.com
