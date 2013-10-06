@@ -26,7 +26,6 @@ Func setEnv()
 	If Not FileExists("userconf.ini") Then
 		FileCopy("userconf.sample.ini", "userconf.ini")
 	EndIf
-	FileWrite('./include/dummy', @CRLF)
 EndFunc   ;==>setEnv
 
 Func setTray()
@@ -206,7 +205,7 @@ Func daemon()
 	$SILENT = 1
 	While True
 		Sleep(3000)
-		$SUB_PID = Run("./include/Python27/python27.exe ./include/FGFW_Lite.py", @ScriptDir, @SW_HIDE)
+		$SUB_PID = Run("./include/Python27/python27.exe ./include/FGFW_Lite.py -hide", @ScriptDir, @SW_HIDE)
 		If Not $SILENT Then TrayTip("FGFW_Lite", 'FGFW_Lite Restarting...', 0)
 		While ProcessExists($SUB_PID)
 			Sleep(100)
@@ -226,7 +225,6 @@ Func onExit()
 	IniDelete("userconf.ini", "Proxy", "ProxyEnable")
 	IniDelete("userconf.ini", "Proxy", "ProxyServer")
 	IniDelete("userconf.ini", "Proxy", "ProxyOverride")
-	FileDelete('./include/dummy')
 EndFunc   ;==>onExit
 
 Func _setIEProxy($ProxyEnable = 1, $ProxyServer = "127.0.0.1:8118", $ProxyOverride = "<local>")
