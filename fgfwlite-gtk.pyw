@@ -136,7 +136,7 @@ def drop_desktop():
 
 class GoAgentGTK:
 
-    command = ['/usr/bin/env', 'python', './include/FGFW_Lite.py']
+    command = ['/usr/bin/env', 'python2.7', './fgfw-lite/fgfw-lite.py']
     message = u'FGFW-Lite已经启动，单击托盘图标可以最小化'
     message = None
     fail_message = u'FGFW-Lite启动失败，请查看控制台窗口的错误信息。'
@@ -150,7 +150,7 @@ class GoAgentGTK:
         for cmd in ('python2.7', 'python27', 'python2'):
             if os.system('which %s' % cmd) == 0:
                 self.command[1] = cmd
-                break 
+                break
 
         self.window.add(terminal)
         self.childpid = self.terminal.fork_command(self.command[0], self.command, os.getcwd())

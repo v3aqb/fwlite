@@ -66,7 +66,7 @@ if ' ' in WORKINGDIR:
 os.chdir(WORKINGDIR)
 
 if sys.platform.startswith('win'):
-    PYTHON2 = '%s/include/Python27/python27.exe' % WORKINGDIR
+    PYTHON2 = '%s/Python27/python27.exe' % WORKINGDIR
 else:
     for cmd in ('python2.7', 'python27', 'python2'):
         if os.system('which %s' % cmd) == 0:
@@ -77,8 +77,8 @@ if not os.path.isfile('./userconf.ini'):
     with open('./userconf.ini', 'w') as f:
         f.write(open('./userconf.sample.ini').read())
 
-if not os.path.isfile('./include/redirector.txt'):
-    with open('./include/redirector.txt', 'w') as f:
+if not os.path.isfile('./fgfw-lite/redirector.txt'):
+    with open('./fgfw-lite/redirector.txt', 'w') as f:
         f.write('''\
 |http://www.google.com/search forcehttps
 |http://www.google.com/url forcehttps
@@ -90,11 +90,11 @@ if not os.path.isfile('./include/redirector.txt'):
 |http://*.googlecode.com forcehttps
 |http://*.wikipedia.org forcehttps
 ''')
-if not os.path.isfile('./include/local.txt'):
-    with open('./include/local.txt', 'w') as f:
+if not os.path.isfile('./fgfw-lite/local.txt'):
+    with open('./fgfw-lite/local.txt', 'w') as f:
         f.write('! local gfwlist config\n! rules: http://t.cn/zTeBinu\n')
 
-for item in ['./include/redirector.txt', './userconf.ini', './include/local.txt']:
+for item in ['./fgfw-lite/redirector.txt', './userconf.ini', './fgfw-lite/local.txt']:
     with open(item) as f:
         data = open(item).read()
     with open(item, 'w') as f:
@@ -635,7 +635,7 @@ class redirector(object):
     def config(self):
         self.list = []
 
-        for line in open('./include/redirector.txt'):
+        for line in open('./fgfw-lite/redirector.txt'):
             line = line.strip()
             if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
                 try:
@@ -864,10 +864,7 @@ class goagentabs(FGFWProxyAbs):
             if self.enable:
                 conf.addparentproxy('GoAgent-PAAS', ('http', '127.0.0.1', 8088, None, None))
 
-        if os.path.isfile("./include/dummy"):
-            proxy.set('listen', 'visible', '0')
-            os.remove("./include/dummy")
-        elif '-hide' in sys.argv[1:]:
+        if '-hide' in sys.argv[1:]:
             proxy.set('listen', 'visible', '0')
         else:
             proxy.set('listen', 'visible', '1')
@@ -1059,14 +1056,14 @@ class fgfwproxy(FGFWProxyAbs):
         self.arg = arg
 
     def _config(self):
-        self.filelist = [['https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './include/gfwlist.txt'],
-                         ['http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './include/delegated-apnic-latest'],
-                         ['https://fgfw-lite.googlecode.com/git-history/master/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
-                         ['https://fgfw-lite.googlecode.com/git-history/master/include/cloud.txt', './include/cloud.txt'],
+        self.filelist = [['https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './fgfw-lite/gfwlist.txt'],
+                         ['http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './fgfw-lite/delegated-apnic-latest'],
+                         ['https://fgfw-lite.googlecode.com/git-history/master/fgfw-lite/FGFW_Lite.py', './fgfw-lite/FGFW_Lite.py'],
+                         ['https://fgfw-lite.googlecode.com/git-history/master/fgfw-lite/cloud.txt', './fgfw-lite/cloud.txt'],
                          ['https://fgfw-lite.googlecode.com/git-history/master/userconf.sample.ini', './userconf.sample.ini'],
                          ['https://fgfw-lite.googlecode.com/git-history/master/README.md', './README.md'],
-                         # ['https://github.com/v3aqb/fgfw-lite/raw/master/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
-                         # ['https://github.com/v3aqb/fgfw-lite/raw/master/include/cloud.txt', './include/cloud.txt'],
+                         # ['https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/FGFW_Lite.py', './fgfw-lite/FGFW_Lite.py'],
+                         # ['https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/cloud.txt', './fgfw-lite/cloud.txt'],
                          # ['https://github.com/v3aqb/fgfw-lite/raw/master/userconf.sample.ini', './userconf.sample.ini'],
                          # ['https://github.com/v3aqb/fgfw-lite/raw/master/README.md', './README.md'],
                          ]
@@ -1118,13 +1115,13 @@ class fgfwproxy(FGFWProxyAbs):
                 else:
                     cls.gfwlist.append(o)
 
-        for line in open('./include/local.txt'):
+        for line in open('./fgfw-lite/local.txt'):
             add_rule(line, force=True)
 
-        for line in open('./include/cloud.txt'):
+        for line in open('./fgfw-lite/cloud.txt'):
             add_rule(line, force=True)
 
-        with open('./include/gfwlist.txt') as f:
+        with open('./fgfw-lite/gfwlist.txt') as f:
             try:
                 data = ''.join(f.read().split())
                 if len(data) % 4:
@@ -1137,7 +1134,7 @@ class fgfwproxy(FGFWProxyAbs):
                     for line in f:
                         add_rule(line)
                 else:
-                    logger.warning('./include/gfwlist.txt is corrupted!')
+                    logger.warning('./fgfw-lite/gfwlist.txt is corrupted!')
 
     @classmethod
     def parentproxy(cls, uri, domain=None, forceproxy=False):
@@ -1220,7 +1217,7 @@ class fgfwproxy(FGFWProxyAbs):
         cls.chinanet.append(ip_network('127.0.0.0/8'))
         # ripped from https://github.com/fivesheep/chnroutes
         import math
-        with open('./include/delegated-apnic-latest') as remotefile:
+        with open('./fgfw-lite/delegated-apnic-latest') as remotefile:
             data = remotefile.read()
 
         cnregex = re.compile(r'apnic\|cn\|ipv4\|[0-9\.]+\|[0-9]+\|[0-9]+\|a.*', re.IGNORECASE)
