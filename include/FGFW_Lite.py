@@ -688,8 +688,6 @@ def ifbackup():
 
 
 def update(auto=False):
-    if auto:
-        open("./include/dummy", 'w').close()
     conf.presets.set('Update', 'LastUpdate', str(time.time()))
     for item in FGFWProxyAbs.ITEMS:
         if item.enableupdate:
@@ -869,6 +867,8 @@ class goagentabs(FGFWProxyAbs):
         if os.path.isfile("./include/dummy"):
             proxy.set('listen', 'visible', '0')
             os.remove("./include/dummy")
+        elif '-hide' in sys.argv[1:]:
+            proxy.set('listen', 'visible', '0')
         else:
             proxy.set('listen', 'visible', '1')
 
@@ -1197,7 +1197,7 @@ class fgfwproxy(FGFWProxyAbs):
                     ppname = parentlist[int(hosthash, 16) % len(parentlist)]
                     return (ppname, conf.parentdictalive.get(ppname))
         if ifhost_in_china():
-            return ('direct', conf.parentdictalive.get('direct'))
+            pass
         elif forceproxy or ifgfwlist():
             if parentlist:
                 if len(parentlist) == 1:
