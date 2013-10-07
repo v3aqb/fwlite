@@ -1197,7 +1197,7 @@ class fgfwproxy(FGFWProxyAbs):
                     ppname = parentlist[int(hosthash, 16) % len(parentlist)]
                     return (ppname, conf.parentdictalive.get(ppname))
         if ifhost_in_china():
-            return ('direct', conf.parentdictalive.get('direct'))
+            pass
         elif forceproxy or ifgfwlist():
             if parentlist:
                 if len(parentlist) == 1:
