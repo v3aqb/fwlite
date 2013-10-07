@@ -28,7 +28,7 @@ from subprocess import Popen
 import shlex
 import time
 import re
-from threading import Thread, Timer
+from threading import Thread
 import atexit
 import platform
 import base64
@@ -692,7 +692,7 @@ def update(auto=False):
     for item in FGFWProxyAbs.ITEMS:
         if item.enableupdate:
             item.update()
-    Timer(4, restart).start()
+    restart()
 
 
 def restart():
@@ -810,7 +810,7 @@ class FGFWProxyAbs(object):
         try:
             r = urllib2.urlopen(req)
         except Exception as e:
-            logger.info('{} NOT updated. Reason: {}'.format(path, e.reason))
+            logger.info('{} NOT updated. Reason: {}'.format(path, e))
         else:
             if r.getcode() == 200:
                 with open(path, 'wb') as localfile:
