@@ -676,7 +676,7 @@ def chkproxy():
 
 def ifupdate():
     if conf.userconf.dgetbool('FGFW_Lite', 'autoupdate'):
-        lastupdate = conf.presets.dgetfloat('Update', 'LastUpdate', 0)
+        lastupdate = conf.version.dgetfloat('Update', 'LastUpdate', 0)
         if time.time() - lastupdate > conf.UPDATE_INTV * 60 * 60:
             update(auto=True)
 
@@ -688,7 +688,7 @@ def ifbackup():
 
 
 def update(auto=False):
-    conf.presets.set('Update', 'LastUpdate', str(time.time()))
+    conf.version.set('Update', 'LastUpdate', str(time.time()))
     for item in FGFWProxyAbs.ITEMS:
         if item.enableupdate:
             item.update()
@@ -801,7 +801,7 @@ class FGFWProxyAbs(object):
         if len(self.filelist) > 0:
             for i in range(len(self.filelist)):
                 url, path = self.filelist[i]
-                etag = conf.presets.dget('Update', path.replace('./', '').replace('/', '-'), '')
+                etag = conf.version.dget('Update', path.replace('./', '').replace('/', '-'), '')
                 self.updateViaHTTP(url, etag, path)
 
     def updateViaHTTP(self, url, etag, path):
@@ -815,7 +815,7 @@ class FGFWProxyAbs(object):
             if r.getcode() == 200:
                 with open(path, 'wb') as localfile:
                     localfile.write(r.read())
-                conf.presets.set('Update', path.replace('./', '').replace('/', '-'), r.info().getheader('ETag'))
+                conf.version.set('Update', path.replace('./', '').replace('/', '-'), r.info().getheader('ETag'))
                 logger.info('%s Updated.' % path)
             else:
                 logger.info('{} NOT updated. Reason: {}'.format(path, str(r.getcode())))
@@ -1285,7 +1285,7 @@ class SConfigParser(configparser.ConfigParser):
 
 class Config(object):
     def __init__(self):
-        self.presets = SConfigParser()
+        self.version = SConfigParser()
         self.userconf = SConfigParser()
         self.reload()
         self.UPDATE_INTV = 6
@@ -1293,11 +1293,11 @@ class Config(object):
         self.parentdict = {}
 
     def reload(self):
-        self.presets.read('presets.ini')
+        self.version.read('version.ini')
         self.userconf.read('userconf.ini')
 
     def confsave(self):
-        self.presets.write(open('presets.ini', 'w'))
+        self.version.write(open('version.ini', 'w'))
         self.userconf.write(open('userconf.ini', 'w'))
 
     def addparentproxy(self, name, proxy):
