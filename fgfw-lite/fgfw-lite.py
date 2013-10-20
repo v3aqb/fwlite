@@ -256,13 +256,12 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             else:
                 s = '%s /%s %s\r\n' % (self.request.method, self.requestpath.decode('utf-8'), self.request.version)
-            s = s.encode('latin1')
-            for key, value in self.request.headers.items():
-                s += b'%s: %s\r\n' % (key, value)
-            s += b'\r\n'
+            s = [s.encode('latin1'),]
+            s.append('\r\n'.join(['%s: %s' % (key, value) for key, value in self.request.headers.items()]).encode('utf8'))
+            s.append(b'\r\n\r\n')
             if self.request.body:
-                s += self.request.body + b'\r\n\r\n'
-            _on_connect(bytes(s))
+                s.extend([self.request.body, b'\r\n\r\n'])
+            _on_connect(b''.join(s))
 
         def _on_connect(data=None):
             self.upstream.read_until_regex(b"\r?\n\r?\n", _on_headers)
@@ -397,13 +396,12 @@ class ProxyHandler(tornado.web.RequestHandler):
                 s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
             if self.request.method != 'CONNECT':
                 self.request.headers['Connection'] = 'close'
-            for key, value in self.request.headers.items():
-                s += '%s: %s\r\n' % (key, value)
-            s += '\r\n'
-            s = s.encode()
+            s = [s.encode('latin1'),]
+            s.append('\r\n'.join(['%s: %s' % (key, value) for key, value in self.request.headers.items()]).encode('utf8'))
+            s.append(b'\r\n\r\n')
             if self.request.body:
-                s += self.request.body + b'\r\n\r\n'
-            start_tunnel(s)
+                s.extend([self.request.body, b'\r\n\r\n'])
+            start_tunnel(b''.join(s))
 
         def socks5_handshake(data=None):
             def get_server_auth_method(data=None):
@@ -1008,7 +1006,7 @@ class shadowsocksabs(FGFWProxyAbs):
 
             password = conf.userconf.dget('shadowsocks', 'password', 'barfoo!')
             method = conf.userconf.dget('shadowsocks', 'method', 'table')
-            self.cmd += ' -s {} -p {} -l 1080 -k {} -m {}'.format(server, server_port, password, method.strip('"'))
+            self.cmd = '{} -s {} -p {} -l 1080 -k {} -m {}'.format(self.cmd, server, server_port, password, method.strip('"'))
 
 
 class cow_abs(FGFWProxyAbs):
@@ -1025,7 +1023,7 @@ class cow_abs(FGFWProxyAbs):
             self.cmd = '%s/cow/cow.exe' % WORKINGDIR
         else:
             self.cmd = '%s/cow/cow' % WORKINGDIR
-        self.enableupdate = False
+        self.enableupdate = conf.userconf.dgetbool('cow', 'update', False)
         if not os.path.isfile(self.cmd):
             self.enable = False
             return
@@ -1143,8 +1141,7 @@ class fgfwproxy(FGFWProxyAbs):
             url:  'https://www.google.com'
             domain: 'www.google.com'
         '''
-        if uri and domain is None:
-            domain = uri.split('/')[2].split(':')[0]
+        domain = uri.split('/')[2].split(':')[0]
 
         def ifgfwlist_force():
             for rule in cls.gfwlist_force:
@@ -1194,7 +1191,7 @@ class fgfwproxy(FGFWProxyAbs):
                     ppname = parentlist[int(hosthash, 16) % len(parentlist)]
                     return (ppname, conf.parentdictalive.get(ppname))
         if ifhost_in_china():
-            pass
+            return ('direct', conf.parentdictalive.get('direct'))
         elif forceproxy or ifgfwlist():
             if parentlist:
                 if len(parentlist) == 1:
