@@ -614,7 +614,6 @@ def update(auto=False):
 
 def restart():
     conf.confsave()
-    REDIRECTOR.config()
     for item in FGFWProxyAbs.ITEMS:
         item.config()
         item.restart()
