@@ -999,7 +999,7 @@ class fgfwproxy(FGFWProxyAbs):
     def _config(self):
         self.filelist = [['https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './fgfw-lite/gfwlist.txt'],
                          ['http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './fgfw-lite/delegated-apnic-latest'],
-                         ['https://fgfw-lite.googlecode.com/git-history/master/fgfw-lite/FGFW_Lite.py', './fgfw-lite/FGFW_Lite.py'],
+                         ['https://fgfw-lite.googlecode.com/git-history/master/fgfw-lite/fgfw-lite.py', './fgfw-lite/fgfw-lite.py'],
                          ['https://fgfw-lite.googlecode.com/git-history/master/fgfw-lite/cloud.txt', './fgfw-lite/cloud.txt'],
                          ['https://fgfw-lite.googlecode.com/git-history/master/userconf.sample.ini', './userconf.sample.ini'],
                          ['https://fgfw-lite.googlecode.com/git-history/master/README.md', './README.md'],
