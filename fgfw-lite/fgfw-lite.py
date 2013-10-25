@@ -1017,7 +1017,6 @@ class fgfwproxy(FGFWProxyAbs):
 
         cls.gfwlist = []
         cls.gfwlist_force = []
-        cls.inchinadict = {}
 
         def add_rule(line, force=False):
             try:
@@ -1068,21 +1067,16 @@ class fgfwproxy(FGFWProxyAbs):
             return False
 
         def ifhost_in_china():
-            if domain is None:
+            if not domain:
                 return False
-            result = cls.inchinadict.get(domain)
-            if result is None:
-                try:
-                    ipo = ip_address(socket.gethostbyname(domain))
-                except Exception:
-                    return False
-                result = False
-                for net in cls.chinanet:
-                    if ipo in net:
-                        result = True
-                        break
-                cls.inchinadict[domain] = result
-            return result
+            try:
+                ipo = ip_address(socket.gethostbyname(domain))
+            except Exception:
+                return False
+            for net in cls.chinanet:
+                if ipo in net:
+                    return True
+            return False
 
         def ifgfwlist():
             for rule in cls.gfwlist:
