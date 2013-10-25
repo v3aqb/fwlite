@@ -1040,7 +1040,7 @@ class fgfwproxy(FGFWProxyAbs):
                 data = ''.join(f.read().split())
                 if len(data) % 4:
                     data += '=' * (4 - len(data) % 4)
-                for line in base64.b64decode(data).split():
+                for line in base64.b64decode(data).splitlines():
                     add_rule(line)
             except TypeError:
                 f.seek(0)
