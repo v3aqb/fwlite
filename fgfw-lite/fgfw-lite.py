@@ -498,29 +498,10 @@ class ForceProxyHandler(ProxyHandler):
 
 
 class autoproxy_rule(object):
-    """docstring for autoproxy_rule
-        (type,pattern)
-        type:
-            int
-            DOMAIN = 0
-            URI = 1
-            KEYWORD = 2
-            OVERRIDE_DOMAIN = 3
-            OVERRIDE_URI =4
-            OVERRIDE_KEYWORD = 5
-
-        pattern:
-            list
-            [string, string, .....]
-    """
     DOMAIN = 0
-    URI = 1
-    KEYWORD = 2
-    REGEX = 3
-    OVERRIDE_DOMAIN = 4
-    OVERRIDE_URI = 5
-    OVERRIDE_KEYWORD = 6
-    OVERRIDE_REGEX = 7
+    REGEX = 1
+    OVERRIDE_DOMAIN = 2
+    OVERRIDE_REGEX = 3
 
     def __init__(self, arg):
         super(autoproxy_rule, self).__init__()
@@ -532,19 +513,17 @@ class autoproxy_rule(object):
         self.rule = arg.strip()
         if self.rule == '' or len(self.rule) < 3 or self.rule.startswith('!') or self.rule.startswith('['):
             raise ValueError("invalid autoproxy_rule: %s" % self.rule)
-        self._type, self._ptrnlst = self._autopxy_rule_parse(self.rule)
+        self._type, self._ptrn = self._autopxy_rule_parse(self.rule)
         self.override = True if self._type >= self.OVERRIDE_DOMAIN else False
 
     def _autopxy_rule_parse(self, rule):
         def parse(rule):
             if rule.startswith('||'):
-                return (self.DOMAIN, rule.replace('||', '').replace('/', '').split('*'))
-            elif rule.startswith('|'):
-                return (self.URI, rule.replace('|', '').split('*'))
+                return (self.DOMAIN, re.compile(rule.replace('||', '').replace('/', '').replace('.', r'\.').replace('?', r'\?').replace('*', '.*')+'$'))
             elif rule.startswith('/') and rule.endswith('/'):
-                return (self.REGEX, [re.compile(rule[1:-1]), ])
+                return (self.REGEX, re.compile(rule[1:-1]))
             else:
-                return (self.KEYWORD, rule.split('*'))
+                return (self.REGEX, re.compile(rule.replace('|', '^').replace('.', r'\.').replace('?', r'\?').replace('*', '.*')))
 
         if rule.startswith('@@'):
             a, b = parse(rule.replace('@@', ''))
@@ -554,62 +533,26 @@ class autoproxy_rule(object):
 
     def match(self, url, domain=None):
         # url must be something like https://www.google.com
-        ptrnlst = self._ptrnlst[:]
 
-        def _match_domain():
-            if domain.endswith(ptrnlst.pop()):
-                if ptrnlst:
-                    return _match_keyword(uri=domain)
+        def _match_domain(domain):
+            if not domain:
+                domain = url.split('/')[2].split(':')[0]
+            if self._ptrn.search(domain):
                 return True
             return False
-
-        def _match_uri():
-            s = ptrnlst.pop(0)
-            if url.startswith(s):
-                if ptrnlst:
-                    return _match_keyword(index=len(s))
-                return True
-            return False
-
-        def _match_keyword(uri=url, index=0):
-            i = index
-            while ptrnlst:
-                s = ptrnlst.pop(0)
-                if s in url:
-                    i = uri.find(s, i) + len(s)
-                else:
-                    return False
-            return True
 
         def _match_regex(uri=url, index=0):
-            if ptrnlst[0].match(uri):
+            if self._ptrn.search(uri):
                 return True
             return False
 
-        if domain is None:
-            domain = url.split('/')[2].split(':')[0]
-
         if self._type is self.DOMAIN:
-            return _match_domain()
-        elif self._type is self.URI:
-            if url.startswith('https://'):
-                if self.rule.startswith('|https://'):
-                    return _match_uri()
-                return False
-            return _match_uri()
-        elif self._type is self.KEYWORD:
-            if url.startswith('https://'):
-                return False
-            return _match_keyword()
+            return _match_domain(domain)
         elif self._type is self.REGEX:
             return _match_regex()
 
         elif self._type is self.OVERRIDE_DOMAIN:
-            return _match_domain()
-        elif self._type is self.OVERRIDE_URI:
-            return _match_uri()
-        elif self._type is self.OVERRIDE_KEYWORD:
-            return _match_keyword()
+            return _match_domain(domain)
         elif self._type is self.OVERRIDE_REGEX:
             return _match_regex()
 
