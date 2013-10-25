@@ -117,7 +117,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             uri = 'https://{}'.format(uri)
         host = self.request.host.split(':')[0]
         # redirector
-        new_url = REDIRECTOR.get(uri, host)
+        new_url = redirector.get(uri, host)
         if new_url:
             if new_url.startswith('403'):
                 self.send_error(status_code=403)
@@ -511,7 +511,7 @@ class autoproxy_rule(object):
             else:
                 raise TypeError("invalid type: must be a string(or bytes)")
         self.rule = arg.strip()
-        if self.rule == '' or len(self.rule) < 3 or self.rule.startswith('!') or self.rule.startswith('['):
+        if len(self.rule) < 3 or self.rule.startswith('!') or self.rule.startswith('['):
             raise ValueError("invalid autoproxy_rule: %s" % self.rule)
         self._type, self._ptrn = self._autopxy_rule_parse(self.rule)
         self.override = True if self._type >= self.OVERRIDE_DOMAIN else False
@@ -559,60 +559,36 @@ class autoproxy_rule(object):
 
 class redirector(object):
     """docstring for redirector"""
-    def __init__(self, arg=None):
-        super(redirector, self).__init__()
-        self.arg = arg
-        self.config()
+    lst = []
 
-    def get(self, uri, host=None):
-        for rule, result in self.list:
+    for line in open('./fgfw-lite/redirector.txt'):
+        line = line.strip()
+        if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
+            try:
+                o = autoproxy_rule(line.split()[0])
+                if o.override:
+                    raise Exception
+            except Exception:
+                pass
+            else:
+                lst.append((o, line.split()[1]))
+
+    @classmethod
+    def get(cls, uri, host=None):
+        for rule, result in cls.lst:
             if rule.match(uri, host):
                 logger.info('Match redirect rule {}, {}'.format(rule.rule, result))
                 if result == 'forcehttps':
                     return uri.replace('http://', 'https://', 1)
                 return result
-        return False
-
-    def config(self):
-        self.list = []
-
-        for line in open('./fgfw-lite/redirector.txt'):
-            line = line.strip()
-            if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
-                try:
-                    o = autoproxy_rule(line.split()[0])
-                    if o.override:
-                        raise Exception
-                except Exception:
-                    pass
-                else:
-                    self.list.append((o, line.split()[1]))
-
-REDIRECTOR = redirector()
 
 
 def updateNbackup():
     while True:
         time.sleep(90)
-        chkproxy()
         ifupdate()
         if conf.userconf.dgetbool('AutoBackupConf', 'enable', False):
             ifbackup()
-
-
-def chkproxy():
-    dit = conf.parentdict.copy()
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-    for k, v in dit.items():
-        if v[1] is None or k == 'cow':
-            continue
-        try:
-            s.connect((v[1], v[2]))
-        except Exception:
-            del dit[k]
-        else:
-            s.close()
-    conf.parentdictalive = dit
 
 
 def ifupdate():
@@ -1038,12 +1014,9 @@ class fgfwproxy(FGFWProxyAbs):
 
     @classmethod
     def conf(cls):
-        conf.parentdict = {}
-        conf.addparentproxy('direct', (None, None, None, None, None))
 
         cls.gfwlist = []
         cls.gfwlist_force = []
-        cls.inchinadict = {}
 
         def add_rule(line, force=False):
             try:
@@ -1067,7 +1040,7 @@ class fgfwproxy(FGFWProxyAbs):
                 data = ''.join(f.read().split())
                 if len(data) % 4:
                     data += '=' * (4 - len(data) % 4)
-                for line in base64.b64decode(data).split():
+                for line in base64.b64decode(data).splitlines():
                     add_rule(line)
             except TypeError:
                 f.seek(0)
@@ -1094,21 +1067,16 @@ class fgfwproxy(FGFWProxyAbs):
             return False
 
         def ifhost_in_china():
-            if domain is None:
+            if not domain:
                 return False
-            result = cls.inchinadict.get(domain)
-            if result is None:
-                try:
-                    ipo = ip_address(socket.gethostbyname(domain))
-                except Exception:
-                    return False
-                result = False
-                for net in cls.chinanet:
-                    if ipo in net:
-                        result = True
-                        break
-                cls.inchinadict[domain] = result
-            return result
+            try:
+                ipo = ip_address(socket.gethostbyname(domain))
+            except Exception:
+                return False
+            for net in cls.chinanet:
+                if ipo in net:
+                    return True
+            return False
 
         def ifgfwlist():
             for rule in cls.gfwlist:
@@ -1117,7 +1085,7 @@ class fgfwproxy(FGFWProxyAbs):
                     return not rule.override
             return False
 
-        parentlist = list(conf.parentdictalive.keys())
+        parentlist = list(conf.parentdict.keys())
         if uri.startswith('ftp://'):
             if 'GoAgent' in parentlist:
                 parentlist.remove('GoAgent')
@@ -1128,28 +1096,27 @@ class fgfwproxy(FGFWProxyAbs):
         if ifgfwlist_force():
             if parentlist:
                 if len(parentlist) == 1:
-                    return (parentlist[0], conf.parentdictalive.get(parentlist[0]))
+                    return (parentlist[0], conf.parentdict.get(parentlist[0]))
                 else:
                     hosthash = hashlib.md5(domain).hexdigest()
                     ppname = parentlist[int(hosthash, 16) % len(parentlist)]
-                    return (ppname, conf.parentdictalive.get(ppname))
+                    return (ppname, conf.parentdict.get(ppname))
         if ifhost_in_china():
-            return ('direct', conf.parentdictalive.get('direct'))
+            return ('direct', conf.parentdict.get('direct'))
         elif forceproxy or ifgfwlist():
             if parentlist:
                 if len(parentlist) == 1:
-                    return (parentlist[0], conf.parentdictalive.get(parentlist[0]))
+                    return (parentlist[0], conf.parentdict.get(parentlist[0]))
                 else:
                     hosthash = hashlib.md5(domain).hexdigest()
                     ppname = parentlist[int(hosthash, 16) % len(parentlist)]
-                    return (ppname, conf.parentdictalive.get(ppname))
-        if 'cow' in conf.parentdictalive.keys():
-            return ('cow', conf.parentdictalive.get('cow'))
-        return ('direct', conf.parentdictalive.get('direct'))
+                    return (ppname, conf.parentdict.get(ppname))
+        if 'cow' in conf.parentdict.keys():
+            return ('cow', conf.parentdict.get('cow'))
+        return ('direct', conf.parentdict.get('direct'))
 
     @classmethod
     def chinaroute(cls):
-
         cls.chinanet = []
         cls.chinanet.append(ip_network('192.168.0.0/16'))
         cls.chinanet.append(ip_network('172.16.0.0/12'))
@@ -1250,6 +1217,7 @@ class Config(object):
         self.parentdict[name] = proxy
 
 conf = Config()
+conf.addparentproxy('direct', (None, None, None, None, None))
 
 
 @atexit.register
@@ -1275,7 +1243,6 @@ def main():
         conf.addparentproxy('https', ('https', host, int(port), user, passwd))
     if conf.userconf.dgetbool('cow', 'enable', True):
         cow_abs()
-    conf.parentdictalive = conf.parentdict.copy()
     updatedaemon = Thread(target=updateNbackup)
     updatedaemon.daemon = True
     updatedaemon.start()
