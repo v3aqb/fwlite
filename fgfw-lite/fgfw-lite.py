@@ -28,7 +28,7 @@ from subprocess import Popen
 import shlex
 import time
 import re
-from threading import Thread, Timer
+from threading import Thread
 import atexit
 import platform
 import base64
@@ -66,7 +66,7 @@ if ' ' in WORKINGDIR:
 os.chdir(WORKINGDIR)
 
 if sys.platform.startswith('win'):
-    PYTHON2 = '%s/include/Python27/python27.exe' % WORKINGDIR
+    PYTHON2 = '%s/Python27/python27.exe' % WORKINGDIR
 else:
     for cmd in ('python2.7', 'python27', 'python2'):
         if os.system('which %s' % cmd) == 0:
@@ -77,8 +77,8 @@ if not os.path.isfile('./userconf.ini'):
     with open('./userconf.ini', 'w') as f:
         f.write(open('./userconf.sample.ini').read())
 
-if not os.path.isfile('./include/redirector.txt'):
-    with open('./include/redirector.txt', 'w') as f:
+if not os.path.isfile('./fgfw-lite/redirector.txt'):
+    with open('./fgfw-lite/redirector.txt', 'w') as f:
         f.write('''\
 |http://www.google.com/search forcehttps
 |http://www.google.com/url forcehttps
@@ -90,11 +90,11 @@ if not os.path.isfile('./include/redirector.txt'):
 |http://*.googlecode.com forcehttps
 |http://*.wikipedia.org forcehttps
 ''')
-if not os.path.isfile('./include/local.txt'):
-    with open('./include/local.txt', 'w') as f:
+if not os.path.isfile('./fgfw-lite/local.txt'):
+    with open('./fgfw-lite/local.txt', 'w') as f:
         f.write('! local gfwlist config\n! rules: http://t.cn/zTeBinu\n')
 
-for item in ['./include/redirector.txt', './userconf.ini', './include/local.txt']:
+for item in ['./fgfw-lite/redirector.txt', './userconf.ini', './fgfw-lite/local.txt']:
     with open(item) as f:
         data = open(item).read()
     with open(item, 'w') as f:
@@ -256,13 +256,12 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             else:
                 s = '%s /%s %s\r\n' % (self.request.method, self.requestpath.decode('utf-8'), self.request.version)
-            s = s.encode('latin1')
-            for key, value in self.request.headers.items():
-                s += b'%s: %s\r\n' % (key, value)
-            s += b'\r\n'
+            s = [s.encode('latin1'),]
+            s.append('\r\n'.join(['%s: %s' % (key, value) for key, value in self.request.headers.items()]).encode('utf8'))
+            s.append(b'\r\n\r\n')
             if self.request.body:
-                s += self.request.body + b'\r\n\r\n'
-            _on_connect(bytes(s))
+                s.extend([self.request.body, b'\r\n\r\n'])
+            _on_connect(b''.join(s))
 
         def _on_connect(data=None):
             self.upstream.read_until_regex(b"\r?\n\r?\n", _on_headers)
@@ -397,13 +396,12 @@ class ProxyHandler(tornado.web.RequestHandler):
                 s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
             if self.request.method != 'CONNECT':
                 self.request.headers['Connection'] = 'close'
-            for key, value in self.request.headers.items():
-                s += '%s: %s\r\n' % (key, value)
-            s += '\r\n'
-            s = s.encode()
+            s = [s.encode('latin1'),]
+            s.append('\r\n'.join(['%s: %s' % (key, value) for key, value in self.request.headers.items()]).encode('utf8'))
+            s.append(b'\r\n\r\n')
             if self.request.body:
-                s += self.request.body + b'\r\n\r\n'
-            start_tunnel(s)
+                s.extend([self.request.body, b'\r\n\r\n'])
+            start_tunnel(b''.join(s))
 
         def socks5_handshake(data=None):
             def get_server_auth_method(data=None):
@@ -635,7 +633,7 @@ class redirector(object):
     def config(self):
         self.list = []
 
-        for line in open('./include/redirector.txt'):
+        for line in open('./fgfw-lite/redirector.txt'):
             line = line.strip()
             if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
                 try:
@@ -676,7 +674,7 @@ def chkproxy():
 
 def ifupdate():
     if conf.userconf.dgetbool('FGFW_Lite', 'autoupdate'):
-        lastupdate = conf.presets.dgetfloat('Update', 'LastUpdate', 0)
+        lastupdate = conf.version.dgetfloat('Update', 'LastUpdate', 0)
         if time.time() - lastupdate > conf.UPDATE_INTV * 60 * 60:
             update(auto=True)
 
@@ -688,11 +686,11 @@ def ifbackup():
 
 
 def update(auto=False):
-    conf.presets.set('Update', 'LastUpdate', str(time.time()))
+    conf.version.set('Update', 'LastUpdate', str(time.time()))
     for item in FGFWProxyAbs.ITEMS:
         if item.enableupdate:
             item.update()
-    Timer(4, restart).start()
+    restart()
 
 
 def restart():
@@ -801,7 +799,7 @@ class FGFWProxyAbs(object):
         if len(self.filelist) > 0:
             for i in range(len(self.filelist)):
                 url, path = self.filelist[i]
-                etag = conf.presets.dget('Update', path.replace('./', '').replace('/', '-'), '')
+                etag = conf.version.dget('Update', path.replace('./', '').replace('/', '-'), '')
                 self.updateViaHTTP(url, etag, path)
 
     def updateViaHTTP(self, url, etag, path):
@@ -810,12 +808,12 @@ class FGFWProxyAbs(object):
         try:
             r = urllib2.urlopen(req)
         except Exception as e:
-            logger.info('{} NOT updated. Reason: {}'.format(path, e.reason))
+            logger.info('{} NOT updated. Reason: {}'.format(path, e))
         else:
             if r.getcode() == 200:
                 with open(path, 'wb') as localfile:
                     localfile.write(r.read())
-                conf.presets.set('Update', path.replace('./', '').replace('/', '-'), r.info().getheader('ETag'))
+                conf.version.set('Update', path.replace('./', '').replace('/', '-'), r.info().getheader('ETag'))
                 logger.info('%s Updated.' % path)
             else:
                 logger.info('{} NOT updated. Reason: {}'.format(path, str(r.getcode())))
@@ -864,10 +862,7 @@ class goagentabs(FGFWProxyAbs):
             if self.enable:
                 conf.addparentproxy('GoAgent-PAAS', ('http', '127.0.0.1', 8088, None, None))
 
-        if os.path.isfile("./include/dummy"):
-            proxy.set('listen', 'visible', '0')
-            os.remove("./include/dummy")
-        elif '-hide' in sys.argv[1:]:
+        if '-hide' in sys.argv[1:]:
             proxy.set('listen', 'visible', '0')
         else:
             proxy.set('listen', 'visible', '1')
@@ -1011,7 +1006,7 @@ class shadowsocksabs(FGFWProxyAbs):
 
             password = conf.userconf.dget('shadowsocks', 'password', 'barfoo!')
             method = conf.userconf.dget('shadowsocks', 'method', 'table')
-            self.cmd += ' -s {} -p {} -l 1080 -k {} -m {}'.format(server, server_port, password, method.strip('"'))
+            self.cmd = '{} -s {} -p {} -l 1080 -k {} -m {}'.format(self.cmd, server, server_port, password, method.strip('"'))
 
 
 class cow_abs(FGFWProxyAbs):
@@ -1028,7 +1023,7 @@ class cow_abs(FGFWProxyAbs):
             self.cmd = '%s/cow/cow.exe' % WORKINGDIR
         else:
             self.cmd = '%s/cow/cow' % WORKINGDIR
-        self.enableupdate = False
+        self.enableupdate = conf.userconf.dgetbool('cow', 'update', False)
         if not os.path.isfile(self.cmd):
             self.enable = False
             return
@@ -1059,14 +1054,14 @@ class fgfwproxy(FGFWProxyAbs):
         self.arg = arg
 
     def _config(self):
-        self.filelist = [['https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './include/gfwlist.txt'],
-                         ['http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './include/delegated-apnic-latest'],
-                         ['https://fgfw-lite.googlecode.com/git-history/master/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
-                         ['https://fgfw-lite.googlecode.com/git-history/master/include/cloud.txt', './include/cloud.txt'],
+        self.filelist = [['https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './fgfw-lite/gfwlist.txt'],
+                         ['http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './fgfw-lite/delegated-apnic-latest'],
+                         ['https://fgfw-lite.googlecode.com/git-history/master/fgfw-lite/FGFW_Lite.py', './fgfw-lite/FGFW_Lite.py'],
+                         ['https://fgfw-lite.googlecode.com/git-history/master/fgfw-lite/cloud.txt', './fgfw-lite/cloud.txt'],
                          ['https://fgfw-lite.googlecode.com/git-history/master/userconf.sample.ini', './userconf.sample.ini'],
                          ['https://fgfw-lite.googlecode.com/git-history/master/README.md', './README.md'],
-                         # ['https://github.com/v3aqb/fgfw-lite/raw/master/include/FGFW_Lite.py', './include/FGFW_Lite.py'],
-                         # ['https://github.com/v3aqb/fgfw-lite/raw/master/include/cloud.txt', './include/cloud.txt'],
+                         # ['https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/FGFW_Lite.py', './fgfw-lite/FGFW_Lite.py'],
+                         # ['https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/cloud.txt', './fgfw-lite/cloud.txt'],
                          # ['https://github.com/v3aqb/fgfw-lite/raw/master/userconf.sample.ini', './userconf.sample.ini'],
                          # ['https://github.com/v3aqb/fgfw-lite/raw/master/README.md', './README.md'],
                          ]
@@ -1118,13 +1113,13 @@ class fgfwproxy(FGFWProxyAbs):
                 else:
                     cls.gfwlist.append(o)
 
-        for line in open('./include/local.txt'):
+        for line in open('./fgfw-lite/local.txt'):
             add_rule(line, force=True)
 
-        for line in open('./include/cloud.txt'):
+        for line in open('./fgfw-lite/cloud.txt'):
             add_rule(line, force=True)
 
-        with open('./include/gfwlist.txt') as f:
+        with open('./fgfw-lite/gfwlist.txt') as f:
             try:
                 data = ''.join(f.read().split())
                 if len(data) % 4:
@@ -1137,7 +1132,7 @@ class fgfwproxy(FGFWProxyAbs):
                     for line in f:
                         add_rule(line)
                 else:
-                    logger.warning('./include/gfwlist.txt is corrupted!')
+                    logger.warning('./fgfw-lite/gfwlist.txt is corrupted!')
 
     @classmethod
     def parentproxy(cls, uri, domain=None, forceproxy=False):
@@ -1146,8 +1141,7 @@ class fgfwproxy(FGFWProxyAbs):
             url:  'https://www.google.com'
             domain: 'www.google.com'
         '''
-        if uri and domain is None:
-            domain = uri.split('/')[2].split(':')[0]
+        domain = uri.split('/')[2].split(':')[0]
 
         def ifgfwlist_force():
             for rule in cls.gfwlist_force:
@@ -1197,7 +1191,7 @@ class fgfwproxy(FGFWProxyAbs):
                     ppname = parentlist[int(hosthash, 16) % len(parentlist)]
                     return (ppname, conf.parentdictalive.get(ppname))
         if ifhost_in_china():
-            pass
+            return ('direct', conf.parentdictalive.get('direct'))
         elif forceproxy or ifgfwlist():
             if parentlist:
                 if len(parentlist) == 1:
@@ -1220,7 +1214,7 @@ class fgfwproxy(FGFWProxyAbs):
         cls.chinanet.append(ip_network('127.0.0.0/8'))
         # ripped from https://github.com/fivesheep/chnroutes
         import math
-        with open('./include/delegated-apnic-latest') as remotefile:
+        with open('./fgfw-lite/delegated-apnic-latest') as remotefile:
             data = remotefile.read()
 
         cnregex = re.compile(r'apnic\|cn\|ipv4\|[0-9\.]+\|[0-9]+\|[0-9]+\|a.*', re.IGNORECASE)
@@ -1288,7 +1282,7 @@ class SConfigParser(configparser.ConfigParser):
 
 class Config(object):
     def __init__(self):
-        self.presets = SConfigParser()
+        self.version = SConfigParser()
         self.userconf = SConfigParser()
         self.reload()
         self.UPDATE_INTV = 6
@@ -1296,11 +1290,11 @@ class Config(object):
         self.parentdict = {}
 
     def reload(self):
-        self.presets.read('presets.ini')
+        self.version.read('version.ini')
         self.userconf.read('userconf.ini')
 
     def confsave(self):
-        self.presets.write(open('presets.ini', 'w'))
+        self.version.write(open('version.ini', 'w'))
         self.userconf.write(open('userconf.ini', 'w'))
 
     def addparentproxy(self, name, proxy):
