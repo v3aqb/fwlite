@@ -909,8 +909,8 @@ class shadowsocksabs(FGFWProxyAbs):
             conf.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
         self.enableupdate = conf.userconf.dgetbool('shadowsocks', 'update', False)
         if not self.cmd.endswith('shadowsocks.exe'):
-            server = conf.userconf.dget('shadowsocks', 'server', '')
-            server_port = conf.userconf.dget('shadowsocks', 'server_port', '')
+            server = conf.userconf.dget('shadowsocks', 'server', '127.0.0.1')
+            server_port = conf.userconf.dget('shadowsocks', 'server_port', '8388')
             if not server_port.isdigit():
                 portlst = []
                 for item in server_port.split(','):
@@ -923,7 +923,7 @@ class shadowsocksabs(FGFWProxyAbs):
                 server_port = random.choice(portlst)
 
             password = conf.userconf.dget('shadowsocks', 'password', 'barfoo!')
-            method = conf.userconf.dget('shadowsocks', 'method', 'table')
+            method = conf.userconf.dget('shadowsocks', 'method', 'aes-256-cfb')
             self.cmd = '{} -s {} -p {} -l 1080 -k {} -m {}'.format(self.cmd, server, server_port, password, method.strip('"'))
 
 
