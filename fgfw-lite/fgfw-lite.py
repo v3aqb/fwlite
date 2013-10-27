@@ -40,6 +40,7 @@ import urllib2
 import tornado.ioloop
 import tornado.iostream
 import tornado.web
+import tornado.gen
 from tornado.httputil import HTTPHeaders
 try:
     import configparser
@@ -148,6 +149,36 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         logger.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
 
+    @tornado.gen.coroutine
+    def connect_remote_via_socks5(self):
+        logger.info('sending auth info')
+        self.upstream.write(b"\x05\x02\x00\x02" if self.ppusername else b"\x05\x01\x00")
+        logger.info('reading auth method')
+        data = yield tornado.gen.Task(self.upstream.read_bytes, 2)
+        logger.info('auth method:' + repr(data))
+        if data == b'\x05\x02':
+            self.upstream.write(b''.join([b"\x01",
+                                        chr(len(self.ppusername)).encode(),
+                                        self.ppusername.encode(),
+                                        chr(len(self.pppassword)).encode(),
+                                        self.pppassword.encode()]))
+            data = yield tornado.gen.Task(self.upstream.read_bytes, 2)
+        if data == b'\x05\x00' or data == b'\x01\x00':
+            logger.info('auth pass, connecting remote')
+            self.upstream.write(b''.join([b"\x05\x01\x00\x03",
+                                        chr(len(self.request.host)).encode(),
+                                        self.request.host.encode(),
+                                        struct.pack(">H", self.requestport)]))
+            data = yield tornado.gen.Task(self.upstream.read_bytes, 4)
+            if data.startswith(b'\x05\x00\x00\x01'):
+                data = yield tornado.gen.Task(self.upstream.read_bytes, 6)
+            elif data.startswith(b'\x05\x00\x00\x03'):
+                data = yield tornado.gen.Task(self.upstream.read_bytes, 3)
+                data = yield tornado.gen.Task(self.upstream.read_bytes, data[0])
+            logger.info('connected')
+        else:
+            self.send_error(status_code=500)
+
     @tornado.web.asynchronous
     def get(self):
 
@@ -156,9 +187,6 @@ class ProxyHandler(tornado.web.RequestHandler):
         def _get_upstream():
 
             def socks5_handshake(data=None):
-                def get_server_auth_method(data=None):
-                    self.upstream.read_bytes(2, socks5_auth)
-
                 def socks5_auth(data=None):
                     if data == b'\x05\x00':  # no auth needed
                         conn_upstream()
@@ -183,9 +211,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                                    chr(len(self.request.host)).encode(),
                                    self.request.host.encode(),
                                    struct.pack(">H", self.requestport)])
-                    self.upstream.write(req, post_conn_upstream)
-
-                def post_conn_upstream(data=None):
+                    self.upstream.write(req)
                     self.upstream.read_bytes(4, read_upstream_data)
 
                 def read_upstream_data(data=None):
@@ -207,11 +233,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.upstream.close()
                     client.close()
 
-                if self.ppusername:
-                    authmethod = b"\x05\x02\x00\x02"
-                else:
-                    authmethod = b"\x05\x01\x00"
-                self.upstream.write(authmethod, get_server_auth_method)
+                self.upstream.write(b"\x05\x02\x00\x02" if self.ppusername else b"\x05\x01\x00")
+                self.upstream.read_bytes(2, socks5_auth)
 
             def _create_upstream():
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
@@ -261,11 +284,8 @@ class ProxyHandler(tornado.web.RequestHandler):
             s.append(b'\r\n\r\n')
             if self.request.body:
                 s.extend([self.request.body, b'\r\n\r\n'])
-            _on_connect(b''.join(s))
-
-        def _on_connect(data=None):
+            self.upstream.write(b''.join(s))
             self.upstream.read_until_regex(b"\r?\n\r?\n", _on_headers)
-            self.upstream.write(data)
 
         def _on_headers(data=None):
             read_from_upstream(data)
@@ -404,9 +424,6 @@ class ProxyHandler(tornado.web.RequestHandler):
             start_tunnel(b''.join(s))
 
         def socks5_handshake(data=None):
-            def get_server_auth_method(data=None):
-                upstream.read_bytes(2, socks5_auth)
-
             def socks5_auth(data=None):
                 if data == b'\x05\x00':  # no auth needed
                     conn_upstream()
@@ -431,9 +448,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                                chr(len(self.request.host)).encode(),
                                self.request.host.encode(),
                                struct.pack(">H", self.requestport)])
-                upstream.write(req, post_conn_upstream)
-
-            def post_conn_upstream(data=None):
+                upstream.write(req)
                 upstream.read_bytes(4, read_upstream_data)
 
             def read_upstream_data(data=None):
@@ -458,33 +473,24 @@ class ProxyHandler(tornado.web.RequestHandler):
                 upstream.close()
                 client.close()
 
-            if self.ppusername:
-                authmethod = b"\x05\x02\x00\x02"
-            else:
-                authmethod = b"\x05\x01\x00"
-            upstream.write(authmethod, get_server_auth_method)
+            upstream.write(b"\x05\x02\x00\x02" if self.ppusername else b"\x05\x01\x00")
+            upstream.read_bytes(2, socks5_auth)
 
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+        self.upstream = tornado.iostream.IOStream(s)
+        upstream = self.upstream
         if self.pphost is None:
             if self.request.method == 'CONNECT':
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-                upstream = tornado.iostream.IOStream(s)
-                upstream.connect((self.request.host.split(':')[0], self.requestport), start_ssltunnel)
+                self.upstream.connect((self.request.host.split(':')[0], self.requestport), start_ssltunnel)
             else:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-                upstream = tornado.iostream.IOStream(s)
-                upstream.connect((self.request.host.split(':')[0], self.requestport), http_conntgt)
+                self.upstream.connect((self.request.host.split(':')[0], self.requestport), http_conntgt)
         elif self.pptype == 'http':
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-            upstream = tornado.iostream.IOStream(s)
-            upstream.connect((self.pphost, int(self.ppport)), http_conntgt)
+            self.upstream.connect((self.pphost, int(self.ppport)), http_conntgt)
         elif self.pptype == 'https':
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-            upstream = tornado.iostream.SSLIOStream(s)
-            upstream.connect((self.pphost, int(self.ppport)), http_conntgt)
+            self.upstream = tornado.iostream.SSLIOStream(s)
+            self.upstream.connect((self.pphost, int(self.ppport)), http_conntgt)
         elif self.pptype == 'socks5':
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-            upstream = tornado.iostream.IOStream(s)
-            upstream.connect((self.pphost, int(self.ppport)), socks5_handshake)
+            self.upstream.connect((self.pphost, int(self.ppport)), socks5_handshake)
         else:
             client.write(b'HTTP/1.1 501 %s proxy not supported.\r\n\r\n' % self.pptype)
             client.close()
@@ -584,7 +590,7 @@ class redirector(object):
 
 
 def updateNbackup():
-    while True:
+    while 1:
         time.sleep(90)
         ifupdate()
         if conf.userconf.dgetbool('AutoBackupConf', 'enable', False):
@@ -691,7 +697,7 @@ class FGFWProxyAbs(object):
         self.enableupdate = True
 
     def start(self):
-        while True:
+        while 1:
             if self.enable:
                 if self.cwd:
                     os.chdir(self.cwd)
@@ -1245,7 +1251,7 @@ def main():
     updatedaemon = Thread(target=updateNbackup)
     updatedaemon.daemon = True
     updatedaemon.start()
-    while True:
+    while 1:
         try:
             exec(raw_input().strip())
         except Exception as e:
