@@ -40,7 +40,7 @@ import urllib2
 import tornado.ioloop
 import tornado.iostream
 import tornado.web
-import tornado.gen
+from tornado import gen
 from tornado.httputil import HTTPHeaders
 try:
     import configparser
@@ -142,33 +142,30 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         logger.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
 
-    @tornado.gen.coroutine
+    @gen.coroutine
     def connect_remote_via_socks5(self):
-        logger.info('sending auth info')
+        self.upstream.set_nodelay(True)
         self.upstream.write(b"\x05\x02\x00\x02" if self.ppusername else b"\x05\x01\x00")
-        logger.info('reading auth method')
-        data = yield tornado.gen.Task(self.upstream.read_bytes, 2)
-        logger.info('auth method:' + repr(data))
+        data = yield gen.Task(self.upstream.read_bytes, 2)
         if data == b'\x05\x02':
             self.upstream.write(b''.join([b"\x01",
                                         chr(len(self.ppusername)).encode(),
                                         self.ppusername.encode(),
                                         chr(len(self.pppassword)).encode(),
                                         self.pppassword.encode()]))
-            data = yield tornado.gen.Task(self.upstream.read_bytes, 2)
+            data = yield gen.Task(self.upstream.read_bytes, 2)
         if data == b'\x05\x00' or data == b'\x01\x00':
-            logger.info('auth pass, connecting remote')
             self.upstream.write(b''.join([b"\x05\x01\x00\x03",
                                         chr(len(self.request.host)).encode(),
                                         self.request.host.encode(),
                                         struct.pack(">H", self.requestport)]))
-            data = yield tornado.gen.Task(self.upstream.read_bytes, 4)
+            data = yield gen.Task(self.upstream.read_bytes, 4)
             if data.startswith(b'\x05\x00\x00\x01'):
-                data = yield tornado.gen.Task(self.upstream.read_bytes, 6)
+                data = yield gen.Task(self.upstream.read_bytes, 6)
             elif data.startswith(b'\x05\x00\x00\x03'):
-                data = yield tornado.gen.Task(self.upstream.read_bytes, 3)
-                data = yield tornado.gen.Task(self.upstream.read_bytes, data[0])
-            logger.info('connected')
+                data = yield gen.Task(self.upstream.read_bytes, 3)
+                data = yield gen.Task(self.upstream.read_bytes, data[0])
+            self.upstream.set_nodelay(False)
         else:
             self.send_error(status_code=500)
 
@@ -219,13 +216,14 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.upstream.read_bytes(data[0], conn)
 
                 def conn(data=None):
+                    self.upstream.set_nodelay(False)
                     _sent_request()
 
                 def fail():
-                    client.write(b'HTTP/1.1 500 socks5 proxy Connection Failed.\r\n\r\n')
+                    self.send_error(500)
                     self.upstream.close()
-                    client.close()
 
+                self.upstream.set_nodelay(True)
                 self.upstream.write(b"\x05\x02\x00\x02" if self.ppusername else b"\x05\x01\x00")
                 self.upstream.read_bytes(2, socks5_auth)
 
@@ -242,8 +240,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 elif self.pptype == 'socks5':
                     self.upstream.connect((self.pphost, int(self.ppport)), socks5_handshake)
                 else:
-                    client.write(b'HTTP/1.1 501 %s proxy not supported.\r\n\r\n' % self.pptype)
-                    client.close()
+                    self.send_error(501)
 
             lst = UPSTREAM_POOL.get(self.upstream_name)
             self.upstream = None
@@ -266,13 +263,13 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         def _sent_request():
             if self.pptype == 'http' or self.pptype == 'https':
-                s = '%s %s %s\r\n' % (self.request.method, self.request.uri.decode('utf-8'), self.request.version)
+                s = b'%s %s %s\r\n' % (self.request.method, self.request.uri.decode('utf-8').encode('latin1'), self.request.version)
                 if self.ppusername and 'Proxy-Authorization' not in self.request.headers:
                     a = '%s:%s' % (self.ppusername, self.pppassword)
                     self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             else:
-                s = '%s /%s %s\r\n' % (self.request.method, self.requestpath.decode('utf-8'), self.request.version)
-            s = [s.encode('latin1'),]
+                s = b'%s /%s %s\r\n' % (self.request.method, self.requestpath.decode('utf-8').encode('latin1'), self.request.version)
+            s = [s,]
             s.append('\r\n'.join(['%s: %s' % (key, value) for key, value in self.request.headers.items()]).encode('utf8'))
             s.append(b'\r\n\r\n')
             if self.request.body:
@@ -401,7 +398,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         def http_conntgt(data=None):
             if self.pptype == 'http' or self.pptype == 'https':
-                s = '%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
+                s = b'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
                 if 'Proxy-Authorization' not in self.request.headers and self.ppusername:
                     a = '%s:%s' % (self.ppusername, self.pppassword)
                     self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
@@ -409,8 +406,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                 s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
             if self.request.method != 'CONNECT':
                 self.request.headers['Connection'] = 'close'
-            s = [s.encode('latin1'),]
-            s.append('\r\n'.join(['%s: %s' % (key, value) for key, value in self.request.headers.items()]).encode('utf8'))
+            s = [s,]
+            s.append(b'\r\n'.join(['%s: %s' % (key, value) for key, value in self.request.headers.items()]).encode('utf8'))
             s.append(b'\r\n\r\n')
             if self.request.body:
                 s.extend([self.request.body, b'\r\n\r\n'])
@@ -456,16 +453,17 @@ class ProxyHandler(tornado.web.RequestHandler):
                 upstream.read_bytes(data[0], conn)
 
             def conn(data=None):
+                upstream.set_nodelay(False)
                 if self.request.method == 'CONNECT':
                     start_ssltunnel()
                 else:
                     http_conntgt()
 
             def fail():
-                client.write(b'HTTP/1.1 500 socks5 proxy Connection Failed.\r\n\r\n')
+                self.send_error(500)
                 upstream.close()
-                client.close()
 
+            upstream.set_nodelay(True)
             upstream.write(b"\x05\x02\x00\x02" if self.ppusername else b"\x05\x01\x00")
             upstream.read_bytes(2, socks5_auth)
 
@@ -485,8 +483,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         elif self.pptype == 'socks5':
             self.upstream.connect((self.pphost, int(self.ppport)), socks5_handshake)
         else:
-            client.write(b'HTTP/1.1 501 %s proxy not supported.\r\n\r\n' % self.pptype)
-            client.close()
+            self.send_error(501)
 
 
 class ForceProxyHandler(ProxyHandler):
@@ -580,7 +577,7 @@ class redirector(object):
             if q.startswith('xn--'):
                 q = q[4:].decode('punycode')
             result = 'https://www.google.com/search?q=%s&ie=utf-8&oe=utf-8&aq=t&rls=org.mozilla:zh-CN:official' % q
-            logger.info('Match redirect rule addressbar-search, {}'.format(result))
+            logger.info('Match redirect rule addressbar-search')
             return result
         for rule, result in cls.lst:
             if rule.match(uri, host):
@@ -637,10 +634,7 @@ def backup():
         logger.error("read userconf.ini failed!")
     else:
         if not os.path.isdir(backupPath):
-            try:
-                os.makedirs(backupPath)
-            except:
-                logger.error('create dir %s failed!' % backupPath)
+            os.makedirs(backupPath)
         if len(backuplist) > 0:
             logger.info("start packing")
             for i in range(len(backuplist)):
@@ -656,7 +650,7 @@ def backup():
                         logger.info('Packing %s failed.' % filepath)
                     else:
                         pack.close()
-                        logger.info('Done.')
+                        logger.info('Done Packing %s.' % filepath)
         #remove old backup file
         rotation = conf.userconf.dgetint('AutoBackupConf', 'rotation', 10)
         filelist = os.listdir(str(backupPath))
