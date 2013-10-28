@@ -18,7 +18,7 @@
 # You should have received a copy of the GNU General Public License along
 # with this program; if not, see <http://www.gnu.org/licenses>.
 
-from __future__ import print_function
+from __future__ import print_function, unicode_literals
 
 __version__ = '0.3.3.0'
 
@@ -112,6 +112,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.pppassword = pp
 
     def prepare(self):
+        self.request.uri = unicode(self.request.uri, 'utf8')
         uri = self.request.uri
         if '//' not in uri:
             uri = 'https://{}'.format(uri)
@@ -235,19 +236,20 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         def _sent_request():
             if self.pptype == 'http' or self.pptype == 'https':
-                s = b'%s %s %s\r\n' % (self.request.method, self.request.uri.decode('utf-8').encode('latin1'), self.request.version)
+                s = u'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
                 if self.ppusername and 'Proxy-Authorization' not in self.request.headers:
                     a = '%s:%s' % (self.ppusername, self.pppassword)
                     self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             else:
-                s = b'%s /%s %s\r\n' % (self.request.method, self.requestpath.decode('utf-8').encode('latin1'), self.request.version)
+                s = u'%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
             s = [s,]
-            s.append('\r\n'.join(['%s: %s' % (key, value) for key, value in self.request.headers.items()]).encode('utf8'))
-            s.append(b'\r\n\r\n')
+            s.append(u'\r\n'.join([u'%s: %s' % (key, unicode(value, 'utf8')) for key, value in self.request.headers.items()]))
+            s.append(u'\r\n\r\n')
+            self.upstream.write(u''.join(s).encode('latin1'))
             if self.request.body:
-                s.extend([self.request.body, b'\r\n\r\n'])
-            self.upstream.write(b''.join(s))
-            self.upstream.read_until_regex(b"\r?\n\r?\n", _on_headers)
+                self.upstream.write(self.request.body)
+                self.upstream.write(b'\r\n\r\n')
+            self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def _on_headers(data=None):
             read_from_upstream(data)
@@ -361,7 +363,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             client.read_until_close(client_close, read_from_client)
             upstream.read_until_close(upstream_close, read_from_upstream)
             if data:
-                read_from_client(data)
+                read_from_client(data.encode())
 
         def start_ssltunnel(data=None):
             client.read_until_close(client_close, read_from_client)
