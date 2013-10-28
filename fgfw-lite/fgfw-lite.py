@@ -125,6 +125,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 self.redirect(new_url)
             return
+        # self.request.headers['X-Forwarded-For'] = self.request.remote_ip
 
         urisplit = uri.split('/')
         self.requestpath = '/'.join(urisplit[3:])
@@ -257,6 +258,8 @@ class ProxyHandler(tornado.web.RequestHandler):
             data = unicode(data, 'latin1')
             first_line, _, header_data = data.partition("\n")
             status_code = int(first_line.split()[1])
+            self.set_status(status_code)
+
             headers = HTTPHeaders.parse(header_data)
             self._close_flag = True if headers.get('Connection') == 'close' else False
             if "Content-Length" in headers:
