@@ -20,7 +20,7 @@
 
 from __future__ import print_function, unicode_literals
 
-__version__ = '0.3.3.0'
+__version__ = '0.3.4.0'
 
 import sys
 import os
@@ -496,7 +496,10 @@ class autoproxy_rule(object):
             elif rule.startswith('/') and rule.endswith('/'):
                 return (self.REGEX, re.compile(rule[1:-1]))
             else:
-                return (self.REGEX, re.compile(rule.replace('|', '^').replace('.', r'\.').replace('?', r'\?').replace('*', '.*')))
+                regex = rule.replace('|', '^').replace('.', r'\.').replace('?', r'\?').replace('*', '.*')
+                if not rule.startswith('|'):
+                    regex = ''.join([r'^http://.*', regex])
+                return (self.REGEX, re.compile())
 
         if rule.startswith('@@'):
             a, b = parse(rule.replace('@@', ''))
@@ -579,12 +582,18 @@ class parent_proxy(object):
                 pass
             else:
                 if force:
-                    self.gfwlist_force.append(o)
+                    if o.override:
+                        self.gfwlist_force.insert(0, o)
+                    else:
+                        self.gfwlist_force.append(o)
                 else:
-                    self.gfwlist.append(o)
+                    if o.override:
+                        self.gfwlist.insert(0, o)
+                    else:
+                        self.gfwlist.append(o)
 
         for line in open('./fgfw-lite/local.txt'):
-            add_rule(line, force=True)
+            add_rule(line)
 
         for line in open('./fgfw-lite/cloud.txt'):
             add_rule(line, force=True)
@@ -633,21 +642,21 @@ class parent_proxy(object):
             domain: 'www.google.com'
         '''
         domain = uri.split('/')[2].split(':')[0]
-
+        # return ('direct', conf.parentdict.get('direct'))
         def ifgfwlist_force():
             for rule in self.gfwlist_force:
                 if rule.match(uri, domain):
                     logger.info('Autoproxy Rule match {}'.format(rule.rule))
                     return not rule.override
-            return False
+            return None
 
         def ifhost_in_china():
             if not domain:
-                return False
+                return None
             try:
                 ipo = ip_address(socket.gethostbyname(domain))
             except Exception:
-                return False
+                return None
             for net in self.chinanet:
                 if ipo in net:
                     return True
@@ -658,9 +667,9 @@ class parent_proxy(object):
                 if rule.match(uri, domain):
                     logger.info('Autoproxy Rule match {}'.format(rule.rule))
                     return not rule.override
-            return False
+            return None
 
-        parentlist = list(conf.parentdict.keys())
+        parentlist = conf.parentdict.keys()
         if uri.startswith('ftp://'):
             if 'GoAgent' in parentlist:
                 parentlist.remove('GoAgent')
@@ -668,17 +677,13 @@ class parent_proxy(object):
             parentlist.remove('cow')
         parentlist.remove('direct')
         # select parent via uri
-        if ifgfwlist_force():
-            if parentlist:
-                if len(parentlist) == 1:
-                    return (parentlist[0], conf.parentdict.get(parentlist[0]))
-                else:
-                    hosthash = hashlib.md5(domain).hexdigest()
-                    ppname = parentlist[int(hosthash, 16) % len(parentlist)]
-                    return (ppname, conf.parentdict.get(ppname))
-        if ifhost_in_china():
+
+        a = ifgfwlist_force()
+
+        if a is False or ifhost_in_china():
             return ('direct', conf.parentdict.get('direct'))
-        elif forceproxy or ifgfwlist():
+
+        if a or forceproxy or ifgfwlist():
             if parentlist:
                 if len(parentlist) == 1:
                     return (parentlist[0], conf.parentdict.get(parentlist[0]))
@@ -686,6 +691,7 @@ class parent_proxy(object):
                     hosthash = hashlib.md5(domain).hexdigest()
                     ppname = parentlist[int(hosthash, 16) % len(parentlist)]
                     return (ppname, conf.parentdict.get(ppname))
+
         if 'cow' in conf.parentdict.keys():
             return ('cow', conf.parentdict.get('cow'))
         return ('direct', conf.parentdict.get('direct'))
