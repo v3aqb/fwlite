@@ -254,7 +254,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         def _on_headers(data=None):
             read_from_upstream(data)
             self._headers_written = True
-            data = data.decode()
+            data = unicode(data, 'latin1')
             first_line, _, header_data = data.partition("\n")
             status_code = int(first_line.split()[1])
             headers = HTTPHeaders.parse(header_data)
