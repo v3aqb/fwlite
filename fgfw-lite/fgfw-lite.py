@@ -499,7 +499,7 @@ class autoproxy_rule(object):
                 regex = rule.replace('|', '^').replace('.', r'\.').replace('?', r'\?').replace('*', '.*')
                 if not rule.startswith('|'):
                     regex = ''.join([r'^http://.*', regex])
-                return (self.REGEX, re.compile())
+                return (self.REGEX, re.compile(regex))
 
         if rule.startswith('@@'):
             a, b = parse(rule.replace('@@', ''))
