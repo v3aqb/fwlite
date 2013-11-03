@@ -554,8 +554,8 @@ class redirector(object):
         searchword = re.match(r'^http://([\w-]+)/$', uri)
         if searchword:
             q = searchword.group(1)
-            if q.startswith('xn--'):
-                q = q[4:].decode('punycode')
+            if 'xn--' in q:
+                q = q.decode('idna')
             result = 'https://www.google.com/search?q=%s&ie=utf-8&oe=utf-8&aq=t&rls=org.mozilla:zh-CN:official' % q
             logger.info('Match redirect rule addressbar-search')
             return result
