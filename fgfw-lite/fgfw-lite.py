@@ -556,7 +556,7 @@ class redirector(object):
             q = searchword.group(1)
             if 'xn--' in q:
                 q = q.decode('idna')
-            result = 'https://www.google.com/search?q=%s&ie=utf-8&oe=utf-8&aq=t&rls=org.mozilla:zh-CN:official' % q
+            result = 'https://www.google.com/search?q=%s&ie=utf-8&oe=utf-8&aq=t&rls=org.mozilla:zh-CN:official' % urllib2.quote(q.encode('utf-8'))
             logger.info('Match redirect rule addressbar-search')
             return result
         for rule, result in self.lst:
