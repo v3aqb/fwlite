@@ -888,7 +888,7 @@ class goagentabs(FGFWProxyAbs):
         proxy.set("gae", "password", conf.userconf.dget('goagent', 'goagentGAEpassword', ''))
         proxy.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
         proxy.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
-        proxy.set("google_hk", "hosts", conf.userconf.dget('goagent', 'gaehkhosts', 'www.google.com|mail.google.com|www.l.google.com|mail.l.google.com|www.google.com.hk'))
+        proxy.set("google_hk", "hosts", conf.userconf.dget('goagent', 'gaehkhosts', 'www.google.com|mail.google.com'))
         proxy.set('pac', 'enable', '0')
         proxy.set('paas', 'fetchserver', conf.userconf.dget('goagent', 'paasfetchserver', ''))
         if conf.userconf.dget('goagent', 'paasfetchserver'):
