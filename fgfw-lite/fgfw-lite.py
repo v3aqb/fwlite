@@ -92,7 +92,7 @@ if not os.path.isfile('./fgfw-lite/redirector.txt'):
 ''')
 if not os.path.isfile('./fgfw-lite/local.txt'):
     with open('./fgfw-lite/local.txt', 'w') as f:
-        f.write('! local gfwlist config\n! rules: http://t.cn/zTeBinu\n')
+        f.write('! local gfwlist config\n! rules: https://adblockplus.org/zh_CN/filters\n')
 
 for item in ['./fgfw-lite/redirector.txt', './userconf.ini', './fgfw-lite/local.txt']:
     with open(item) as f:
@@ -106,8 +106,8 @@ UPSTREAM_POOL = {}
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT']
 
-    def getparent(self, uri, host):
-        self.ppname, pp = PARENT_PROXY.parentproxy(uri, host)
+    def getparent(self, uri):
+        self.ppname, pp = PARENT_PROXY.parentproxy(uri)
         self.pptype, self.pphost, self.ppport, self.ppusername,\
             self.pppassword = pp
 
@@ -118,7 +118,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             uri = 'https://{}'.format(uri)
         host = self.request.host.split(':')[0]
         # redirector
-        new_url = REDIRECTOR.get(uri, host)
+        new_url = REDIRECTOR.get(uri)
         if new_url:
             if new_url.startswith('403'):
                 self.send_error(status_code=403)
@@ -134,7 +134,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.requestport = int(urisplit[2].split(':')[1])
         else:
             self.requestport = 443 if uri.startswith('https://') else 80
-        self.getparent(uri, host)
+        self.getparent(uri)
 
         if self.pptype == 'socks5':
             self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
@@ -464,18 +464,13 @@ class ProxyHandler(tornado.web.RequestHandler):
 
 
 class ForceProxyHandler(ProxyHandler):
-    def getparent(self, uri, host):
-        self.ppname, pp = PARENT_PROXY.parentproxy(uri, host, forceproxy=True)
+    def getparent(self, uri):
+        self.ppname, pp = PARENT_PROXY.parentproxy(uri, forceproxy=True)
         self.pptype, self.pphost, self.ppport, self.ppusername,\
             self.pppassword = pp
 
 
 class autoproxy_rule(object):
-    DOMAIN = 0
-    REGEX = 1
-    OVERRIDE_DOMAIN = 2
-    OVERRIDE_REGEX = 3
-
     def __init__(self, arg):
         super(autoproxy_rule, self).__init__()
         if not isinstance(arg, str):
@@ -486,51 +481,34 @@ class autoproxy_rule(object):
         self.rule = arg.strip()
         if len(self.rule) < 3 or self.rule.startswith('!') or self.rule.startswith('['):
             raise ValueError("invalid autoproxy_rule: %s" % self.rule)
-        self._type, self._ptrn = self._autopxy_rule_parse(self.rule)
-        self.override = True if self._type >= self.OVERRIDE_DOMAIN else False
+        self._ptrn = self._autopxy_rule_parse(self.rule)
 
     def _autopxy_rule_parse(self, rule):
         def parse(rule):
             if rule.startswith('||'):
-                return (self.REGEX, re.compile(rule.replace('.', r'\.').replace('?', r'\?').replace('*', '.*').replace('||', '^(https?://)?([^/]+\.)?')))
+                return re.compile(rule.replace('.', r'\.').replace('?', r'\?').replace('*', '.*').replace('^', r'[^\w%._-]').replace('||', '^(?:https?://)?(?:[^/]+\.)?'))
             elif rule.startswith('/') and rule.endswith('/'):
-                return (self.REGEX, re.compile(rule[1:-1]))
+                return re.compile(rule[1:-1])
             else:
-                regex = rule.replace('|', '^').replace('.', r'\.').replace('?', r'\?').replace('*', '.*')
+                regex = rule.replace('.', r'\.').replace('?', r'\?').replace('*', '.*').replace('^', r'[^\w%._-]')
+                regex = re.sub(r'^\|', r'^', regex)
+                regex = re.sub(r'\|$', r'$', regex)
                 if not rule.startswith('|'):
-                    regex = ''.join([r'^http://.*', regex])
-                return (self.REGEX, re.compile(regex))
+                    regex = re.sub(r'^', r'^http://.*', regex)
+                return re.compile(regex)
 
         if rule.startswith('@@'):
-            a, b = parse(rule.replace('@@', ''))
-            return (a+self.OVERRIDE_DOMAIN, b)
+            self.override = True
+            return parse(rule[2:])
         else:
+            self.override = False
             return parse(rule)
 
-    def match(self, url, domain=None):
+    def match(self, uri):
         # url must be something like https://www.google.com
-
-        def _match_domain(domain):
-            if not domain:
-                domain = url.split('/')[2].split(':')[0]
-            if self._ptrn.search(domain):
-                return True
-            return False
-
-        def _match_regex(uri=url, index=0):
-            if self._ptrn.search(uri):
-                return True
-            return False
-
-        if self._type is self.DOMAIN:
-            return _match_domain(domain)
-        elif self._type is self.REGEX:
-            return _match_regex()
-
-        elif self._type is self.OVERRIDE_DOMAIN:
-            return _match_domain(domain)
-        elif self._type is self.OVERRIDE_REGEX:
-            return _match_regex()
+        if self._ptrn.search(uri):
+            return True
+        return False
 
 
 class redirector(object):
@@ -560,7 +538,7 @@ class redirector(object):
             logger.info('Match redirect rule addressbar-search')
             return result
         for rule, result in self.lst:
-            if rule.match(uri, host):
+            if rule.match(uri):
                 logger.info('Match redirect rule {}, {}'.format(rule.rule, result))
                 if result == 'forcehttps':
                     return uri.replace('http://', 'https://', 1)
@@ -635,7 +613,7 @@ class parent_proxy(object):
 
             self.chinanet.append(ip_network('{}/{}'.format(starting_ip, mask2)))
 
-    def parentproxy(self, uri, domain=None, forceproxy=False):
+    def parentproxy(self, uri, forceproxy=False):
         '''
             decide which parentproxy to use.
             url:  'https://www.google.com'
@@ -645,7 +623,7 @@ class parent_proxy(object):
         # return ('direct', conf.parentdict.get('direct'))
         def ifgfwlist_force():
             for rule in self.gfwlist_force:
-                if rule.match(uri, domain):
+                if rule.match(uri):
                     logger.info('Autoproxy Rule match {}'.format(rule.rule))
                     return not rule.override
             return None
@@ -664,7 +642,7 @@ class parent_proxy(object):
 
         def ifgfwlist():
             for rule in self.gfwlist:
-                if rule.match(uri, domain):
+                if rule.match(uri):
                     logger.info('Autoproxy Rule match {}'.format(rule.rule))
                     return not rule.override
             return None
