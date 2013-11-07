@@ -479,7 +479,7 @@ class autoproxy_rule(object):
             else:
                 raise TypeError("invalid type: must be a string(or bytes)")
         self.rule = arg.strip()
-        if len(self.rule) < 3 or self.rule.startswith('!') or self.rule.startswith('['):
+        if len(self.rule) < 3 or self.rule.startswith('!') or self.rule.startswith('[') or '#' in self.rule:
             raise ValueError("invalid autoproxy_rule: %s" % self.rule)
         self._ptrn = self._autopxy_rule_parse(self.rule)
 
@@ -521,8 +521,6 @@ class redirector(object):
             if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
                 try:
                     o = autoproxy_rule(line.split()[0])
-                    if o.override:
-                        raise Exception
                 except Exception:
                     pass
                 else:
@@ -540,6 +538,8 @@ class redirector(object):
         for rule, result in self.lst:
             if rule.match(uri):
                 logger.info('Match redirect rule {}, {}'.format(rule.rule, result))
+                if rule.override:
+                    return None
                 if result == 'forcehttps':
                     return uri.replace('http://', 'https://', 1)
                 return result
