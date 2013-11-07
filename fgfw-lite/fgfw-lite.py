@@ -492,7 +492,7 @@ class autoproxy_rule(object):
     def _autopxy_rule_parse(self, rule):
         def parse(rule):
             if rule.startswith('||'):
-                return (self.DOMAIN, re.compile(rule.replace('||', '').replace('/', '').replace('.', r'\.').replace('?', r'\?').replace('*', '.*')+'$'))
+                return (self.REGEX, re.compile(rule.replace('.', r'\.').replace('?', r'\?').replace('*', '.*').replace('||', '^(https?://)?([^/]+\.)?')))
             elif rule.startswith('/') and rule.endswith('/'):
                 return (self.REGEX, re.compile(rule[1:-1]))
             else:
