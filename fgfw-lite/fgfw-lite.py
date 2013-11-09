@@ -673,7 +673,7 @@ class parent_proxy(object):
                     ppname = parentlist[int(hosthash, 16) % len(parentlist)]
                     return (ppname, conf.parentdict.get(ppname))
 
-        if 'cow' in conf.parentdict.keys():
+        if 'cow' in conf.parentdict.keys() and not uri.startswith('ftp://'):
             return ('cow', conf.parentdict.get('cow'))
         return ('direct', conf.parentdict.get('direct'))
 
