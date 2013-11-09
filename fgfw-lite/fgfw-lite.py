@@ -41,6 +41,8 @@ import tornado.ioloop
 import tornado.iostream
 import tornado.web
 from tornado.httputil import HTTPHeaders
+from tornado.httpserver import HTTPConnection, HTTPServer, _BadRequestException, HTTPRequest
+from tornado.escape import native_str
 try:
     import configparser
 except ImportError:
@@ -103,6 +105,57 @@ for item in ['./fgfw-lite/redirector.txt', './userconf.ini', './fgfw-lite/local.
 UPSTREAM_POOL = {}
 
 
+class HTTPProxyConnection(HTTPConnection):
+    def _on_headers(self, data):
+        try:
+            data = native_str(data.decode('latin1'))
+            eol = data.find("\r\n")
+            start_line = data[:eol]
+            try:
+                method, uri, version = start_line.split(" ")
+            except ValueError:
+                raise _BadRequestException("Malformed HTTP request line")
+            if not version.startswith("HTTP/"):
+                raise _BadRequestException("Malformed HTTP version in HTTP Request-Line")
+            try:
+                headers = HTTPHeaders.parse(data[eol:])
+            except ValueError:
+                # Probably from split() if there was no ':' in the line
+                raise _BadRequestException("Malformed HTTP headers")
+
+            # HTTPRequest wants an IP, not a full socket address
+            if self.address_family in (socket.AF_INET, socket.AF_INET6):
+                remote_ip = self.address[0]
+            else:
+                # Unix (or other) socket; fake the remote address
+                remote_ip = '0.0.0.0'
+
+            self._request = HTTPRequest(
+                connection=self, method=method, uri=uri, version=version,
+                headers=headers, remote_ip=remote_ip, protocol=self.protocol)
+
+            content_length = headers.get("Content-Length")
+            if content_length:
+                content_length = int(content_length)
+                if content_length > self.stream.max_buffer_size:
+                    raise _BadRequestException("Content-Length too long")
+                if headers.get("Expect") == "100-continue":
+                    self.stream.write(b"HTTP/1.1 100 (Continue)\r\n\r\n")
+
+            self.request_callback(self._request)
+        except _BadRequestException as e:
+            gen_log.info("Malformed HTTP request from %s: %s",
+                         self.address[0], e)
+            self.close()
+            return
+
+
+class HTTPProxyServer(HTTPServer):
+    def handle_stream(self, stream, address):
+        HTTPProxyConnection(stream, address, self.request_callback,
+                       self.no_keep_alive, self.xheaders, self.protocol)
+
+
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT']
 
@@ -112,7 +165,6 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.pppassword = pp
 
     def prepare(self):
-        self.request.uri = unicode(self.request.uri, 'utf8')
         uri = self.request.uri
         if '//' not in uri:
             uri = 'https://{}'.format(uri)
@@ -235,6 +287,12 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 client.write(data)
 
+        def read_from_client(data):
+            if self.upstream.closed():
+                client.close()
+            else:
+                self.upstream.write(data)
+
         def _sent_request():
             if self.pptype == 'http' or self.pptype == 'https':
                 s = u'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
@@ -247,9 +305,14 @@ class ProxyHandler(tornado.web.RequestHandler):
             s.append(u'\r\n'.join([u'%s: %s' % (key, unicode(value, 'utf8')) for key, value in self.request.headers.items()]))
             s.append(u'\r\n\r\n')
             self.upstream.write(u''.join(s).encode('latin1'))
-            if self.request.body:
-                self.upstream.write(self.request.body)
-                self.upstream.write(b'\r\n\r\n')
+            content_length = self.request.headers.get("Content-Length")
+            if content_length:
+                client.read_bytes(int(content_length), end_body, streaming_callback=read_from_client)
+            else:
+                self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
+
+        def end_body(data=None):
+            read_from_client(b'\r\n\r\n')
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def _on_headers(data=None):
@@ -1099,9 +1162,11 @@ class fgfwproxy(FGFWProxyAbs):
         """
         print("Starting HTTP proxy on port {} and {}".format(port, str(int(port)+1)))
         app = tornado.web.Application([(r'.*', ProxyHandler), ])
-        app.listen(8118)
+        http_server = HTTPProxyServer(app)
+        http_server.listen(8118)
         app2 = tornado.web.Application([(r'.*', ForceProxyHandler), ])
-        app2.listen(8119)
+        http_server2 = HTTPProxyServer(app2)
+        http_server2.listen(8119)
         ioloop = tornado.ioloop.IOLoop.instance()
         if start_ioloop:
             ioloop.start()
