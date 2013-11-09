@@ -258,7 +258,10 @@ class ProxyHandler(tornado.web.RequestHandler):
             data = unicode(data, 'latin1')
             first_line, _, header_data = data.partition("\n")
             status_code = int(first_line.split()[1])
-            self.set_status(status_code)
+            try:
+                self.set_status(status_code)
+            except ValueError:
+                self.set_status(500)
 
             headers = HTTPHeaders.parse(header_data)
             self._close_flag = True if headers.get('Connection') == 'close' else False
