@@ -144,8 +144,8 @@ class HTTPProxyConnection(HTTPConnection):
 
             self.request_callback(self._request)
         except _BadRequestException as e:
-            gen_log.info("Malformed HTTP request from %s: %s",
-                         self.address[0], e)
+            logger.info("Malformed HTTP request from %s: %s",
+                        self.address[0], e)
             self.close()
             return
 
@@ -153,7 +153,7 @@ class HTTPProxyConnection(HTTPConnection):
 class HTTPProxyServer(HTTPServer):
     def handle_stream(self, stream, address):
         HTTPProxyConnection(stream, address, self.request_callback,
-                       self.no_keep_alive, self.xheaders, self.protocol)
+                            self.no_keep_alive, self.xheaders, self.protocol)
 
 
 class ProxyHandler(tornado.web.RequestHandler):
@@ -168,7 +168,6 @@ class ProxyHandler(tornado.web.RequestHandler):
         uri = self.request.uri
         if '//' not in uri:
             uri = 'https://{}'.format(uri)
-        host = self.request.host.split(':')[0]
         # redirector
         new_url = REDIRECTOR.get(uri)
         if new_url:
@@ -182,10 +181,8 @@ class ProxyHandler(tornado.web.RequestHandler):
         urisplit = uri.split('/')
         self.requestpath = '/'.join(urisplit[3:])
 
-        if ':' in urisplit[2]:
-            self.requestport = int(urisplit[2].split(':')[1])
-        else:
-            self.requestport = 443 if uri.startswith('https://') else 80
+        self.requestport = int(urisplit[2].split(':')[1]) if ':' in urisplit[2] else 80
+
         self.getparent(uri)
 
         if self.pptype == 'socks5':
@@ -301,7 +298,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             else:
                 s = u'%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
-            s = [s,]
+            s = [s, ]
             s.append(u'\r\n'.join([u'%s: %s' % (key, unicode(value, 'utf8')) for key, value in self.request.headers.items()]))
             s.append(u'\r\n\r\n')
             self.upstream.write(u''.join(s).encode('latin1'))
@@ -384,25 +381,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         _get_upstream()
 
-    @tornado.web.asynchronous
-    def post(self):
-        return self.get()
-
-    @tornado.web.asynchronous
-    def delete(self):
-        return self.get()
-
-    @tornado.web.asynchronous
-    def trace(self):
-        return self.get()
-
-    @tornado.web.asynchronous
-    def put(self):
-        return self.get()
-
-    @tornado.web.asynchronous
-    def head(self):
-        return self.get()
+    post = delete = trace = put = head = get
 
     @tornado.web.asynchronous
     def connect(self):
@@ -449,7 +428,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
             if self.request.method != 'CONNECT':
                 self.request.headers['Connection'] = 'close'
-            s = [s,]
+            s = [s, ]
             s.append(b'\r\n'.join(['%s: %s' % (key, value) for key, value in self.request.headers.items()]).encode('utf8'))
             s.append(b'\r\n\r\n')
             if self.request.body:
@@ -613,6 +592,7 @@ class redirector(object):
 REDIRECTOR = redirector()
 REDIRECTOR.config()
 
+
 class parent_proxy(object):
     """docstring for parent_proxy"""
     def config(self):
@@ -687,6 +667,7 @@ class parent_proxy(object):
         '''
         domain = uri.split('/')[2].split(':')[0]
         # return ('direct', conf.parentdict.get('direct'))
+
         def ifgfwlist_force():
             for rule in self.gfwlist_force:
                 if rule.match(uri):
