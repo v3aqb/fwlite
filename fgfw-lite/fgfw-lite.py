@@ -171,6 +171,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         # redirector
         new_url = REDIRECTOR.get(uri)
         if new_url:
+            logger.debug('redirecting to %s' % new_url)
             if new_url.startswith('403'):
                 self.send_error(status_code=403)
             else:
@@ -271,6 +272,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 for item in lst:
                     lst.remove(item)
                     if not item.closed():
+                        logger.debug('reuse connection')
                         self.upstream = item
                         break
             if self.upstream is None:
@@ -278,7 +280,12 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 _sent_request()
 
+        def _client_write(data):
+            if not client.closed():
+                client.write(data)
+
         def _sent_request():
+            logger.debug('remote server connected, sending http request')
             if self.pptype == 'http' or self.pptype == 'https':
                 s = u'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
                 if self.ppusername and 'Proxy-Authorization' not in self.request.headers:
@@ -292,16 +299,18 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.upstream.write(u''.join(s).encode('latin1'))
             content_length = self.request.headers.get("Content-Length")
             if content_length:
+                logger.debug('sending request body')
                 client.read_bytes(int(content_length), end_body, streaming_callback=self.upstream.write)
             else:
                 self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def end_body(data=None):
             self.upstream.write(b'\r\n\r\n')
+            logger.debug('reading response header')
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def _on_headers(data=None):
-            client.write(data)
+            _client_write(data)
             self._headers_written = True
             data = unicode(data, 'latin1')
             first_line, _, header_data = data.partition("\n")
@@ -313,6 +322,8 @@ class ProxyHandler(tornado.web.RequestHandler):
 
             headers = HTTPHeaders.parse(header_data)
             self._close_flag = False if headers.get('Connection') == 'keep-alive' else True
+            # self._close_flag = True
+            logger.debug('_close_flag: %s' % self._close_flag)
             if "Content-Length" in headers:
                 if "," in headers["Content-Length"]:
                     # Proxies sometimes cause Content-Length headers to get
@@ -332,28 +343,32 @@ class ProxyHandler(tornado.web.RequestHandler):
             elif headers.get("Transfer-Encoding") == "chunked":
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             elif content_length is not None:
-                self.upstream.read_bytes(content_length, _finish, streaming_callback=client.write)
+                logger.debug('reading response body')
+                self.upstream.read_bytes(content_length, _finish, streaming_callback=_client_write)
             elif headers.get("Connection") == "close":
+                logger.debug('reading response body')
                 self.upstream.read_until_close(_finish)
             else:
                 _finish()
 
         def _on_chunk_lenth(data):
-            client.write(data)
+            _client_write(data)
+            logger.debug('reading chunk data')
             length = int(data.strip(), 16)
             self.upstream.read_bytes(length + 2,  # chunk ends with \r\n
                                      _on_chunk_data)
 
         def _on_chunk_data(data):
-            client.write(data)
+            _client_write(data)
             if len(data) != 2:
+                logger.debug('reading chunk lenth')
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             else:
                 _finish()
 
         def _finish(data=None):
             if data:
-                client.write(data)
+                _client_write(data)
             self.finish()
 
         _get_upstream()
@@ -592,8 +607,8 @@ class parent_proxy(object):
         def add_rule(line, force=False):
             try:
                 o = autoproxy_rule(line)
-            except TypeError:
-                pass
+            except TypeError as e:
+                logger.debug('create autoproxy rule failed: %s' % e)
             else:
                 if force:
                     if o.override:
@@ -691,6 +706,7 @@ class parent_proxy(object):
         if 'cow' in parentlist:
             parentlist.remove('cow')
         parentlist.remove('direct')
+
         # select parent via uri
 
         a = ifgfwlist_force()
@@ -706,7 +722,8 @@ class parent_proxy(object):
                     hosthash = hashlib.md5(domain).hexdigest()
                     ppname = parentlist[int(hosthash, 16) % len(parentlist)]
                     return (ppname, conf.parentdict.get(ppname))
-
+            else:
+                logger.warning('No parent proxy available, direct connection is used')
         if 'cow' in conf.parentdict.keys() and not uri.startswith('ftp://'):
             return ('cow', conf.parentdict.get('cow'))
         return ('direct', conf.parentdict.get('direct'))
