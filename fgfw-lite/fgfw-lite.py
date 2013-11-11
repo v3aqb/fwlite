@@ -755,7 +755,7 @@ def ifbackup():
 
 def update(auto=False):
     conf.version.set('Update', 'LastUpdate', str(time.time()))
-    for item in FGFWProxyAbs.ITEMS:
+    for item in FGFWProxyHandler.ITEMS:
         if item.enableupdate:
             item.update()
     restart()
@@ -763,7 +763,7 @@ def update(auto=False):
 
 def restart():
     conf.confsave()
-    for item in FGFWProxyAbs.ITEMS:
+    for item in FGFWProxyHandler.ITEMS:
         item.config()
         item.restart()
     PARENT_PROXY.config()
@@ -816,12 +816,12 @@ def backup():
                     surname = filename.split('-')[0]
 
 
-class FGFWProxyAbs(object):
-    """docstring for FGFWProxyAbs"""
+class FGFWProxyHandler(object):
+    """docstring for FGFWProxyHandler"""
     ITEMS = []
 
     def __init__(self):
-        FGFWProxyAbs.ITEMS.append(self)
+        FGFWProxyHandler.ITEMS.append(self)
         self.subpobj = None
         self.config()
         self.daemon = Thread(target=self.start)
@@ -885,10 +885,10 @@ class FGFWProxyAbs(object):
                 logger.info('{} NOT updated. Reason: {}'.format(path, str(r.getcode())))
 
 
-class goagentabs(FGFWProxyAbs):
+class goagentHandler(FGFWProxyHandler):
     """docstring for ClassName"""
     def __init__(self):
-        FGFWProxyAbs.__init__(self)
+        FGFWProxyHandler.__init__(self)
 
     def _config(self):
         self.filelist = [['https://github.com/goagent/goagent/raw/3.0/local/proxy.py', './goagent/proxy.py'],
@@ -1016,10 +1016,10 @@ class goagentabs(FGFWProxyAbs):
         return 0
 
 
-class shadowsocksabs(FGFWProxyAbs):
+class shadowsocksHandler(FGFWProxyHandler):
     """docstring for ClassName"""
     def __init__(self):
-        FGFWProxyAbs.__init__(self)
+        FGFWProxyHandler.__init__(self)
 
     def _config(self):
         self.filelist = [['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/local.py', './shadowsocks/local.py'],
@@ -1076,10 +1076,10 @@ class shadowsocksabs(FGFWProxyAbs):
             conf.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
 
 
-class cow_abs(FGFWProxyAbs):
+class cowHandler(FGFWProxyHandler):
     """docstring for cow_abs"""
     def __init__(self):
-        FGFWProxyAbs.__init__(self)
+        FGFWProxyHandler.__init__(self)
 
     def _config(self):
         self.filelist = []
@@ -1114,10 +1114,10 @@ class cow_abs(FGFWProxyAbs):
             conf.addparentproxy('cow', ('http', '127.0.0.1', 8117, None, None))
 
 
-class fgfwproxy(FGFWProxyAbs):
+class fgfwproxy(FGFWProxyHandler):
     """docstring for ClassName"""
     def __init__(self, arg=''):
-        FGFWProxyAbs.__init__(self)
+        FGFWProxyHandler.__init__(self)
         self.arg = arg
 
     def _config(self):
@@ -1242,7 +1242,7 @@ conf.addparentproxy('direct', (None, None, None, None, None))
 
 @atexit.register
 def atexit_do():
-    for item in FGFWProxyAbs.ITEMS:
+    for item in FGFWProxyHandler.ITEMS:
         item.enable = False
         item.restart()
     conf.confsave()
@@ -1252,9 +1252,9 @@ def main():
     if conf.userconf.dgetbool('fgfwproxy', 'enable', True):
         fgfwproxy()
     if conf.userconf.dgetbool('goagent', 'enable', True):
-        goagentabs()
+        goagentHandler()
     if conf.userconf.dgetbool('shadowsocks', 'enable', False):
-        shadowsocksabs()
+        shadowsocksHandler()
     if conf.userconf.dgetbool('https', 'enable', False):
         host = conf.userconf.dget('https', 'host', '')
         port = conf.userconf.dget('https', 'port', '443')
@@ -1262,7 +1262,7 @@ def main():
         passwd = conf.userconf.dget('https', 'passwd', None)
         conf.addparentproxy('https', ('https', host, int(port), user, passwd))
     if conf.userconf.dgetbool('cow', 'enable', True):
-        cow_abs()
+        cowHandler()
     updatedaemon = Thread(target=updateNbackup)
     updatedaemon.daemon = True
     updatedaemon.start()
