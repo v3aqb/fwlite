@@ -41,6 +41,8 @@ import tornado.ioloop
 import tornado.iostream
 import tornado.web
 from tornado.httputil import HTTPHeaders
+from tornado.httpserver import HTTPConnection, HTTPServer, _BadRequestException, HTTPRequest
+from tornado.escape import native_str
 try:
     import configparser
 except ImportError:
@@ -103,6 +105,57 @@ for item in ['./fgfw-lite/redirector.txt', './userconf.ini', './fgfw-lite/local.
 UPSTREAM_POOL = {}
 
 
+class HTTPProxyConnection(HTTPConnection):
+    def _on_headers(self, data):
+        try:
+            data = native_str(data.decode('latin1'))
+            eol = data.find("\r\n")
+            start_line = data[:eol]
+            try:
+                method, uri, version = start_line.split(" ")
+            except ValueError:
+                raise _BadRequestException("Malformed HTTP request line")
+            if not version.startswith("HTTP/"):
+                raise _BadRequestException("Malformed HTTP version in HTTP Request-Line")
+            try:
+                headers = HTTPHeaders.parse(data[eol:])
+            except ValueError:
+                # Probably from split() if there was no ':' in the line
+                raise _BadRequestException("Malformed HTTP headers")
+
+            # HTTPRequest wants an IP, not a full socket address
+            if self.address_family in (socket.AF_INET, socket.AF_INET6):
+                remote_ip = self.address[0]
+            else:
+                # Unix (or other) socket; fake the remote address
+                remote_ip = '0.0.0.0'
+
+            self._request = HTTPRequest(
+                connection=self, method=method, uri=uri, version=version,
+                headers=headers, remote_ip=remote_ip, protocol=self.protocol)
+
+            content_length = headers.get("Content-Length")
+            if content_length:
+                content_length = int(content_length)
+                if content_length > self.stream.max_buffer_size:
+                    raise _BadRequestException("Content-Length too long")
+                if headers.get("Expect") == "100-continue":
+                    self.stream.write(b"HTTP/1.1 100 (Continue)\r\n\r\n")
+
+            self.request_callback(self._request)
+        except _BadRequestException as e:
+            logger.info("Malformed HTTP request from %s: %s",
+                        self.address[0], e)
+            self.close()
+            return
+
+
+class HTTPProxyServer(HTTPServer):
+    def handle_stream(self, stream, address):
+        HTTPProxyConnection(stream, address, self.request_callback,
+                            self.no_keep_alive, self.xheaders, self.protocol)
+
+
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT']
 
@@ -112,14 +165,13 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.pppassword = pp
 
     def prepare(self):
-        self.request.uri = unicode(self.request.uri, 'utf8')
         uri = self.request.uri
         if '//' not in uri:
             uri = 'https://{}'.format(uri)
-        host = self.request.host.split(':')[0]
         # redirector
         new_url = REDIRECTOR.get(uri)
         if new_url:
+            logger.debug('redirecting to %s' % new_url)
             if new_url.startswith('403'):
                 self.send_error(status_code=403)
             else:
@@ -130,10 +182,8 @@ class ProxyHandler(tornado.web.RequestHandler):
         urisplit = uri.split('/')
         self.requestpath = '/'.join(urisplit[3:])
 
-        if ':' in urisplit[2]:
-            self.requestport = int(urisplit[2].split(':')[1])
-        else:
-            self.requestport = 443 if uri.startswith('https://') else 80
+        self.requestport = int(urisplit[2].split(':')[1]) if ':' in urisplit[2] else 80
+
         self.getparent(uri)
 
         if self.pptype == 'socks5':
@@ -222,6 +272,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 for item in lst:
                     lst.remove(item)
                     if not item.closed():
+                        logger.debug('reuse connection')
                         self.upstream = item
                         break
             if self.upstream is None:
@@ -229,13 +280,12 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 _sent_request()
 
-        def read_from_upstream(data):
-            if client.closed():
-                self.upstream.close()
-            else:
+        def _client_write(data):
+            if not client.closed():
                 client.write(data)
 
         def _sent_request():
+            logger.debug('remote server connected, sending http request')
             if self.pptype == 'http' or self.pptype == 'https':
                 s = u'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
                 if self.ppusername and 'Proxy-Authorization' not in self.request.headers:
@@ -243,25 +293,37 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             else:
                 s = u'%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
-            s = [s,]
+            s = [s, ]
             s.append(u'\r\n'.join([u'%s: %s' % (key, unicode(value, 'utf8')) for key, value in self.request.headers.items()]))
             s.append(u'\r\n\r\n')
             self.upstream.write(u''.join(s).encode('latin1'))
-            if self.request.body:
-                self.upstream.write(self.request.body)
-                self.upstream.write(b'\r\n\r\n')
+            content_length = self.request.headers.get("Content-Length")
+            if content_length:
+                logger.debug('sending request body')
+                client.read_bytes(int(content_length), end_body, streaming_callback=self.upstream.write)
+            else:
+                self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
+
+        def end_body(data=None):
+            self.upstream.write(b'\r\n\r\n')
+            logger.debug('reading response header')
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def _on_headers(data=None):
-            read_from_upstream(data)
+            _client_write(data)
             self._headers_written = True
             data = unicode(data, 'latin1')
             first_line, _, header_data = data.partition("\n")
             status_code = int(first_line.split()[1])
-            self.set_status(status_code)
+            try:
+                self.set_status(status_code)
+            except ValueError:
+                self.set_status(500)
 
             headers = HTTPHeaders.parse(header_data)
-            self._close_flag = True if headers.get('Connection') == 'close' else False
+            self._close_flag = False if headers.get('Connection') == 'keep-alive' else True
+            # self._close_flag = True
+            logger.debug('_close_flag: %s' % self._close_flag)
             if "Content-Length" in headers:
                 if "," in headers["Content-Length"]:
                     # Proxies sometimes cause Content-Length headers to get
@@ -281,62 +343,50 @@ class ProxyHandler(tornado.web.RequestHandler):
             elif headers.get("Transfer-Encoding") == "chunked":
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             elif content_length is not None:
-                self.upstream.read_bytes(content_length, _finish, streaming_callback=read_from_upstream)
+                logger.debug('reading response body')
+                self.upstream.read_bytes(content_length, _finish, streaming_callback=_client_write)
             elif headers.get("Connection") == "close":
+                logger.debug('reading response body')
                 self.upstream.read_until_close(_finish)
             else:
                 _finish()
 
         def _on_chunk_lenth(data):
-            read_from_upstream(data)
+            _client_write(data)
+            logger.debug('reading chunk data')
             length = int(data.strip(), 16)
             self.upstream.read_bytes(length + 2,  # chunk ends with \r\n
                                      _on_chunk_data)
 
         def _on_chunk_data(data):
-            read_from_upstream(data)
+            _client_write(data)
             if len(data) != 2:
+                logger.debug('reading chunk lenth')
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             else:
                 _finish()
 
         def _finish(data=None):
-            if self.upstream_name not in UPSTREAM_POOL:
-                UPSTREAM_POOL[self.upstream_name] = []
-            lst = UPSTREAM_POOL.get(self.upstream_name)
-            for item in lst:
-                if item.closed():
-                    lst.remove(item)
-            if not self.upstream.closed():
-                if self._close_flag:
-                    self.upstream.close()
-                else:
-                    lst.append(self.upstream)
             if data:
-                read_from_upstream(data)
+                _client_write(data)
             self.finish()
 
         _get_upstream()
 
-    @tornado.web.asynchronous
-    def post(self):
-        return self.get()
+    post = delete = trace = put = head = get
 
-    @tornado.web.asynchronous
-    def delete(self):
-        return self.get()
+    def on_finish(self):
+        if not self.upstream.closed():
+            if self._close_flag:
+                self.upstream.close()
+            else:
+                if self.upstream_name not in UPSTREAM_POOL:
+                    UPSTREAM_POOL[self.upstream_name] = []
+                UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
 
-    @tornado.web.asynchronous
-    def trace(self):
-        return self.get()
-
-    @tornado.web.asynchronous
-    def put(self):
-        return self.get()
-
-    @tornado.web.asynchronous
-    def head(self):
-        return self.get()
+    def on_connection_close(self):
+        self.upstream.close()
+        self.finish()
 
     @tornado.web.asynchronous
     def connect(self):
@@ -383,7 +433,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
             if self.request.method != 'CONNECT':
                 self.request.headers['Connection'] = 'close'
-            s = [s,]
+            s = [s, ]
             s.append(b'\r\n'.join(['%s: %s' % (key, value) for key, value in self.request.headers.items()]).encode('utf8'))
             s.append(b'\r\n\r\n')
             if self.request.body:
@@ -480,7 +530,7 @@ class autoproxy_rule(object):
                 raise TypeError("invalid type: must be a string(or bytes)")
         self.rule = arg.strip()
         if len(self.rule) < 3 or self.rule.startswith('!') or self.rule.startswith('[') or '#' in self.rule:
-            raise ValueError("invalid autoproxy_rule: %s" % self.rule)
+            raise TypeError("invalid autoproxy_rule: %s" % self.rule)
         self._ptrn = self._autopxy_rule_parse(self.rule)
 
     def _autopxy_rule_parse(self, rule):
@@ -521,7 +571,7 @@ class redirector(object):
             if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
                 try:
                     o = autoproxy_rule(line.split()[0])
-                except Exception:
+                except TypeError:
                     pass
                 else:
                     self.lst.append((o, line.split()[1]))
@@ -547,6 +597,7 @@ class redirector(object):
 REDIRECTOR = redirector()
 REDIRECTOR.config()
 
+
 class parent_proxy(object):
     """docstring for parent_proxy"""
     def config(self):
@@ -556,8 +607,8 @@ class parent_proxy(object):
         def add_rule(line, force=False):
             try:
                 o = autoproxy_rule(line)
-            except Exception:
-                pass
+            except TypeError as e:
+                logger.debug('create autoproxy rule failed: %s' % e)
             else:
                 if force:
                     if o.override:
@@ -621,6 +672,7 @@ class parent_proxy(object):
         '''
         domain = uri.split('/')[2].split(':')[0]
         # return ('direct', conf.parentdict.get('direct'))
+
         def ifgfwlist_force():
             for rule in self.gfwlist_force:
                 if rule.match(uri):
@@ -654,6 +706,7 @@ class parent_proxy(object):
         if 'cow' in parentlist:
             parentlist.remove('cow')
         parentlist.remove('direct')
+
         # select parent via uri
 
         a = ifgfwlist_force()
@@ -669,8 +722,9 @@ class parent_proxy(object):
                     hosthash = hashlib.md5(domain).hexdigest()
                     ppname = parentlist[int(hosthash, 16) % len(parentlist)]
                     return (ppname, conf.parentdict.get(ppname))
-
-        if 'cow' in conf.parentdict.keys():
+            else:
+                logger.warning('No parent proxy available, direct connection is used')
+        if 'cow' in conf.parentdict.keys() and not uri.startswith('ftp://'):
             return ('cow', conf.parentdict.get('cow'))
         return ('direct', conf.parentdict.get('direct'))
 
@@ -837,9 +891,9 @@ class goagentabs(FGFWProxyAbs):
         FGFWProxyAbs.__init__(self)
 
     def _config(self):
-        self.filelist = [['https://goagent.googlecode.com/git-history/3.0/local/proxy.py', './goagent/proxy.py'],
-                         ['https://goagent.googlecode.com/git-history/3.0/local/proxy.ini', './goagent/proxy.ini'],
-                         ['https://goagent.googlecode.com/git-history/3.0/local/cacert.pem', './goagent/cacert.pem'],
+        self.filelist = [['https://github.com/goagent/goagent/raw/3.0/local/proxy.py', './goagent/proxy.py'],
+                         ['https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.ini'],
+                         ['https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'],
                          ]
         self.cwd = '%s/goagent' % WORKINGDIR
         self.cmd = '{} {}/goagent/proxy.py'.format(PYTHON2, WORKINGDIR)
@@ -866,7 +920,8 @@ class goagentabs(FGFWProxyAbs):
         proxy.set("gae", "password", conf.userconf.dget('goagent', 'goagentGAEpassword', ''))
         proxy.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
         proxy.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
-        proxy.set("google_hk", "hosts", conf.userconf.dget('goagent', 'gaehkhosts', 'www.google.com|mail.google.com'))
+        proxy.set('gae', 'options', conf.userconf.dget('goagent', 'options', ''))
+        proxy.set("google_hk", "hosts", conf.userconf.dget('goagent', 'gaehkhosts', 'www.google.com|mail.google.com|www.google.com.hk'))
         proxy.set('pac', 'enable', '0')
         proxy.set('paas', 'fetchserver', conf.userconf.dget('goagent', 'paasfetchserver', ''))
         if conf.userconf.dget('goagent', 'paasfetchserver'):
@@ -974,51 +1029,52 @@ class shadowsocksabs(FGFWProxyAbs):
         self.cmd = '{} -B {}/shadowsocks/local.py'.format(PYTHON2, WORKINGDIR)
         self.cwd = '%s/shadowsocks' % WORKINGDIR
         self.enable = conf.userconf.dgetbool('shadowsocks', 'enable', False)
-        lst = []
-        if sys.platform.startswith('win'):
-            self.cmd = 'c:/python27/python.exe -B %s/shadowsocks/local.py' % WORKINGDIR
-            for cmd in ('ss-local', 'sslocal'):
-                if 'XP' in platform.platform():
-                    continue
-                if os.system('where %s' % cmd) == 0:
-                    self.cmd = cmd
-                    break
-            else:
-                lst = ['./shadowsocks/ss-local.exe',
-                       './shadowsocks/shadowsocks-local.exe',
-                       './shadowsocks/shadowsocks.exe']
-        elif sys.platform.startswith('linux'):
-            for cmd in ('ss-local', 'sslocal'):
-                if os.system('which %s' % cmd) == 0:
-                    self.cmd = cmd
-                    break
-            else:
-                lst = ['./shadowsocks/ss-local',
-                       './shadowsocks/shadowsocks-local']
-        for f in lst:
-            if os.path.isfile(f):
-                self.cmd = ''.join([WORKINGDIR, f[1:]])
-                break
-        if self.enable:
-            conf.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
         self.enableupdate = conf.userconf.dgetbool('shadowsocks', 'update', False)
-        if not self.cmd.endswith('shadowsocks.exe'):
-            server = conf.userconf.dget('shadowsocks', 'server', '127.0.0.1')
-            server_port = conf.userconf.dget('shadowsocks', 'server_port', '8388')
-            if not server_port.isdigit():
-                portlst = []
-                for item in server_port.split(','):
-                    if item.strip().isdigit():
-                        portlst.append(item.strip())
-                    else:
-                        a, b = item.strip().split('-')
-                        for i in range(int(a), int(b)+1):
-                            portlst.append(str(i))
-                server_port = random.choice(portlst)
+        if self.enable:
+            lst = []
+            if sys.platform.startswith('win'):
+                self.cmd = 'c:/python27/python.exe -B %s/shadowsocks/local.py' % WORKINGDIR
+                for cmd in ('ss-local', 'sslocal'):
+                    if 'XP' in platform.platform():
+                        continue
+                    if os.system('where %s' % cmd) == 0:
+                        self.cmd = cmd
+                        break
+                else:
+                    lst = ['./shadowsocks/ss-local.exe',
+                           './shadowsocks/shadowsocks-local.exe',
+                           './shadowsocks/shadowsocks.exe']
+            elif sys.platform.startswith('linux'):
+                for cmd in ('ss-local', 'sslocal'):
+                    if os.system('which %s' % cmd) == 0:
+                        self.cmd = cmd
+                        break
+                else:
+                    lst = ['./shadowsocks/ss-local',
+                           './shadowsocks/shadowsocks-local']
+            for f in lst:
+                if os.path.isfile(f):
+                    self.cmd = ''.join([WORKINGDIR, f[1:]])
+                    break
 
-            password = conf.userconf.dget('shadowsocks', 'password', 'barfoo!')
-            method = conf.userconf.dget('shadowsocks', 'method', 'aes-256-cfb')
-            self.cmd = '{} -s {} -p {} -l 1080 -k {} -m {}'.format(self.cmd, server, server_port, password, method.strip('"'))
+            if not self.cmd.endswith('shadowsocks.exe'):
+                server = conf.userconf.dget('shadowsocks', 'server', '127.0.0.1')
+                server_port = conf.userconf.dget('shadowsocks', 'server_port', '8388')
+                if not server_port.isdigit():
+                    portlst = []
+                    for item in server_port.split(','):
+                        if item.strip().isdigit():
+                            portlst.append(item.strip())
+                        else:
+                            a, b = item.strip().split('-')
+                            for i in range(int(a), int(b)+1):
+                                portlst.append(str(i))
+                    server_port = random.choice(portlst)
+
+                password = conf.userconf.dget('shadowsocks', 'password', 'barfoo!')
+                method = conf.userconf.dget('shadowsocks', 'method', 'aes-256-cfb')
+                self.cmd = '{} -s {} -p {} -l 1080 -k {} -m {}'.format(self.cmd, server, server_port, password, method.strip('"'))
+            conf.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
 
 
 class cow_abs(FGFWProxyAbs):
@@ -1096,9 +1152,11 @@ class fgfwproxy(FGFWProxyAbs):
         """
         print("Starting HTTP proxy on port {} and {}".format(port, str(int(port)+1)))
         app = tornado.web.Application([(r'.*', ProxyHandler), ])
-        app.listen(8118)
+        http_server = HTTPProxyServer(app)
+        http_server.listen(8118)
         app2 = tornado.web.Application([(r'.*', ForceProxyHandler), ])
-        app2.listen(8119)
+        http_server2 = HTTPProxyServer(app2)
+        http_server2.listen(8119)
         ioloop = tornado.ioloop.IOLoop.instance()
         if start_ioloop:
             ioloop.start()
