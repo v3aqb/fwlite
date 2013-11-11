@@ -898,12 +898,13 @@ class goagentabs(FGFWProxyAbs):
         if self.enable:
             conf.addparentproxy('GoAgent', ('http', '127.0.0.1', int(listen_port), None, None))
 
-        proxy.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_cn'))
+        proxy.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_hk'))
         proxy.set('gae', 'appid', conf.userconf.dget('goagent', 'goagentGAEAppid', 'mzu5gx1heh2beebo2'))
         proxy.set("gae", "password", conf.userconf.dget('goagent', 'goagentGAEpassword', ''))
         proxy.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
         proxy.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
-        proxy.set("google_hk", "hosts", conf.userconf.dget('goagent', 'gaehkhosts', 'www.google.com|mail.google.com'))
+        proxy.set('gae', 'options', conf.userconf.dget('goagent', 'options', ''))
+        proxy.set("google_hk", "hosts", conf.userconf.dget('goagent', 'gaehkhosts', 'www.google.com|mail.google.com|www.google.com.hk'))
         proxy.set('pac', 'enable', '0')
         proxy.set('paas', 'fetchserver', conf.userconf.dget('goagent', 'paasfetchserver', ''))
         if conf.userconf.dget('goagent', 'paasfetchserver'):
