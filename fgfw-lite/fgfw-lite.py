@@ -278,18 +278,6 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 _sent_request()
 
-        def read_from_upstream(data):
-            if client.closed():
-                self.upstream.close()
-            else:
-                client.write(data)
-
-        def read_from_client(data):
-            if self.upstream.closed():
-                client.close()
-            else:
-                self.upstream.write(data)
-
         def _sent_request():
             if self.pptype == 'http' or self.pptype == 'https':
                 s = u'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
@@ -304,16 +292,16 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.upstream.write(u''.join(s).encode('latin1'))
             content_length = self.request.headers.get("Content-Length")
             if content_length:
-                client.read_bytes(int(content_length), end_body, streaming_callback=read_from_client)
+                client.read_bytes(int(content_length), end_body, streaming_callback=self.upstream.write)
             else:
                 self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def end_body(data=None):
-            read_from_client(b'\r\n\r\n')
+            self.upstream.write(b'\r\n\r\n')
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def _on_headers(data=None):
-            read_from_upstream(data)
+            client.write(data)
             self._headers_written = True
             data = unicode(data, 'latin1')
             first_line, _, header_data = data.partition("\n")
@@ -324,7 +312,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.set_status(500)
 
             headers = HTTPHeaders.parse(header_data)
-            self._close_flag = True if headers.get('Connection') == 'close' else False
+            self._close_flag = False if headers.get('Connection') == 'keep-alive' else True
             if "Content-Length" in headers:
                 if "," in headers["Content-Length"]:
                     # Proxies sometimes cause Content-Length headers to get
@@ -344,44 +332,46 @@ class ProxyHandler(tornado.web.RequestHandler):
             elif headers.get("Transfer-Encoding") == "chunked":
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             elif content_length is not None:
-                self.upstream.read_bytes(content_length, _finish, streaming_callback=read_from_upstream)
+                self.upstream.read_bytes(content_length, _finish, streaming_callback=client.write)
             elif headers.get("Connection") == "close":
                 self.upstream.read_until_close(_finish)
             else:
                 _finish()
 
         def _on_chunk_lenth(data):
-            read_from_upstream(data)
+            client.write(data)
             length = int(data.strip(), 16)
             self.upstream.read_bytes(length + 2,  # chunk ends with \r\n
                                      _on_chunk_data)
 
         def _on_chunk_data(data):
-            read_from_upstream(data)
+            client.write(data)
             if len(data) != 2:
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             else:
                 _finish()
 
         def _finish(data=None):
-            if self.upstream_name not in UPSTREAM_POOL:
-                UPSTREAM_POOL[self.upstream_name] = []
-            lst = UPSTREAM_POOL.get(self.upstream_name)
-            for item in lst:
-                if item.closed():
-                    lst.remove(item)
-            if not self.upstream.closed():
-                if self._close_flag:
-                    self.upstream.close()
-                else:
-                    lst.append(self.upstream)
             if data:
-                read_from_upstream(data)
+                client.write(data)
             self.finish()
 
         _get_upstream()
 
     post = delete = trace = put = head = get
+
+    def on_finish(self):
+        if not self.upstream.closed():
+            if self._close_flag:
+                self.upstream.close()
+            else:
+                if self.upstream_name not in UPSTREAM_POOL:
+                    UPSTREAM_POOL[self.upstream_name] = []
+                UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
+
+    def on_connection_close(self):
+        self.upstream.close()
+        self.finish()
 
     @tornado.web.asynchronous
     def connect(self):
