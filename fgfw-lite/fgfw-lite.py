@@ -515,7 +515,7 @@ class autoproxy_rule(object):
                 raise TypeError("invalid type: must be a string(or bytes)")
         self.rule = arg.strip()
         if len(self.rule) < 3 or self.rule.startswith('!') or self.rule.startswith('[') or '#' in self.rule:
-            raise ValueError("invalid autoproxy_rule: %s" % self.rule)
+            raise TypeError("invalid autoproxy_rule: %s" % self.rule)
         self._ptrn = self._autopxy_rule_parse(self.rule)
 
     def _autopxy_rule_parse(self, rule):
@@ -556,7 +556,7 @@ class redirector(object):
             if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
                 try:
                     o = autoproxy_rule(line.split()[0])
-                except Exception:
+                except TypeError:
                     pass
                 else:
                     self.lst.append((o, line.split()[1]))
@@ -592,7 +592,7 @@ class parent_proxy(object):
         def add_rule(line, force=False):
             try:
                 o = autoproxy_rule(line)
-            except Exception:
+            except TypeError:
                 pass
             else:
                 if force:
