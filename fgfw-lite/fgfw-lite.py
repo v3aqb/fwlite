@@ -1012,51 +1012,52 @@ class shadowsocksabs(FGFWProxyAbs):
         self.cmd = '{} -B {}/shadowsocks/local.py'.format(PYTHON2, WORKINGDIR)
         self.cwd = '%s/shadowsocks' % WORKINGDIR
         self.enable = conf.userconf.dgetbool('shadowsocks', 'enable', False)
-        lst = []
-        if sys.platform.startswith('win'):
-            self.cmd = 'c:/python27/python.exe -B %s/shadowsocks/local.py' % WORKINGDIR
-            for cmd in ('ss-local', 'sslocal'):
-                if 'XP' in platform.platform():
-                    continue
-                if os.system('where %s' % cmd) == 0:
-                    self.cmd = cmd
-                    break
-            else:
-                lst = ['./shadowsocks/ss-local.exe',
-                       './shadowsocks/shadowsocks-local.exe',
-                       './shadowsocks/shadowsocks.exe']
-        elif sys.platform.startswith('linux'):
-            for cmd in ('ss-local', 'sslocal'):
-                if os.system('which %s' % cmd) == 0:
-                    self.cmd = cmd
-                    break
-            else:
-                lst = ['./shadowsocks/ss-local',
-                       './shadowsocks/shadowsocks-local']
-        for f in lst:
-            if os.path.isfile(f):
-                self.cmd = ''.join([WORKINGDIR, f[1:]])
-                break
-        if self.enable:
-            conf.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
         self.enableupdate = conf.userconf.dgetbool('shadowsocks', 'update', False)
-        if not self.cmd.endswith('shadowsocks.exe'):
-            server = conf.userconf.dget('shadowsocks', 'server', '127.0.0.1')
-            server_port = conf.userconf.dget('shadowsocks', 'server_port', '8388')
-            if not server_port.isdigit():
-                portlst = []
-                for item in server_port.split(','):
-                    if item.strip().isdigit():
-                        portlst.append(item.strip())
-                    else:
-                        a, b = item.strip().split('-')
-                        for i in range(int(a), int(b)+1):
-                            portlst.append(str(i))
-                server_port = random.choice(portlst)
+        if self.enable:
+            lst = []
+            if sys.platform.startswith('win'):
+                self.cmd = 'c:/python27/python.exe -B %s/shadowsocks/local.py' % WORKINGDIR
+                for cmd in ('ss-local', 'sslocal'):
+                    if 'XP' in platform.platform():
+                        continue
+                    if os.system('where %s' % cmd) == 0:
+                        self.cmd = cmd
+                        break
+                else:
+                    lst = ['./shadowsocks/ss-local.exe',
+                           './shadowsocks/shadowsocks-local.exe',
+                           './shadowsocks/shadowsocks.exe']
+            elif sys.platform.startswith('linux'):
+                for cmd in ('ss-local', 'sslocal'):
+                    if os.system('which %s' % cmd) == 0:
+                        self.cmd = cmd
+                        break
+                else:
+                    lst = ['./shadowsocks/ss-local',
+                           './shadowsocks/shadowsocks-local']
+            for f in lst:
+                if os.path.isfile(f):
+                    self.cmd = ''.join([WORKINGDIR, f[1:]])
+                    break
 
-            password = conf.userconf.dget('shadowsocks', 'password', 'barfoo!')
-            method = conf.userconf.dget('shadowsocks', 'method', 'aes-256-cfb')
-            self.cmd = '{} -s {} -p {} -l 1080 -k {} -m {}'.format(self.cmd, server, server_port, password, method.strip('"'))
+            if not self.cmd.endswith('shadowsocks.exe'):
+                server = conf.userconf.dget('shadowsocks', 'server', '127.0.0.1')
+                server_port = conf.userconf.dget('shadowsocks', 'server_port', '8388')
+                if not server_port.isdigit():
+                    portlst = []
+                    for item in server_port.split(','):
+                        if item.strip().isdigit():
+                            portlst.append(item.strip())
+                        else:
+                            a, b = item.strip().split('-')
+                            for i in range(int(a), int(b)+1):
+                                portlst.append(str(i))
+                    server_port = random.choice(portlst)
+
+                password = conf.userconf.dget('shadowsocks', 'password', 'barfoo!')
+                method = conf.userconf.dget('shadowsocks', 'method', 'aes-256-cfb')
+                self.cmd = '{} -s {} -p {} -l 1080 -k {} -m {}'.format(self.cmd, server, server_port, password, method.strip('"'))
+            conf.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
 
 
 class cow_abs(FGFWProxyAbs):
