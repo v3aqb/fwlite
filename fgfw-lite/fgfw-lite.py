@@ -874,9 +874,9 @@ class goagentabs(FGFWProxyAbs):
         FGFWProxyAbs.__init__(self)
 
     def _config(self):
-        self.filelist = [['https://goagent.googlecode.com/git-history/3.0/local/proxy.py', './goagent/proxy.py'],
-                         ['https://goagent.googlecode.com/git-history/3.0/local/proxy.ini', './goagent/proxy.ini'],
-                         ['https://goagent.googlecode.com/git-history/3.0/local/cacert.pem', './goagent/cacert.pem'],
+        self.filelist = [['https://github.com/goagent/goagent/raw/3.0/local/proxy.py', './goagent/proxy.py'],
+                         ['https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.ini'],
+                         ['https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'],
                          ]
         self.cwd = '%s/goagent' % WORKINGDIR
         self.cmd = '{} {}/goagent/proxy.py'.format(PYTHON2, WORKINGDIR)
