@@ -157,7 +157,7 @@ class HTTPProxyServer(HTTPServer):
 
 
 class ProxyHandler(tornado.web.RequestHandler):
-    SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT']
+    SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT', 'OPTIONS']
 
     def getparent(self, uri):
         self.ppname, pp = PARENT_PROXY.parentproxy(uri)
@@ -373,7 +373,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         _get_upstream()
 
-    post = delete = trace = put = head = get
+    options = post = delete = trace = put = head = get
 
     def on_finish(self):
         if not self.upstream.closed():
