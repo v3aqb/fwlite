@@ -256,6 +256,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             def _create_upstream():
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
                 self.upstream = tornado.iostream.IOStream(s)
+                self.upstream.set_close_callback(self.on_upstream_close)
                 if self.pptype == 'http':
                     self.upstream.connect((self.pphost, int(self.ppport)), _sent_request)
                 elif self.pptype == 'https':
@@ -274,9 +275,11 @@ class ProxyHandler(tornado.web.RequestHandler):
                 for item in lst:
                     lst.remove(item)
                     if not item.closed():
-                        logger.debug('reuse connection')
-                        self.upstream = item
-                        break
+                        if time.time() - item._last_active < 60:
+                            logger.debug('reuse connection')
+                            self.upstream = item
+                            break
+                        item.close()
             if self.upstream is None:
                 _create_upstream()
             else:
@@ -386,6 +389,8 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 if self.upstream_name not in UPSTREAM_POOL:
                     UPSTREAM_POOL[self.upstream_name] = []
+                self.upstream._last_active = time.time()
+                self.upstream.set_close_callback(None)
                 UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
 
     def on_connection_close(self):
@@ -393,6 +398,10 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.upstream.close()
         logger.debug('client connection closed')
         self.finish()
+
+    def on_upstream_close(self):
+        if not self._headers_written:
+            self.send_error(504)
 
     @tornado.web.asynchronous
     def connect(self):
@@ -423,11 +432,13 @@ class ProxyHandler(tornado.web.RequestHandler):
             upstream.read_until_close(upstream_close, read_from_upstream)
             if data:
                 read_from_client(data.encode())
+            self._headers_written = True
 
         def start_ssltunnel(data=None):
             client.read_until_close(client_close, read_from_client)
             upstream.read_until_close(upstream_close, read_from_upstream)
             read_from_upstream(b'HTTP/1.1 200 Connection established\r\n\r\n')
+            self._headers_written = True
 
         def http_conntgt(data=None):
             if self.pptype == 'http' or self.pptype == 'https':
@@ -502,6 +513,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         self.upstream = tornado.iostream.IOStream(s)
+        self.upstream.set_close_callback(self.on_upstream_close)
         upstream = self.upstream
         if self.pphost is None:
             if self.request.method == 'CONNECT':
