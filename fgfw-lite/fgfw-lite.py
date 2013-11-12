@@ -620,6 +620,7 @@ class parent_proxy(object):
     def config(self):
         self.gfwlist = []
         self.gfwlist_force = []
+        self.hostinchina = {}
 
         def add_rule(line, force=False):
             try:
@@ -700,13 +701,17 @@ class parent_proxy(object):
         def ifhost_in_china():
             if not domain:
                 return None
+            if domain in self.hostinchina:
+                return self.hostinchina.get(domain)
             try:
                 ipo = ip_address(socket.gethostbyname(domain))
             except Exception:
                 return None
             for net in self.chinanet:
                 if ipo in net:
+                    self.hostinchina[domain] = True
                     return True
+            self.hostinchina[domain] = False
             return False
 
         def ifgfwlist():
