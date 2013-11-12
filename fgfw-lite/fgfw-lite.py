@@ -190,7 +190,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         if self.pptype == 'socks5':
             self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
         else:
-            self.upstream_name = self.ppname if self.pphost else self.request.host
+            self.upstream_name = self.ppname if self.pphost else '{}-{}'.format(self.request.host,  str(self.requestport))
 
         logger.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
 
@@ -269,17 +269,17 @@ class ProxyHandler(tornado.web.RequestHandler):
                 else:
                     self.send_error(501)
 
-            lst = UPSTREAM_POOL.get(self.upstream_name)
+            lst = UPSTREAM_POOL.get(self.upstream_name, [])
             self.upstream = None
-            if isinstance(lst, list):
-                for item in lst:
-                    lst.remove(item)
-                    if not item.closed():
-                        if time.time() - item._last_active < 60:
-                            logger.debug('reuse connection')
-                            self.upstream = item
-                            break
-                        item.close()
+            for item in lst:
+                lst.remove(item)
+                if not item.closed():
+                    if time.time() - item._last_active < 60:
+                        logger.debug('reuse connection')
+                        self.upstream = item
+                        self.upstream.set_close_callback(self.on_upstream_close)
+                        break
+                    item.close()
             if self.upstream is None:
                 _create_upstream()
             else:
@@ -325,33 +325,33 @@ class ProxyHandler(tornado.web.RequestHandler):
             except ValueError:
                 self.set_status(500)
 
-            headers = HTTPHeaders.parse(header_data)
-            conn_header = headers.get("Connection")
+            self._headers = HTTPHeaders.parse(header_data)
+            conn_header = self._headers.get("Connection")
             if conn_header and (conn_header.lower() == "keep-alive"):
                 self._close_flag = False
             logger.debug('_close_flag: %s' % self._close_flag)
-            if "Content-Length" in headers:
-                if "," in headers["Content-Length"]:
+            if "Content-Length" in self._headers:
+                if "," in self._headers["Content-Length"]:
                     # Proxies sometimes cause Content-Length headers to get
                     # duplicated.  If all the values are identical then we can
                     # use them but if they differ it's an error.
-                    pieces = re.split(r',\s*', headers["Content-Length"])
+                    pieces = re.split(r',\s*', self._headers["Content-Length"])
                     if any(i != pieces[0] for i in pieces):
                         raise ValueError("Multiple unequal Content-Lengths: %r" %
-                                         headers["Content-Length"])
-                    headers["Content-Length"] = pieces[0]
-                content_length = int(headers["Content-Length"])
+                                         self._headers["Content-Length"])
+                    self._headers["Content-Length"] = pieces[0]
+                content_length = int(self._headers["Content-Length"])
             else:
                 content_length = None
 
             if self.request.method == "HEAD" or status_code == 304:
                 _finish()
-            elif headers.get("Transfer-Encoding") == "chunked":
+            elif self._headers.get("Transfer-Encoding") == "chunked":
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             elif content_length is not None:
                 logger.debug('reading response body')
                 self.upstream.read_bytes(content_length, _finish, streaming_callback=_client_write)
-            elif headers.get("Connection") == "close":
+            elif self._headers.get("Connection") == "close":
                 logger.debug('reading response body')
                 self.upstream.read_until_close(_finish)
             else:
@@ -382,16 +382,15 @@ class ProxyHandler(tornado.web.RequestHandler):
     options = post = delete = trace = put = head = get
 
     def on_finish(self):
-        if hasattr(self, 'upstream'):
-            if self.upstream.closed() or self._close_flag:
-                self.upstream.close()
-                self.request.connection.stream.close()
-            else:
-                if self.upstream_name not in UPSTREAM_POOL:
-                    UPSTREAM_POOL[self.upstream_name] = []
-                self.upstream._last_active = time.time()
-                self.upstream.set_close_callback(None)
-                UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
+        if self.upstream.closed() or self._close_flag:
+            self.upstream.close()
+            self.request.connection.stream.close()
+        else:
+            if self.upstream_name not in UPSTREAM_POOL:
+                UPSTREAM_POOL[self.upstream_name] = []
+            self.upstream._last_active = time.time()
+            self.upstream.set_close_callback(None)
+            UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
 
     def on_connection_close(self):
         if hasattr(self, 'upstream'):
