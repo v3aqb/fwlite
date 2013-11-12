@@ -225,7 +225,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                     req = b''.join([b"\x05\x01\x00\x03",
                                    chr(len(self.request.host)).encode(),
                                    self.request.host.encode(),
-                                   struct.pack(">H", self.requestport)])
+                                   struct.pack(b">H", self.requestport)])
                     self.upstream.write(req)
                     self.upstream.read_bytes(4, read_upstream_data)
 
@@ -470,7 +470,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 req = b''.join([b"\x05\x01\x00\x03",
                                chr(len(self.request.host)).encode(),
                                self.request.host.encode(),
-                               struct.pack(">H", self.requestport)])
+                               struct.pack(b">H", self.requestport)])
                 upstream.write(req)
                 upstream.read_bytes(4, read_upstream_data)
 
