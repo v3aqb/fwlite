@@ -157,7 +157,7 @@ class HTTPProxyServer(HTTPServer):
 
 
 class ProxyHandler(tornado.web.RequestHandler):
-    SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT', 'OPTIONS']
+    SUPPORTED_METHODS = ('GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT', 'OPTIONS')
 
     def getparent(self, uri):
         self.ppname, pp = PARENT_PROXY.parentproxy(uri)
@@ -166,6 +166,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     def prepare(self):
         uri = self.request.uri
+        self._close_flag = True
         if '//' not in uri:
             uri = 'https://{}'.format(uri)
         # redirector
@@ -241,6 +242,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
                 def conn(data=None):
                     self.upstream.set_nodelay(False)
+                    logger.debug('socks5 remote server connected')
                     _sent_request()
 
                 def fail():
@@ -305,7 +307,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def end_body(data=None):
-            self.upstream.write(b'\r\n\r\n')
+            # self.upstream.write(b'\r\n\r\n')
             logger.debug('reading response header')
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
@@ -321,8 +323,9 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.set_status(500)
 
             headers = HTTPHeaders.parse(header_data)
-            self._close_flag = False if headers.get('Connection') == 'keep-alive' else True
-            # self._close_flag = True
+            conn_header = headers.get("Connection")
+            if conn_header and (conn_header.lower() == "keep-alive"):
+                self._close_flag = False
             logger.debug('_close_flag: %s' % self._close_flag)
             if "Content-Length" in headers:
                 if "," in headers["Content-Length"]:
@@ -376,16 +379,19 @@ class ProxyHandler(tornado.web.RequestHandler):
     options = post = delete = trace = put = head = get
 
     def on_finish(self):
-        if not self.upstream.closed():
-            if self._close_flag:
+        if hasattr(self, 'upstream'):
+            if self.upstream.closed() or self._close_flag:
                 self.upstream.close()
+                self.request.connection.stream.close()
             else:
                 if self.upstream_name not in UPSTREAM_POOL:
                     UPSTREAM_POOL[self.upstream_name] = []
                 UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
 
     def on_connection_close(self):
-        self.upstream.close()
+        if hasattr(self, 'upstream'):
+            self.upstream.close()
+        logger.debug('client connection closed')
         self.finish()
 
     @tornado.web.asynchronous
