@@ -238,7 +238,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                         fail()
 
                 def readhost(data=None):
-                    self.upstream.read_bytes(data[0], conn)
+                    self.upstream.read_bytes(ord(data[0]), conn)
 
                 def conn(data=None):
                     self.upstream.set_nodelay(False)
@@ -493,7 +493,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                     fail()
 
             def readhost(data=None):
-                upstream.read_bytes(data[0], conn)
+                upstream.read_bytes(ord(data[0]), conn)
 
             def conn(data=None):
                 upstream.set_nodelay(False)
