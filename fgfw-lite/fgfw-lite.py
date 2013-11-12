@@ -190,7 +190,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         if self.pptype == 'socks5':
             self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
         else:
-            self.upstream_name = self.ppname if self.pphost else '{}-{}'.format(self.request.host,  str(self.requestport))
+            self.upstream_name = self.ppname if self.pphost else '{}-{}'.format(self.request.host, str(self.requestport))
 
         logger.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
 
@@ -1010,7 +1010,7 @@ class goagentHandler(FGFWProxyHandler):
                 if certdata.startswith(b'-----'):
                     begin = b'-----BEGIN CERTIFICATE-----'
                     end = b'-----END CERTIFICATE-----'
-                    certdata = base64.b64decode(b''.join(certdata[certdata.find(begin)+len(begin):certdata.find(end)].strip().splitlines()))
+                    certdata = base64.b64decode(b''.join(certdata[certdata.find(begin) + len(begin):certdata.find(end)].strip().splitlines()))
                 import ctypes
                 crypt32_handle = ctypes.windll.kernel32.LoadLibraryW('crypt32.dll')
                 crypt32 = ctypes.WinDLL(None, handle=crypt32_handle)
@@ -1088,7 +1088,7 @@ class shadowsocksHandler(FGFWProxyHandler):
                             portlst.append(item.strip())
                         else:
                             a, b = item.strip().split('-')
-                            for i in range(int(a), int(b)+1):
+                            for i in range(int(a), int(b) + 1):
                                 portlst.append(str(i))
                     server_port = random.choice(portlst)
 
@@ -1171,7 +1171,7 @@ class fgfwproxy(FGFWProxyHandler):
         Run proxy on the specified port. If start_ioloop is True (default),
         the tornado IOLoop will be started immediately.
         """
-        print("Starting HTTP proxy on port {} and {}".format(port, str(int(port)+1)))
+        print("Starting HTTP proxy on port {} and {}".format(port, str(int(port) + 1)))
         app = tornado.web.Application([(r'.*', ProxyHandler), ])
         http_server = HTTPProxyServer(app)
         http_server.listen(8118)
