@@ -24,7 +24,7 @@ __version__ = '0.3.4.0'
 
 import sys
 import os
-from subprocess import Popen
+import subprocess
 import shlex
 import time
 import re
@@ -71,7 +71,7 @@ if sys.platform.startswith('win'):
     PYTHON2 = '%s/Python27/python27.exe' % WORKINGDIR
 else:
     for cmd in ('python2.7', 'python27', 'python2'):
-        if os.system('which %s' % cmd) == 0:
+        if subprocess.call(shlex.split('which %s' % cmd)) == 0:
             PYTHON2 = cmd
             break
 
@@ -849,7 +849,7 @@ class FGFWProxyHandler(object):
             if self.enable:
                 if self.cwd:
                     os.chdir(self.cwd)
-                self.subpobj = Popen(shlex.split(self.cmd))
+                self.subpobj = subprocess.Popen(shlex.split(self.cmd))
                 os.chdir(WORKINGDIR)
                 self.subpobj.wait()
             time.sleep(3)
@@ -1007,16 +1007,16 @@ class goagentHandler(FGFWProxyHandler):
                 ctypes.windll.kernel32.FreeLibrary(crypt32_handle)
                 return 0 if ret else -1
         elif sys.platform == 'darwin':
-            return os.system('security find-certificate -a -c "%s" | grep "%s" >/dev/null || security add-trusted-cert -d -r trustRoot -k "/Library/Keychains/System.keychain" "%s"' % (commonname, commonname, certfile))
+            return subprocess.call(shlex.split('security find-certificate -a -c "%s" | grep "%s" >/dev/null || security add-trusted-cert -d -r trustRoot -k "/Library/Keychains/System.keychain" "%s"' % (commonname, commonname, certfile)))
         elif sys.platform.startswith('linux'):
             platform_distname = platform.dist()[0]
             if platform_distname == 'Ubuntu':
                 pemfile = "/etc/ssl/certs/%s.pem" % commonname
                 new_certfile = "/usr/local/share/ca-certificates/%s.crt" % commonname
                 if not os.path.exists(pemfile):
-                    return os.system('cp "%s" "%s" && update-ca-certificates' % (certfile, new_certfile))
+                    return subprocess.call(shlex.split('cp "%s" "%s" && update-ca-certificates' % (certfile, new_certfile)))
             elif any(os.path.isfile('%s/certutil' % x) for x in os.environ['PATH'].split(os.pathsep)):
-                return os.system('certutil -L -d sql:$HOME/.pki/nssdb | grep "%s" || certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "%s" -i "%s"' % (commonname, commonname, certfile))
+                return subprocess.call(shlex.split('certutil -L -d sql:$HOME/.pki/nssdb | grep "%s" || certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "%s" -i "%s"' % (commonname, commonname, certfile)))
             else:
                 logging.warning('please install *libnss3-tools* package to import GoAgent root ca')
         return 0
@@ -1042,7 +1042,7 @@ class shadowsocksHandler(FGFWProxyHandler):
                 for cmd in ('ss-local', 'sslocal'):
                     if 'XP' in platform.platform():
                         continue
-                    if os.system('where %s' % cmd) == 0:
+                    if subprocess.call(shlex.split('where %s' % cmd)) == 0:
                         self.cmd = cmd
                         break
                 else:
@@ -1051,7 +1051,7 @@ class shadowsocksHandler(FGFWProxyHandler):
                            './shadowsocks/shadowsocks.exe']
             elif sys.platform.startswith('linux'):
                 for cmd in ('ss-local', 'sslocal'):
-                    if os.system('which %s' % cmd) == 0:
+                    if subprocess.call(shlex.split('which %s' % cmd)) == 0:
                         self.cmd = cmd
                         break
                 else:
