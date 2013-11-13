@@ -953,7 +953,7 @@ class goagentHandler(FGFWProxyHandler):
             conf.addparentproxy('GoAgent', ('http', '127.0.0.1', int(listen_port), None, None))
 
         proxy.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_cn'))
-        proxy.set('gae', 'appid', conf.userconf.dget('goagent', 'goagentGAEAppid', ''))
+        proxy.set('gae', 'appid', conf.userconf.dget('goagent', 'goagentGAEAppid', 'goagent'))
         proxy.set("gae", "password", conf.userconf.dget('goagent', 'goagentGAEpassword', ''))
         proxy.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
         proxy.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
