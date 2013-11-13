@@ -234,6 +234,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                         self.upstream.read_bytes(6, conn)
                     elif data.startswith(b'\x05\x00\x00\x03'):
                         self.upstream.read_bytes(3, readhost)
+                    elif data.startswith(b'\x05\x00\x00\x04'):
+                        self.upstream.read_bytes(18, conn)
                     else:
                         fail()
 
@@ -496,6 +498,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                     upstream.read_bytes(6, conn)
                 elif data.startswith(b'\x05\x00\x00\x03'):
                     upstream.read_bytes(3, readhost)
+                elif data.startswith(b'\x05\x00\x00\x04'):
+                    self.upstream.read_bytes(18, conn)
                 else:
                     fail()
 
