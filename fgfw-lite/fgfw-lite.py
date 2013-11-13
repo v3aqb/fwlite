@@ -159,14 +159,20 @@ class HTTPProxyServer(HTTPServer):
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ('GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT', 'OPTIONS')
 
-    def getparent(self, uri):
-        self.ppname, pp = PARENT_PROXY.parentproxy(uri)
-        self.pptype, self.pphost, self.ppport, self.ppusername,\
-            self.pppassword = pp
+    def getparent(self, uri, forceproxy=False):
+        self.ppname, pp = PARENT_PROXY.parentproxy(uri, forceproxy)
+        self.pptype, self.pphost, self.ppport, self.ppusername, self.pppassword = pp
+        if self.pptype == 'socks5':
+            self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
+        else:
+            self.upstream_name = self.ppname if self.pphost else '{}-{}'.format(self.request.host, str(self.requestport))
+
+        logger.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
 
     def prepare(self):
         uri = self.request.uri
         self._close_flag = True
+        self._proxy_retry = 0
         if '//' not in uri:
             uri = 'https://{}'.format(uri)
         # redirector
@@ -187,16 +193,10 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         self.getparent(uri)
 
-        if self.pptype == 'socks5':
-            self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
-        else:
-            self.upstream_name = self.ppname if self.pphost else '{}-{}'.format(self.request.host, str(self.requestport))
-
-        logger.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
-
     @tornado.web.asynchronous
     def get(self):
-
+        if self.request.method == 'CONNECT':
+            return self.connect()
         client = self.request.connection.stream
 
         def _get_upstream():
@@ -382,15 +382,16 @@ class ProxyHandler(tornado.web.RequestHandler):
     options = post = delete = trace = put = head = get
 
     def on_finish(self):
-        if self.upstream.closed() or self._close_flag:
-            self.upstream.close()
-            self.request.connection.stream.close()
-        else:
-            if self.upstream_name not in UPSTREAM_POOL:
-                UPSTREAM_POOL[self.upstream_name] = []
-            self.upstream._last_active = time.time()
-            self.upstream.set_close_callback(None)
-            UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
+        if hasattr(self, 'upstream'):
+            if self.upstream.closed() or self._close_flag:
+                self.upstream.close()
+                self.request.connection.stream.close()
+            else:
+                if self.upstream_name not in UPSTREAM_POOL:
+                    UPSTREAM_POOL[self.upstream_name] = []
+                self.upstream._last_active = time.time()
+                self.upstream.set_close_callback(None)
+                UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
 
     def on_connection_close(self):
         if hasattr(self, 'upstream'):
@@ -400,7 +401,13 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     def on_upstream_close(self):
         if not self._headers_written:
-            self.send_error(504)
+            if self._proxy_retry < 3:
+                self._proxy_retry += 1
+                self.clear()
+                self.getparent(self.request.uri, forceproxy=True)
+                self.get()
+            else:
+                self.send_error(504)
 
     @tornado.web.asynchronous
     def connect(self):
@@ -427,17 +434,17 @@ class ProxyHandler(tornado.web.RequestHandler):
                 client.close()
 
         def start_tunnel(data=None):
+            self._headers_written = True
             client.read_until_close(client_close, read_from_client)
             upstream.read_until_close(upstream_close, read_from_upstream)
             if data:
                 read_from_client(data.encode())
-            self._headers_written = True
 
         def start_ssltunnel(data=None):
+            self._headers_written = True
             client.read_until_close(client_close, read_from_client)
             upstream.read_until_close(upstream_close, read_from_upstream)
             read_from_upstream(b'HTTP/1.1 200 Connection established\r\n\r\n')
-            self._headers_written = True
 
         def http_conntgt(data=None):
             if self.pptype == 'http' or self.pptype == 'https':
@@ -531,10 +538,14 @@ class ProxyHandler(tornado.web.RequestHandler):
 
 
 class ForceProxyHandler(ProxyHandler):
-    def getparent(self, uri):
-        self.ppname, pp = PARENT_PROXY.parentproxy(uri, forceproxy=True)
-        self.pptype, self.pphost, self.ppport, self.ppusername,\
-            self.pppassword = pp
+    def getparent(self, uri, forceproxy=True):
+        self.ppname, pp = PARENT_PROXY.parentproxy(uri, forceproxy)
+        self.pptype, self.pphost, self.ppport, self.ppusername, self.pppassword = pp
+        if self.pptype == 'socks5':
+            self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
+        else:
+            self.upstream_name = self.ppname if self.pphost else '{}-{}'.format(self.request.host, str(self.requestport))
+        logger.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
 
 
 class autoproxy_rule(object):
