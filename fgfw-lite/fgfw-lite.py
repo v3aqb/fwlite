@@ -573,9 +573,14 @@ class autoproxy_rule(object):
     def _autopxy_rule_parse(self, rule):
         def parse(rule):
             if rule.startswith('||'):
-                return re.compile(rule.replace('.', r'\.').replace('?', r'\?').replace('*', '.*').replace('^', r'[^\w%._-]').replace('||', '^(?:https?://)?(?:[^/]+\.)?'))
+                return re.compile(rule.replace('.', r'\.').replace('?', r'\?').replace('*', '[^/]*').replace('^', r'[^\w%._-]').replace('||', '^(?:https?://)?(?:[^/]+\.)?'))
             elif rule.startswith('/') and rule.endswith('/'):
                 return re.compile(rule[1:-1])
+            elif rule.startswith('|https://'):
+                i = rule.find('/', 9)
+                regex = rule[9:] if i == -1 else rule[9:i]
+                regex = r'^(?:https://)?%s' % regex.replace('.', r'\.').replace('*', '[^/]*')
+                return re.compile(regex)
             else:
                 regex = rule.replace('.', r'\.').replace('?', r'\?').replace('*', '.*').replace('^', r'[^\w%._-]')
                 regex = re.sub(r'^\|', r'^', regex)
