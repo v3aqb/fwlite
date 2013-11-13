@@ -170,9 +170,9 @@ class ProxyHandler(tornado.web.RequestHandler):
         logger.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
 
     def prepare(self):
-        uri = self.request.uri
         self._close_flag = True
         self._proxy_retry = 0
+        uri = self.request.uri
         if '//' not in uri:
             uri = 'https://{}'.format(uri)
         # redirector
@@ -184,12 +184,12 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 self.redirect(new_url)
             return
-        # self.request.headers['X-Forwarded-For'] = self.request.remote_ip
 
         urisplit = uri.split('/')
         self.requestpath = '/'.join(urisplit[3:])
-
-        self.requestport = int(urisplit[2].split(':')[1]) if ':' in urisplit[2] else 80
+        if self.request.host == "127.0.0.1" and not self.request.uri.startswith('/'):
+            self.request.host = urisplit[2].split(':')[0]
+        self.requestport = int(self.request.host.split(':')[1]) if ':' in self.request.host else 80
 
         self.getparent(uri)
 
@@ -223,8 +223,8 @@ class ProxyHandler(tornado.web.RequestHandler):
 
                 def conn_upstream(data=None):
                     req = b''.join([b"\x05\x01\x00\x03",
-                                   chr(len(self.request.host)).encode(),
-                                   self.request.host.encode(),
+                                   chr(len(self.request.host.split(':')[0])).encode(),
+                                   self.request.host.split(':')[0].encode(),
                                    struct.pack(b">H", self.requestport)])
                     self.upstream.write(req)
                     self.upstream.read_bytes(4, read_upstream_data)
@@ -487,8 +487,8 @@ class ProxyHandler(tornado.web.RequestHandler):
 
             def conn_upstream(data=None):
                 req = b''.join([b"\x05\x01\x00\x03",
-                               chr(len(self.request.host)).encode(),
-                               self.request.host.encode(),
+                               chr(len(self.request.host.split(':')[0])).encode(),
+                               self.request.host.split(':')[0].encode(),
                                struct.pack(b">H", self.requestport)])
                 upstream.write(req)
                 upstream.read_bytes(4, read_upstream_data)
