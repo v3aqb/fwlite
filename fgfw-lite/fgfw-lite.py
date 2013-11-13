@@ -172,11 +172,11 @@ class ProxyHandler(tornado.web.RequestHandler):
     def prepare(self):
         self._close_flag = True
         self._proxy_retry = 0
-        uri = self.request.uri
-        if '//' not in uri:
-            uri = 'https://{}'.format(uri)
+        # transparent proxy
+        if self.request.method != 'CONNECT' and self.request.uri.startswith('/') and self.request.host != "127.0.0.1":
+            self.request.uri = 'http://%s%s' % (self.request.host, self.request.uri)
         # redirector
-        new_url = REDIRECTOR.get(uri)
+        new_url = REDIRECTOR.get(self.request.uri)
         if new_url:
             logger.debug('redirecting to %s' % new_url)
             if new_url.startswith('403'):
@@ -185,21 +185,18 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.redirect(new_url)
             return
 
-        urisplit = uri.split('/')
-        self.requestpath = '/'.join(urisplit[3:])
-        # transparent proxy
-        if self.request.method != 'CONNECT' and self.request.uri.startswith('/') and self.request.host != "127.0.0.1":
-            self.request.uri = 'http://%s%s' % (self.request.host, self.request.uri)
         # try to get host from uri
         if self.request.host == "127.0.0.1":
             if not self.request.uri.startswith('/'):
-                self.request.headers['Host'] = self.request.host = urisplit[2]
+                self.request.headers['Host'] = self.request.host = self.request.uri.split('/')[2] if '//' in self.request.uri else self.request.uri
             else:
                 self.send_error(status_code=403)
                 return
-        self.requestport = int(self.request.host.split(':')[1]) if ':' in self.request.host else 80
 
-        self.getparent(uri)
+        self.requestport = int(self.request.host.split(':')[1]) if ':' in self.request.host else 80
+        self.requestpath = '/'.join(self.request.uri.split('/')[3:]) if '//' in self.request.uri else ''
+
+        self.getparent(self.request.uri)
 
     @tornado.web.asynchronous
     def get(self):
@@ -421,6 +418,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def connect(self):
+        self.requestport = int(self.request.uri.split(':')[1])
         client = self.request.connection.stream
 
         def read_from_client(data):
@@ -711,7 +709,7 @@ class parent_proxy(object):
             url:  'https://www.google.com'
             domain: 'www.google.com'
         '''
-        domain = uri.split('/')[2].split(':')[0]
+        domain = uri.split('/')[2].split(':')[0] if '//' in uri else uri.split(':')[0]
         # return ('direct', conf.parentdict.get('direct'))
 
         def ifgfwlist_force():
