@@ -299,7 +299,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 s = u'%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
             s = [s, ]
-            s.append(u'\r\n'.join([u'%s: %s' % (key, unicode(value, 'utf8')) for key, value in self.request.headers.items()]))
+            s.append(u'\r\n'.join([u'%s: %s' % (key, unicode(value, 'utf8')) for key, value in self.request.headers.items() if key not in ["Expect", ]]))
             s.append(u'\r\n\r\n')
             self.upstream.write(u''.join(s).encode('latin1'))
             content_length = self.request.headers.get("Content-Length")
