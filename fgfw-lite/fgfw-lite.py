@@ -59,7 +59,6 @@ except ImportError:
 
 import logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('FGFW-Lite')
 
 WORKINGDIR = '/'.join(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')).split('/')[:-1])
 if ' ' in WORKINGDIR:
@@ -144,8 +143,8 @@ class HTTPProxyConnection(HTTPConnection):
 
             self.request_callback(self._request)
         except _BadRequestException as e:
-            logger.info("Malformed HTTP request from %s: %s",
-                        self.address[0], e)
+            logging.info("Malformed HTTP request from %s: %s",
+                         self.address[0], e)
             self.close()
             return
 
@@ -167,7 +166,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         else:
             self.upstream_name = self.ppname if self.pphost else '{}-{}'.format(self.request.host, str(self.requestport))
 
-        logger.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
+        logging.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
 
     def prepare(self):
         self._close_flag = True
@@ -178,7 +177,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         # redirector
         new_url = REDIRECTOR.get(self.request.uri)
         if new_url:
-            logger.debug('redirecting to %s' % new_url)
+            logging.debug('redirecting to %s' % new_url)
             if new_url.startswith('403'):
                 self.send_error(status_code=403)
             else:
@@ -249,7 +248,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
                 def conn(data=None):
                     self.upstream.set_nodelay(False)
-                    logger.debug('socks5 remote server connected')
+                    logging.debug('socks5 remote server connected')
                     _sent_request()
 
                 def fail():
@@ -282,7 +281,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 lst.remove(item)
                 if not item.closed():
                     if time.time() - item._last_active < 60:
-                        logger.debug('reuse connection')
+                        logging.debug('reuse connection')
                         self.upstream = item
                         self.upstream.set_close_callback(self.on_upstream_close)
                         break
@@ -297,7 +296,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 client.write(data)
 
         def _sent_request():
-            logger.debug('remote server connected, sending http request')
+            logging.debug('remote server connected, sending http request')
             if self.pptype == 'http' or self.pptype == 'https':
                 s = u'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
                 if self.ppusername and 'Proxy-Authorization' not in self.request.headers:
@@ -311,14 +310,14 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.upstream.write(u''.join(s).encode('latin1'))
             content_length = self.request.headers.get("Content-Length")
             if content_length:
-                logger.debug('sending request body')
+                logging.debug('sending request body')
                 client.read_bytes(int(content_length), end_body, streaming_callback=self.upstream.write)
             else:
                 self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def end_body(data=None):
             # self.upstream.write(b'\r\n\r\n')
-            logger.debug('reading response header')
+            logging.debug('reading response header')
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def _on_headers(data=None):
@@ -336,7 +335,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             conn_header = self._headers.get("Connection")
             if conn_header and (conn_header.lower() == "keep-alive"):
                 self._close_flag = False
-            logger.debug('_close_flag: %s' % self._close_flag)
+            logging.debug('_close_flag: %s' % self._close_flag)
             if "Content-Length" in self._headers:
                 if "," in self._headers["Content-Length"]:
                     # Proxies sometimes cause Content-Length headers to get
@@ -356,17 +355,17 @@ class ProxyHandler(tornado.web.RequestHandler):
             elif self._headers.get("Transfer-Encoding") == "chunked":
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             elif content_length is not None:
-                logger.debug('reading response body')
+                logging.debug('reading response body')
                 self.upstream.read_bytes(content_length, _finish, streaming_callback=_client_write)
             elif self._headers.get("Connection") == "close":
-                logger.debug('reading response body')
+                logging.debug('reading response body')
                 self.upstream.read_until_close(_finish)
             else:
                 _finish()
 
         def _on_chunk_lenth(data):
             _client_write(data)
-            logger.debug('reading chunk data')
+            logging.debug('reading chunk data')
             length = int(data.strip(), 16)
             self.upstream.read_bytes(length + 2,  # chunk ends with \r\n
                                      _on_chunk_data)
@@ -374,7 +373,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         def _on_chunk_data(data):
             _client_write(data)
             if len(data) != 2:
-                logger.debug('reading chunk lenth')
+                logging.debug('reading chunk lenth')
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             else:
                 _finish()
@@ -403,7 +402,7 @@ class ProxyHandler(tornado.web.RequestHandler):
     def on_connection_close(self):
         if hasattr(self, 'upstream'):
             self.upstream.close()
-        logger.debug('client connection closed')
+        logging.debug('client connection closed')
         self.finish()
 
     def on_upstream_close(self):
@@ -555,7 +554,7 @@ class ForceProxyHandler(ProxyHandler):
             self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
         else:
             self.upstream_name = self.ppname if self.pphost else '{}-{}'.format(self.request.host, str(self.requestport))
-        logger.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
+        logging.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
 
 
 class autoproxy_rule(object):
@@ -621,11 +620,11 @@ class redirector(object):
             if 'xn--' in q:
                 q = q.decode('idna')
             result = 'https://www.google.com/search?q=%s&ie=utf-8&oe=utf-8&aq=t&rls=org.mozilla:zh-CN:official' % urllib2.quote(q.encode('utf-8'))
-            logger.info('Match redirect rule addressbar-search')
+            logging.info('Match redirect rule addressbar-search')
             return result
         for rule, result in self.lst:
             if rule.match(uri):
-                logger.info('Match redirect rule {}, {}'.format(rule.rule, result))
+                logging.info('Match redirect rule {}, {}'.format(rule.rule, result))
                 if rule.override:
                     return None
                 if result == 'forcehttps':
@@ -647,7 +646,7 @@ class parent_proxy(object):
             try:
                 o = autoproxy_rule(line)
             except TypeError as e:
-                logger.debug('create autoproxy rule failed: %s' % e)
+                logging.debug('create autoproxy rule failed: %s' % e)
             else:
                 if force:
                     if o.override:
@@ -679,7 +678,7 @@ class parent_proxy(object):
                     for line in f:
                         add_rule(line)
                 else:
-                    logger.warning('./fgfw-lite/gfwlist.txt is corrupted!')
+                    logging.warning('./fgfw-lite/gfwlist.txt is corrupted!')
 
         self.chinanet = []
         self.chinanet.append(ip_network('192.168.0.0/16'))
@@ -715,7 +714,7 @@ class parent_proxy(object):
         def ifgfwlist_force():
             for rule in self.gfwlist_force:
                 if rule.match(uri):
-                    logger.info('Autoproxy Rule match {}'.format(rule.rule))
+                    logging.info('Autoproxy Rule match {}'.format(rule.rule))
                     return not rule.override
             return None
 
@@ -738,7 +737,7 @@ class parent_proxy(object):
         def ifgfwlist():
             for rule in self.gfwlist:
                 if rule.match(uri):
-                    logger.info('Autoproxy Rule match {}'.format(rule.rule))
+                    logging.info('Autoproxy Rule match {}'.format(rule.rule))
                     return not rule.override
             return None
 
@@ -766,7 +765,7 @@ class parent_proxy(object):
                     ppname = parentlist[int(hosthash, 16) % len(parentlist)]
                     return (ppname, conf.parentdict.get(ppname))
             else:
-                logger.warning('No parent proxy available, direct connection is used')
+                logging.warning('No parent proxy available, direct connection is used')
         if 'cow' in conf.parentdict.keys() and not uri.startswith('ftp://'):
             return ('cow', conf.parentdict.get('cow'))
         return ('direct', conf.parentdict.get('direct'))
@@ -821,26 +820,26 @@ def backup():
         backuplist = conf.userconf.items('AutoBackup', raw=True)
         backupPath = conf.userconf.get('AutoBackupConf', 'BackupPath', raw=True)
     except:
-        logger.error("read userconf.ini failed!")
+        logging.error("read userconf.ini failed!")
     else:
         if not os.path.isdir(backupPath):
             os.makedirs(backupPath)
         if len(backuplist) > 0:
-            logger.info("start packing")
+            logging.info("start packing")
             for i in range(len(backuplist)):
                 if os.path.exists(backuplist[i][1]):
                     filepath = '%s/%s-%s.tar.bz2' % (backupPath, backuplist[i][0], time.strftime('%Y%m%d%H%M%S'))
-                    logger.info('packing %s to %s' % (backuplist[i][1], filepath))
+                    logging.info('packing %s to %s' % (backuplist[i][1], filepath))
                     pack = tarfile.open(filepath, "w:bz2")
                     try:
                         pack.add(backuplist[i][1])
                     except Exception:
                         pack.close()
                         os.remove(filepath)
-                        logger.info('Packing %s failed.' % filepath)
+                        logging.info('Packing %s failed.' % filepath)
                     else:
                         pack.close()
-                        logger.info('Done Packing %s.' % filepath)
+                        logging.info('Done Packing %s.' % filepath)
         #remove old backup file
         rotation = conf.userconf.dgetint('AutoBackupConf', 'rotation', 10)
         filelist = os.listdir(str(backupPath))
@@ -917,15 +916,15 @@ class FGFWProxyHandler(object):
         try:
             r = urllib2.urlopen(req)
         except Exception as e:
-            logger.info('{} NOT updated. Reason: {}'.format(path, e))
+            logging.info('{} NOT updated. Reason: {}'.format(path, e))
         else:
             if r.getcode() == 200:
                 with open(path, 'wb') as localfile:
                     localfile.write(r.read())
                 conf.version.set('Update', path.replace('./', '').replace('/', '-'), r.info().getheader('ETag'))
-                logger.info('%s Updated.' % path)
+                logging.info('%s Updated.' % path)
             else:
-                logger.info('{} NOT updated. Reason: {}'.format(path, str(r.getcode())))
+                logging.info('{} NOT updated. Reason: {}'.format(path, str(r.getcode())))
 
 
 class goagentHandler(FGFWProxyHandler):
