@@ -159,7 +159,7 @@ class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ('GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT', 'OPTIONS')
 
     def getparent(self, forceproxy=False):
-        self.ppname, pp = PARENT_PROXY.parentproxy(self.request.uri, self.request.host.split(':')[0], forceproxy)
+        self.ppname, pp = PARENT_PROXY.parentproxy(self.request.uri, self.request.host.rsplit(':', 1)[0], forceproxy)
         self.pptype, self.pphost, self.ppport, self.ppusername, self.pppassword = pp
         if self.pptype == 'socks5':
             self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
@@ -192,7 +192,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.send_error(status_code=403)
                 return
 
-        self.requestport = int(self.request.host.split(':')[1]) if ':' in self.request.host else 80
+        self.requestport = int(self.request.host.rsplit(':', 1)[1]) if ':' in self.request.host else 80
         self.requestpath = '/'.join(self.request.uri.split('/')[3:]) if '//' in self.request.uri else ''
 
         self.getparent()
@@ -227,8 +227,8 @@ class ProxyHandler(tornado.web.RequestHandler):
 
                 def conn_upstream(data=None):
                     req = b''.join([b"\x05\x01\x00\x03",
-                                   chr(len(self.request.host.split(':')[0])).encode(),
-                                   self.request.host.split(':')[0].encode(),
+                                   chr(len(self.request.host.rsplit(':', 1)[0])).encode(),
+                                   self.request.host.rsplit(':', 1)[0].encode(),
                                    struct.pack(b">H", self.requestport)])
                     self.upstream.write(req)
                     self.upstream.read_bytes(4, read_upstream_data)
@@ -269,7 +269,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.upstream = tornado.iostream.SSLIOStream(s)
                     self.upstream.connect((self.pphost, int(self.ppport)), _sent_request)
                 elif self.pptype is None:
-                    self.upstream.connect((self.request.host.split(':')[0], self.requestport), _sent_request)
+                    self.upstream.connect((self.request.host.rsplit(':', 1)[0], self.requestport), _sent_request)
                 elif self.pptype == 'socks5':
                     self.upstream.connect((self.pphost, int(self.ppport)), socks5_handshake)
                 else:
@@ -417,7 +417,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def connect(self):
-        self.requestport = int(self.request.uri.split(':')[1])
+        self.requestport = int(self.request.uri.rsplit(':', 1)[1])
         client = self.request.connection.stream
 
         def read_from_client(data):
@@ -492,8 +492,8 @@ class ProxyHandler(tornado.web.RequestHandler):
 
             def conn_upstream(data=None):
                 req = b''.join([b"\x05\x01\x00\x03",
-                               chr(len(self.request.host.split(':')[0])).encode(),
-                               self.request.host.split(':')[0].encode(),
+                               chr(len(self.request.host.rsplit(':', 1)[0])).encode(),
+                               self.request.host.rsplit(':', 1)[0].encode(),
                                struct.pack(b">H", self.requestport)])
                 upstream.write(req)
                 upstream.read_bytes(4, read_upstream_data)
@@ -532,9 +532,9 @@ class ProxyHandler(tornado.web.RequestHandler):
         upstream = self.upstream
         if self.pphost is None:
             if self.request.method == 'CONNECT':
-                self.upstream.connect((self.request.host.split(':')[0], self.requestport), start_ssltunnel)
+                self.upstream.connect((self.request.host.rsplit(':', 1)[0], self.requestport), start_ssltunnel)
             else:
-                self.upstream.connect((self.request.host.split(':')[0], self.requestport), http_conntgt)
+                self.upstream.connect((self.request.host.rsplit(':', 1)[0], self.requestport), http_conntgt)
         elif self.pptype == 'http':
             self.upstream.connect((self.pphost, int(self.ppport)), http_conntgt)
         elif self.pptype == 'https':
@@ -548,7 +548,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
 class ForceProxyHandler(ProxyHandler):
     def getparent(self, forceproxy=True):
-        self.ppname, pp = PARENT_PROXY.parentproxy(self.request.uri, self.request.host.split(':')[0], forceproxy)
+        self.ppname, pp = PARENT_PROXY.parentproxy(self.request.uri, self.request.host.rsplit(':', 1)[0], forceproxy)
         self.pptype, self.pphost, self.ppport, self.ppusername, self.pppassword = pp
         if self.pptype == 'socks5':
             self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
@@ -934,7 +934,7 @@ class goagentHandler(FGFWProxyHandler):
 
         listen = conf.userconf.dget('goagent', 'listen', '127.0.0.1:8087')
         if ':' in listen:
-            listen_ip, listen_port = listen.split(':')
+            listen_ip, listen_port = listen.rsplit(':', 1)
         else:
             listen_ip = '127.0.0.1'
             listen_port = listen
@@ -1168,7 +1168,7 @@ class fgfwproxy(FGFWProxyHandler):
     def start(self):
         if self.enable:
             if ':' in self.listen:
-                self.run_proxy(self.listen.split(':')[1], address=self.listen.split(':')[0])
+                self.run_proxy(self.listen.rsplit(':', 1)[1], address=self.listen.rsplit(':', 1)[0])
             else:
                 self.run_proxy(self.listen)
 
