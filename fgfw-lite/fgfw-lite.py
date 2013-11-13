@@ -187,6 +187,9 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         urisplit = uri.split('/')
         self.requestpath = '/'.join(urisplit[3:])
+        # transparent proxy
+        if self.request.method != 'CONNECT' and self.request.uri.startswith('/') and self.request.host != "127.0.0.1":
+            self.request.uri = 'http://%s%s' % (self.request.host, self.request.uri)
         if self.request.host == "127.0.0.1" and not self.request.uri.startswith('/'):
             self.request.host = urisplit[2].split(':')[0]
         self.requestport = int(self.request.host.split(':')[1]) if ':' in self.request.host else 80
