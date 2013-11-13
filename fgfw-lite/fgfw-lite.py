@@ -1160,15 +1160,11 @@ class fgfwproxy(FGFWProxyHandler):
     def _config(self):
         self.filelist = [['https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './fgfw-lite/gfwlist.txt'],
                          ['http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './fgfw-lite/delegated-apnic-latest'],
-                         ['https://fgfw-lite.googlecode.com/git-history/master/fgfw-lite/fgfw-lite.py', './fgfw-lite/fgfw-lite.py'],
-                         ['https://fgfw-lite.googlecode.com/git-history/master/fgfw-lite/cloud.txt', './fgfw-lite/cloud.txt'],
-                         ['https://fgfw-lite.googlecode.com/git-history/master/userconf.sample.ini', './userconf.sample.ini'],
-                         ['https://fgfw-lite.googlecode.com/git-history/master/README.md', './README.md'],
-                         ['https://fgfw-lite.googlecode.com/git-history/master/Python27/python27.zip', './Python27/python27.zip'],
-                         # ['https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/FGFW_Lite.py', './fgfw-lite/FGFW_Lite.py'],
-                         # ['https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/cloud.txt', './fgfw-lite/cloud.txt'],
-                         # ['https://github.com/v3aqb/fgfw-lite/raw/master/userconf.sample.ini', './userconf.sample.ini'],
-                         # ['https://github.com/v3aqb/fgfw-lite/raw/master/README.md', './README.md'],
+                         ['https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/fgfw-lite.py', './fgfw-lite/fgfw-lite.py'],
+                         ['https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/cloud.txt', './fgfw-lite/cloud.txt'],
+                         ['https://github.com/v3aqb/fgfw-lite/raw/master/userconf.sample.ini', './userconf.sample.ini'],
+                         ['https://github.com/v3aqb/fgfw-lite/raw/master/README.md', './README.md'],
+                         ['https://github.com/v3aqb/fgfw-lite/raw/master/Python27/python27.zip', './Python27/python27.zip'],
                          ]
         self.enable = conf.userconf.dgetbool('fgfwproxy', 'enable', True)
         self.enableupdate = conf.userconf.dgetbool('fgfwproxy', 'update', True)
