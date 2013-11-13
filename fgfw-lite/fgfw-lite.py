@@ -158,8 +158,8 @@ class HTTPProxyServer(HTTPServer):
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ('GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT', 'OPTIONS')
 
-    def getparent(self, uri, forceproxy=False):
-        self.ppname, pp = PARENT_PROXY.parentproxy(uri, forceproxy)
+    def getparent(self, forceproxy=False):
+        self.ppname, pp = PARENT_PROXY.parentproxy(self.request.uri, self.request.host.split(':')[0], forceproxy)
         self.pptype, self.pphost, self.ppport, self.ppusername, self.pppassword = pp
         if self.pptype == 'socks5':
             self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
@@ -195,7 +195,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         self.requestport = int(self.request.host.split(':')[1]) if ':' in self.request.host else 80
         self.requestpath = '/'.join(self.request.uri.split('/')[3:]) if '//' in self.request.uri else ''
 
-        self.getparent(self.request.uri)
+        self.getparent()
 
     @tornado.web.asynchronous
     def get(self):
@@ -410,7 +410,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             if self._proxy_retry < 3:
                 self._proxy_retry += 1
                 self.clear()
-                self.getparent(self.request.uri, forceproxy=True)
+                self.getparent(forceproxy=True)
                 self.get()
             else:
                 self.send_error(504)
@@ -547,8 +547,8 @@ class ProxyHandler(tornado.web.RequestHandler):
 
 
 class ForceProxyHandler(ProxyHandler):
-    def getparent(self, uri, forceproxy=True):
-        self.ppname, pp = PARENT_PROXY.parentproxy(uri, forceproxy)
+    def getparent(self, forceproxy=True):
+        self.ppname, pp = PARENT_PROXY.parentproxy(self.request.uri, self.request.host.split(':')[0], forceproxy)
         self.pptype, self.pphost, self.ppport, self.ppusername, self.pppassword = pp
         if self.pptype == 'socks5':
             self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
@@ -599,6 +599,7 @@ class autoproxy_rule(object):
     def match(self, uri):
         # url must be something like https://www.google.com
         if self._ptrn.search(uri):
+            logging.info('Autoproxy Rule match {}'.format(self.rule))
             return True
         return False
 
@@ -644,6 +645,7 @@ class parent_proxy(object):
     """docstring for parent_proxy"""
     def config(self):
         self.gfwlist = []
+        self.override = []
         self.gfwlist_force = []
         self.hostinchina = {}
 
@@ -653,16 +655,12 @@ class parent_proxy(object):
             except TypeError as e:
                 logging.debug('create autoproxy rule failed: %s' % e)
             else:
-                if force:
-                    if o.override:
-                        self.gfwlist_force.insert(0, o)
-                    else:
-                        self.gfwlist_force.append(o)
+                if o.override:
+                    self.override.append(o)
+                elif force:
+                    self.gfwlist_force.append(o)
                 else:
-                    if o.override:
-                        self.gfwlist.insert(0, o)
-                    else:
-                        self.gfwlist.append(o)
+                    self.gfwlist.append(o)
 
         for line in open('./fgfw-lite/local.txt'):
             add_rule(line)
@@ -707,44 +705,29 @@ class parent_proxy(object):
 
             self.chinanet.append(ip_network('{}/{}'.format(starting_ip, mask2)))
 
-    def parentproxy(self, uri, forceproxy=False):
+    def parentproxy(self, uri, host, forceproxy=False):
         '''
             decide which parentproxy to use.
             url:  'https://www.google.com'
             domain: 'www.google.com'
         '''
-        domain = uri.split('/')[2].split(':')[0] if '//' in uri else uri.split(':')[0]
         # return ('direct', conf.parentdict.get('direct'))
 
-        def ifgfwlist_force():
-            for rule in self.gfwlist_force:
-                if rule.match(uri):
-                    logging.info('Autoproxy Rule match {}'.format(rule.rule))
-                    return not rule.override
-            return None
-
         def ifhost_in_china():
-            if not domain:
+            if not host:
                 return None
-            if domain in self.hostinchina:
-                return self.hostinchina.get(domain)
+            if host in self.hostinchina:
+                return self.hostinchina.get(host)
             try:
-                ipo = ip_address(socket.gethostbyname(domain))
+                ipo = ip_address(socket.gethostbyname(host))
             except Exception:
                 return None
-            for net in self.chinanet:
-                if ipo in net:
-                    self.hostinchina[domain] = True
-                    return True
-            self.hostinchina[domain] = False
+            if any(ipo in net for net in self.chinanet):
+                logging.info('%s in china' % host)
+                self.hostinchina[host] = True
+                return True
+            self.hostinchina[host] = False
             return False
-
-        def ifgfwlist():
-            for rule in self.gfwlist:
-                if rule.match(uri):
-                    logging.info('Autoproxy Rule match {}'.format(rule.rule))
-                    return not rule.override
-            return None
 
         parentlist = conf.parentdict.keys()
         if uri.startswith('ftp://'):
@@ -756,17 +739,19 @@ class parent_proxy(object):
 
         # select parent via uri
 
-        a = ifgfwlist_force()
+        a = any(rule.match(uri) for rule in self.gfwlist_force)
 
-        if a is False or ifhost_in_china():
+        if not a and ifhost_in_china():
             return ('direct', conf.parentdict.get('direct'))
 
-        if a or forceproxy or ifgfwlist():
+        if a or forceproxy or any(rule.match(uri) for rule in self.gfwlist):
+            if any(rule.match(uri) for rule in self.override):
+                return ('direct', conf.parentdict.get('direct'))
             if parentlist:
                 if len(parentlist) == 1:
                     return (parentlist[0], conf.parentdict.get(parentlist[0]))
                 else:
-                    hosthash = hashlib.md5(domain).hexdigest()
+                    hosthash = hashlib.md5(host).hexdigest()
                     ppname = parentlist[int(hosthash, 16) % len(parentlist)]
                     return (ppname, conf.parentdict.get(ppname))
             else:
