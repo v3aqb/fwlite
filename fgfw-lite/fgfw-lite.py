@@ -650,25 +650,13 @@ PARENT_PROXY = parent_proxy()
 PARENT_PROXY.config()
 
 
-def updateNbackup():
+def updater():
     while 1:
         time.sleep(90)
-        ifupdate()
-        if conf.userconf.dgetbool('AutoBackupConf', 'enable', False):
-            ifbackup()
-
-
-def ifupdate():
-    if conf.userconf.dgetbool('FGFW_Lite', 'autoupdate'):
-        lastupdate = conf.version.dgetfloat('Update', 'LastUpdate', 0)
-        if time.time() - lastupdate > conf.UPDATE_INTV * 60 * 60:
-            update(auto=True)
-
-
-def ifbackup():
-    lastbackup = conf.userconf.dgetfloat('AutoBackupConf', 'LastBackup', 0)
-    if time.time() - lastbackup > conf.BACKUP_INTV * 60 * 60:
-        Thread(target=backup).start()
+        if conf.userconf.dgetbool('FGFW_Lite', 'autoupdate'):
+            lastupdate = conf.version.dgetfloat('Update', 'LastUpdate', 0)
+            if time.time() - lastupdate > conf.UPDATE_INTV * 60 * 60:
+                update(auto=True)
 
 
 def update(auto=False):
@@ -686,52 +674,6 @@ def restart():
         item.restart()
     PARENT_PROXY.config()
     REDIRECTOR.config()
-
-
-def backup():
-    import tarfile
-    conf.userconf.set('AutoBackupConf', 'LastBackup', str(time.time()))
-    conf.confsave()
-    try:
-        backuplist = conf.userconf.items('AutoBackup', raw=True)
-        backupPath = conf.userconf.get('AutoBackupConf', 'BackupPath', raw=True)
-    except:
-        logging.error("read userconf.ini failed!")
-    else:
-        if not os.path.isdir(backupPath):
-            os.makedirs(backupPath)
-        if len(backuplist) > 0:
-            logging.info("start packing")
-            for i in range(len(backuplist)):
-                if os.path.exists(backuplist[i][1]):
-                    filepath = '%s/%s-%s.tar.bz2' % (backupPath, backuplist[i][0], time.strftime('%Y%m%d%H%M%S'))
-                    logging.info('packing %s to %s' % (backuplist[i][1], filepath))
-                    pack = tarfile.open(filepath, "w:bz2")
-                    try:
-                        pack.add(backuplist[i][1])
-                    except Exception:
-                        pack.close()
-                        os.remove(filepath)
-                        logging.info('Packing %s failed.' % filepath)
-                    else:
-                        pack.close()
-                        logging.info('Done Packing %s.' % filepath)
-        #remove old backup file
-        rotation = conf.userconf.dgetint('AutoBackupConf', 'rotation', 10)
-        filelist = os.listdir(str(backupPath))
-        filelist.sort()
-        surname = ''
-        group = []
-        for filename in filelist:
-            if re.search(r'\d{14}\.tar\.bz2$', filename):
-                if filename.split('-')[0] == surname:
-                    group.append(filename)
-                    if len(group) > rotation:
-                        os.remove('%s/%s' % (backupPath, group.pop(0)))
-                else:
-                    group = []
-                    group.append(filename)
-                    surname = filename.split('-')[0]
 
 
 class FGFWProxyHandler(object):
@@ -1177,7 +1119,7 @@ def main():
         conf.addparentproxy('https', ('https', host, int(port), user, passwd))
     if conf.userconf.dgetbool('cow', 'enable', True):
         cowHandler()
-    updatedaemon = Thread(target=updateNbackup)
+    updatedaemon = Thread(target=updater)
     updatedaemon.daemon = True
     updatedaemon.start()
     while 1:
