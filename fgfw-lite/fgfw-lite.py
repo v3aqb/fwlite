@@ -194,10 +194,11 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.send_error(status_code=403)
                 return
 
-        self.requestport = int(self.request.host.rsplit(':', 1)[1]) if ':' in self.request.host else 80
         self.requestpath = '/'.join(self.request.uri.split('/')[3:]) if '//' in self.request.uri else ''
         if self.request.method == 'CONNECT':
             self.requestport = int(self.request.uri.rsplit(':', 1)[1])
+        else:
+            self.requestport = int(self.request.host.rsplit(':', 1)[1]) if ':' in self.request.host else 80
 
         self.getparent()
         yield self.get_remote_conn()
