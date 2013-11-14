@@ -40,6 +40,7 @@ import urllib2
 import tornado.ioloop
 import tornado.iostream
 import tornado.web
+from tornado import gen
 from tornado.httputil import HTTPHeaders
 from tornado.httpserver import HTTPConnection, HTTPServer, _BadRequestException, HTTPRequest
 from tornado.escape import native_str
@@ -168,6 +169,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         logging.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
 
+    @gen.coroutine
     def prepare(self):
         self._close_flag = True
         self._proxy_retry = 0
@@ -194,89 +196,18 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         self.requestport = int(self.request.host.rsplit(':', 1)[1]) if ':' in self.request.host else 80
         self.requestpath = '/'.join(self.request.uri.split('/')[3:]) if '//' in self.request.uri else ''
+        if self.request.method == 'CONNECT':
+            self.requestport = int(self.request.uri.rsplit(':', 1)[1])
 
         self.getparent()
+        yield self.get_remote_conn()
 
-    @tornado.web.asynchronous
-    def get(self):
-        if self.request.method == 'CONNECT':
-            return self.connect()
-        client = self.request.connection.stream
-
-        def _get_upstream():
-
-            def socks5_handshake(data=None):
-                def socks5_auth(data=None):
-                    if data == b'\x05\x00':  # no auth needed
-                        conn_upstream()
-                    elif data == b'\x05\x02':  # basic auth
-                        self.upstream.write(b''.join([b"\x01",
-                                            chr(len(self.ppusername)).encode(),
-                                            self.ppusername.encode(),
-                                            chr(len(self.pppassword)).encode(),
-                                            self.pppassword.encode()]))
-                        self.upstream.read_bytes(2, socks5_auth_finish)
-                    else:  # bad day, something is wrong
-                        fail()
-
-                def socks5_auth_finish(data=None):
-                    if data == b'\x01\x00':  # auth passed
-                        conn_upstream()
-                    else:
-                        fail()
-
-                def conn_upstream(data=None):
-                    req = b''.join([b"\x05\x01\x00\x03",
-                                   chr(len(self.request.host.rsplit(':', 1)[0])).encode(),
-                                   self.request.host.rsplit(':', 1)[0].encode(),
-                                   struct.pack(b">H", self.requestport)])
-                    self.upstream.write(req)
-                    self.upstream.read_bytes(4, read_upstream_data)
-
-                def read_upstream_data(data=None):
-                    if data.startswith(b'\x05\x00\x00\x01'):
-                        self.upstream.read_bytes(6, conn)
-                    elif data.startswith(b'\x05\x00\x00\x03'):
-                        self.upstream.read_bytes(3, readhost)
-                    elif data.startswith(b'\x05\x00\x00\x04'):
-                        self.upstream.read_bytes(18, conn)
-                    else:
-                        fail()
-
-                def readhost(data=None):
-                    self.upstream.read_bytes(ord(data[0]), conn)
-
-                def conn(data=None):
-                    self.upstream.set_nodelay(False)
-                    logging.debug('socks5 remote server connected')
-                    _sent_request()
-
-                def fail():
-                    self.send_error(500)
-                    self.upstream.close()
-
-                self.upstream.set_nodelay(True)
-                self.upstream.write(b"\x05\x02\x00\x02" if self.ppusername else b"\x05\x01\x00")
-                self.upstream.read_bytes(2, socks5_auth)
-
-            def _create_upstream():
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-                self.upstream = tornado.iostream.IOStream(s)
-                self.upstream.set_close_callback(self.on_upstream_close)
-                if self.pptype == 'http':
-                    self.upstream.connect((self.pphost, int(self.ppport)), _sent_request)
-                elif self.pptype == 'https':
-                    self.upstream = tornado.iostream.SSLIOStream(s)
-                    self.upstream.connect((self.pphost, int(self.ppport)), _sent_request)
-                elif self.pptype is None:
-                    self.upstream.connect((self.request.host.rsplit(':', 1)[0], self.requestport), _sent_request)
-                elif self.pptype == 'socks5':
-                    self.upstream.connect((self.pphost, int(self.ppport)), socks5_handshake)
-                else:
-                    self.send_error(501)
-
+    @gen.coroutine
+    def get_remote_conn(self):
+        if hasattr(self, 'upstream'):
+            del self.upstream
+        if self.request.method != 'CONNECT':
             lst = UPSTREAM_POOL.get(self.upstream_name, [])
-            self.upstream = None
             for item in lst:
                 lst.remove(item)
                 if not item.closed():
@@ -286,10 +217,62 @@ class ProxyHandler(tornado.web.RequestHandler):
                         self.upstream.set_close_callback(self.on_upstream_close)
                         break
                     item.close()
-            if self.upstream is None:
-                _create_upstream()
+        if not hasattr(self, 'upstream'):
+            logging.debug('connecting to server')
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+            upstream = tornado.iostream.IOStream(s)
+            upstream.set_close_callback(self.on_upstream_close)
+            if self.pptype is None:
+                yield gen.Task(upstream.connect, (self.request.host.rsplit(':', 1)[0], self.requestport))
+            elif self.pptype == 'http':
+                yield gen.Task(upstream.connect, (self.pphost, int(self.ppport)))
+            elif self.pptype == 'https':
+                upstream = tornado.iostream.SSLIOStream(s)
+                upstream.set_close_callback(self.on_upstream_close)
+                yield gen.Task(upstream.connect, (self.pphost, int(self.ppport)))
+            elif self.pptype == 'socks5':
+                logging.debug('connecting to socks5 server')
+                yield gen.Task(upstream.connect, (self.pphost, int(self.ppport)))
+                try:
+                    upstream.set_nodelay(True)
+                    upstream.write(b"\x05\x02\x00\x02" if self.ppusername else b"\x05\x01\x00")
+                    data = yield gen.Task(upstream.read_bytes, 2)
+                    if data == b'\x05\x02':  # basic auth
+                        upstream.write(b''.join([b"\x01",
+                                                chr(len(self.ppusername)).encode(),
+                                                self.ppusername.encode(),
+                                                chr(len(self.pppassword)).encode(),
+                                                self.pppassword.encode()]))
+                        data = yield gen.Task(upstream.read_bytes, 2)
+
+                    assert data[1] == b'\x00'  # no auth needed or auth passed
+                    req = b''.join([b"\x05\x01\x00\x03",
+                                     chr(len(self.request.host.rsplit(':', 1)[0])).encode(),
+                                     self.request.host.rsplit(':', 1)[0].encode(),
+                                     struct.pack(b">H", self.requestport)])
+                    upstream.write(req)
+                    data = yield gen.Task(upstream.read_bytes, 4)
+                    assert data[1] == b'\x00'
+                    if data[3] == b'\x01':  # read ipv4 addr
+                        yield gen.Task(upstream.read_bytes, 4)
+                    elif data[3] == b'\x03':  # read host addr
+                        data = yield gen.Task(upstream.read_bytes, 1)
+                        yield gen.Task(upstream.read_bytes, ord(data[0]))
+                    elif data[3] == b'\x04':  # read ipv6 addr
+                        yield gen.Task(upstream.read_bytes, 16)
+                    yield gen.Task(upstream.read_bytes, 2)  # read port
+                    upstream.set_nodelay(False)
+                except Exception:
+                    self.send_error(500)
+                    upstream.close()
             else:
-                _sent_request()
+                self.send_error(501)
+            logging.debug('remote server connected')
+            self.upstream = upstream
+
+    @tornado.web.asynchronous
+    def get(self):
+        client = self.request.connection.stream
 
         def _client_write(data):
             if not client.closed():
@@ -332,9 +315,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.set_status(500)
 
             self._headers = HTTPHeaders.parse(header_data)
-            conn_header = self._headers.get("Connection")
-            if conn_header and (conn_header.lower() == "keep-alive"):
-                self._close_flag = False
             logging.debug('_close_flag: %s' % self._close_flag)
             if "Content-Length" in self._headers:
                 if "," in self._headers["Content-Length"]:
@@ -381,9 +361,12 @@ class ProxyHandler(tornado.web.RequestHandler):
         def _finish(data=None):
             if data:
                 _client_write(data)
+            conn_header = self._headers.get("Connection")
+            if conn_header and (conn_header.lower() == "keep-alive"):
+                self._close_flag = False
             self.finish()
 
-        _get_upstream()
+        _sent_request()
 
     options = post = delete = trace = put = head = get
 
@@ -400,150 +383,55 @@ class ProxyHandler(tornado.web.RequestHandler):
                 UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
 
     def on_connection_close(self):
-        if hasattr(self, 'upstream'):
-            self.upstream.close()
         logging.debug('client connection closed')
+        self._close_flag = True
         self.finish()
 
+    @gen.coroutine
     def on_upstream_close(self):
         if not self._headers_written:
             if self._proxy_retry < 3:
                 self._proxy_retry += 1
                 self.clear()
                 self.getparent(forceproxy=True)
-                self.get()
+                yield self.get_remote_conn()
+                if self.request.method == 'CONNECT':
+                    self.connect()
+                else:
+                    self.get()
             else:
                 self.send_error(504)
 
     @tornado.web.asynchronous
     def connect(self):
-        self.requestport = int(self.request.uri.rsplit(':', 1)[1])
+
         client = self.request.connection.stream
 
-        def read_from_client(data):
+        def upstream_write(data):
             if not upstream.closed():
                 upstream.write(data)
 
-        def read_from_upstream(data):
+        def client_write(data):
             if not client.closed():
                 client.write(data)
 
-        def client_close(data=None):
-            if not upstream.closed():
-                if data:
-                    upstream.write(data)
-                upstream.close()
-
-        def upstream_close(data=None):
-            if not client.closed():
-                if data:
-                    client.write(data)
-                client.close()
-
-        def start_tunnel(data=None):
-            self._headers_written = True
-            client.read_until_close(client_close, read_from_client)
-            upstream.read_until_close(upstream_close, read_from_upstream)
-            if data:
-                read_from_client(data.encode())
-
-        def start_ssltunnel(data=None):
-            self._headers_written = True
-            client.read_until_close(client_close, read_from_client)
-            upstream.read_until_close(upstream_close, read_from_upstream)
-            read_from_upstream(b'HTTP/1.1 200 Connection established\r\n\r\n')
-
-        def http_conntgt(data=None):
-            if self.pptype == 'http' or self.pptype == 'https':
-                s = b'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
-                if 'Proxy-Authorization' not in self.request.headers and self.ppusername:
-                    a = '%s:%s' % (self.ppusername, self.pppassword)
-                    self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
-            else:
-                s = '%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
-            if self.request.method != 'CONNECT':
-                self.request.headers['Connection'] = 'close'
-            s = [s, ]
+        upstream = self.upstream
+        if self.pptype and 'http' in self.pptype:
+            s = [b'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version), ]
+            if 'Proxy-Authorization' not in self.request.headers and self.ppusername:
+                a = '%s:%s' % (self.ppusername, self.pppassword)
+                self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             s.append(b'\r\n'.join(['%s: %s' % (key, value) for key, value in self.request.headers.items()]).encode('utf8'))
             s.append(b'\r\n\r\n')
-            if self.request.body:
-                s.extend([self.request.body, b'\r\n\r\n'])
-            start_tunnel(b''.join(s))
-
-        def socks5_handshake(data=None):
-            def socks5_auth(data=None):
-                if data == b'\x05\x00':  # no auth needed
-                    conn_upstream()
-                elif data == b'\x05\x02':  # basic auth
-                    upstream.write(b''.join([b"\x01",
-                                   chr(len(self.ppusername)).encode(),
-                                   self.ppusername.encode(),
-                                   chr(len(self.pppassword)).encode(),
-                                   self.pppassword.encode()]))
-                    upstream.read_bytes(2, socks5_auth_finish)
-                else:  # bad day, something is wrong
-                    fail()
-
-            def socks5_auth_finish(data=None):
-                if data == b'\x01\x00':  # auth passed
-                    conn_upstream()
-                else:
-                    fail()
-
-            def conn_upstream(data=None):
-                req = b''.join([b"\x05\x01\x00\x03",
-                               chr(len(self.request.host.rsplit(':', 1)[0])).encode(),
-                               self.request.host.rsplit(':', 1)[0].encode(),
-                               struct.pack(b">H", self.requestport)])
-                upstream.write(req)
-                upstream.read_bytes(4, read_upstream_data)
-
-            def read_upstream_data(data=None):
-                if data.startswith(b'\x05\x00\x00\x01'):
-                    upstream.read_bytes(6, conn)
-                elif data.startswith(b'\x05\x00\x00\x03'):
-                    upstream.read_bytes(3, readhost)
-                elif data.startswith(b'\x05\x00\x00\x04'):
-                    self.upstream.read_bytes(18, conn)
-                else:
-                    fail()
-
-            def readhost(data=None):
-                upstream.read_bytes(ord(data[0]), conn)
-
-            def conn(data=None):
-                upstream.set_nodelay(False)
-                if self.request.method == 'CONNECT':
-                    start_ssltunnel()
-                else:
-                    http_conntgt()
-
-            def fail():
-                self.send_error(500)
-                upstream.close()
-
-            upstream.set_nodelay(True)
-            upstream.write(b"\x05\x02\x00\x02" if self.ppusername else b"\x05\x01\x00")
-            upstream.read_bytes(2, socks5_auth)
-
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-        self.upstream = tornado.iostream.IOStream(s)
-        self.upstream.set_close_callback(self.on_upstream_close)
-        upstream = self.upstream
-        if self.pphost is None:
-            if self.request.method == 'CONNECT':
-                self.upstream.connect((self.request.host.rsplit(':', 1)[0], self.requestport), start_ssltunnel)
-            else:
-                self.upstream.connect((self.request.host.rsplit(':', 1)[0], self.requestport), http_conntgt)
-        elif self.pptype == 'http':
-            self.upstream.connect((self.pphost, int(self.ppport)), http_conntgt)
-        elif self.pptype == 'https':
-            self.upstream = tornado.iostream.SSLIOStream(s)
-            self.upstream.connect((self.pphost, int(self.ppport)), http_conntgt)
-        elif self.pptype == 'socks5':
-            self.upstream.connect((self.pphost, int(self.ppport)), socks5_handshake)
+            self._headers_written = True
+            upstream_write(b''.join(s).encode())
+            client.read_until_close(upstream.close, upstream_write)
+            upstream.read_until_close(client.close, client_write)
         else:
-            self.send_error(501)
+            self._headers_written = True
+            client_write(b'HTTP/1.1 200 Connection established\r\n\r\n')
+            client.read_until_close(upstream.close, upstream_write)
+            upstream.read_until_close(client.close, client_write)
 
 
 class ForceProxyHandler(ProxyHandler):

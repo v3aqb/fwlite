@@ -1,11 +1,4 @@
-||web.tweetdeck.com
-||huluim.com
-||hulu.com
-||ytimg.com
 ||google.com
 ||google.com.hk
-||google-analytics.com
 ||googlecode.com
-||googleusercontent.com
-||gstatic.com
 ||feedly.com
