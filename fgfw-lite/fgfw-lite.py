@@ -108,7 +108,7 @@ UPSTREAM_POOL = {}
 class HTTPProxyConnection(HTTPConnection):
     def _on_headers(self, data):
         try:
-            data = native_str(data.decode('latin1'))
+            data = unicode(data.decode('latin1'))
             eol = data.find("\r\n")
             start_line = data[:eol]
             try:
@@ -289,7 +289,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 s = u'%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
             s = [s, ]
-            s.append(u'\r\n'.join([u'%s: %s' % (key, unicode(value, 'utf8')) for key, value in self.request.headers.items() if key not in ["Expect", ]]))
+            s.append(u'\r\n'.join([u'%s: %s' % (key, value) for key, value in self.request.headers.items() if key not in ["Expect", ]]))
             s.append(u'\r\n\r\n')
             self.upstream.write(u''.join(s).encode('latin1'))
             content_length = self.request.headers.get("Content-Length")
