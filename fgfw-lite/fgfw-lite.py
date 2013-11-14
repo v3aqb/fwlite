@@ -136,8 +136,6 @@ class HTTPProxyConnection(HTTPConnection):
                 content_length = int(content_length)
                 if content_length > self.stream.max_buffer_size:
                     raise _BadRequestException("Content-Length too long")
-                if headers.get("Expect") == "100-continue":
-                    self.stream.write(b"HTTP/1.1 100 (Continue)\r\n\r\n")
 
             self.request_callback(self._request)
         except _BadRequestException as e:
@@ -286,7 +284,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 s = u'%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
             s = [s, ]
-            s.append(u'\r\n'.join([u'%s: %s' % (key, value) for key, value in self.request.headers.items() if key not in ["Expect", ]]))
+            s.append(u'\r\n'.join([u'%s: %s' % (key, value) for key, value in self.request.headers.items()]))
             s.append(u'\r\n\r\n')
             self.upstream.write(u''.join(s).encode('latin1'))
             content_length = self.request.headers.get("Content-Length")
@@ -306,9 +304,12 @@ class ProxyHandler(tornado.web.RequestHandler):
             self._headers_written = True
             data = unicode(data, 'latin1')
             first_line, _, header_data = data.partition("\n")
-            status_code = int(first_line.split()[1])
+            first_line = first_line.split()
             try:
-                self.set_status(status_code)
+                if len(first_line) >= 3:
+                    self.set_status(int(first_line[1]), ' '.join(first_line[2:]))
+                else:
+                    self.set_status(int(first_line[1]))
             except ValueError:
                 self.set_status(500)
 
@@ -328,18 +329,21 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 content_length = None
 
-            if self.request.method == "HEAD" or status_code == 304:
+            # _client_write(b''.join(write_buffer))
+            # self._headers_written = True
+
+            if self.request.method == "HEAD" or self._status_code == 304 or \
+                    100 <= self._status_code < 200 or self._status_code == 204:
                 _finish()
             elif self._headers.get("Transfer-Encoding") == "chunked":
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             elif content_length is not None:
                 logging.debug('reading response body')
                 self.upstream.read_bytes(content_length, _finish, streaming_callback=_client_write)
-            elif self._headers.get("Connection") == "close":
-                logging.debug('reading response body')
-                self.upstream.read_until_close(_finish)
             else:
-                _finish()
+                logging.debug('reading response body')
+                self._headers["Connection"] = "close"
+                self.upstream.read_until_close(_finish, _client_write)
 
         def _on_chunk_lenth(data):
             _client_write(data)
@@ -357,8 +361,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                 _finish()
 
         def _finish(data=None):
-            if data:
-                _client_write(data)
             conn_header = self._headers.get("Connection")
             if conn_header and (conn_header.lower() == "keep-alive"):
                 self._close_flag = False
