@@ -43,7 +43,6 @@ import tornado.web
 from tornado import gen
 from tornado.httputil import HTTPHeaders
 from tornado.httpserver import HTTPConnection, HTTPServer, _BadRequestException, HTTPRequest
-from tornado.escape import native_str
 try:
     import configparser
 except ImportError:
@@ -51,12 +50,10 @@ except ImportError:
 configparser.RawConfigParser.OPTCRE = re.compile(r'(?P<option>[^=\s][^=]*)\s*(?P<vi>[=])\s*(?P<value>.*)$')
 try:
     import ipaddress
-    ip_address = ipaddress.ip_address
-    ip_network = ipaddress.ip_network
 except ImportError:
-    import ipaddr
-    ip_address = ipaddr.IPAddress
-    ip_network = ipaddr.IPNetwork
+    import ipaddr as ipaddress
+    ipaddress.ip_address = ipaddress.IPAddress
+    ipaddress.ip_network = ipaddress.IPNetwork
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -390,32 +387,34 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @gen.coroutine
     def on_upstream_close(self):
-        if not self._headers_written:
-            if self._proxy_retry < 3:
-                self._proxy_retry += 1
-                self.clear()
-                self.getparent(forceproxy=True)
-                yield self.get_remote_conn()
-                if self.request.method == 'CONNECT':
-                    self.connect()
+        if not self._finished:
+            if not self._headers_written:
+                if self._proxy_retry < 3:
+                    self._proxy_retry += 1
+                    self.clear()
+                    self.getparent(forceproxy=True)
+                    yield self.get_remote_conn()
+                    if self.request.method == 'CONNECT':
+                        self.connect()
+                    else:
+                        self.get()
                 else:
-                    self.get()
+                    self.send_error(504)
             else:
-                self.send_error(504)
+                self.finish()
 
     @tornado.web.asynchronous
     def connect(self):
-
-        client = self.request.connection.stream
-
         def upstream_write(data):
             if not upstream.closed():
                 upstream.write(data)
 
         def client_write(data):
+            self._headers_written = True
             if not client.closed():
                 client.write(data)
 
+        client = self.request.connection.stream
         upstream = self.upstream
         if self.pptype and 'http' in self.pptype:
             s = [b'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version), ]
@@ -424,12 +423,10 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             s.append(b'\r\n'.join(['%s: %s' % (key, value) for key, value in self.request.headers.items()]).encode('utf8'))
             s.append(b'\r\n\r\n')
-            self._headers_written = True
             upstream_write(b''.join(s).encode())
             client.read_until_close(upstream.close, upstream_write)
             upstream.read_until_close(client.close, client_write)
         else:
-            self._headers_written = True
             client_write(b'HTTP/1.1 200 Connection established\r\n\r\n')
             client.read_until_close(upstream.close, upstream_write)
             upstream.read_until_close(client.close, client_write)
@@ -573,10 +570,10 @@ class parent_proxy(object):
                     logging.warning('./fgfw-lite/gfwlist.txt is corrupted!')
 
         self.chinanet = []
-        self.chinanet.append(ip_network('192.168.0.0/16'))
-        self.chinanet.append(ip_network('172.16.0.0/12'))
-        self.chinanet.append(ip_network('10.0.0.0/8'))
-        self.chinanet.append(ip_network('127.0.0.0/8'))
+        self.chinanet.append(ipaddress.ip_network('192.168.0.0/16'))
+        self.chinanet.append(ipaddress.ip_network('172.16.0.0/12'))
+        self.chinanet.append(ipaddress.ip_network('10.0.0.0/8'))
+        self.chinanet.append(ipaddress.ip_network('127.0.0.0/8'))
         # ripped from https://github.com/fivesheep/chnroutes
         import math
         data = open('./fgfw-lite/delegated-apnic-latest').read()
@@ -592,7 +589,7 @@ class parent_proxy(object):
             #mask in *nix format
             mask2 = 32 - int(math.log(num_ip, 2))
 
-            self.chinanet.append(ip_network('{}/{}'.format(starting_ip, mask2)))
+            self.chinanet.append(ipaddress.ip_network('{}/{}'.format(starting_ip, mask2)))
 
     def parentproxy(self, uri, host, forceproxy=False):
         '''
@@ -608,7 +605,7 @@ class parent_proxy(object):
             if host in self.hostinchina:
                 return self.hostinchina.get(host)
             try:
-                ipo = ip_address(socket.gethostbyname(host))
+                ipo = ipaddress.ip_address(socket.gethostbyname(host))
             except Exception:
                 return None
             if any(ipo in net for net in self.chinanet):
