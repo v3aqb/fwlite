@@ -1057,6 +1057,8 @@ class fgfwproxy(FGFWProxyHandler):
         self.enable = conf.userconf.dgetbool('fgfwproxy', 'enable', True)
         self.enableupdate = conf.userconf.dgetbool('fgfwproxy', 'update', True)
         self.listen = conf.userconf.dget('fgfwproxy', 'listen', '8118')
+        if conf.userconf.dgetbool('FGFW_Lite', 'debuginfo', False):
+            logging.basicConfig(level=logging.DEBUG)
 
     def start(self):
         if self.enable:
