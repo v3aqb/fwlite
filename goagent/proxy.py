@@ -985,7 +985,10 @@ class HTTPUtil(object):
                 # set a short timeout to trigger timeout retry more quickly.
                 sock.settimeout(timeout or self.max_timeout)
                 # pick up the certificate
-                ssl_sock = ssl.wrap_socket(sock, do_handshake_on_connect=False)
+                if not self.ssl_validate:
+                    ssl_sock = ssl.wrap_socket(sock, do_handshake_on_connect=False)
+                else:
+                    ssl_sock = ssl.wrap_socket(sock, cert_reqs=ssl.CERT_REQUIRED, ca_certs='cacert.pem', do_handshake_on_connect=False)
                 ssl_sock.settimeout(timeout or self.max_timeout)
                 # start connection time record
                 start_time = time.time()
@@ -1005,7 +1008,8 @@ class HTTPUtil(object):
                 if self.ssl_validate and address[0].endswith('.appspot.com'):
                     cert = ssl_sock.getpeercert()
                     commonname = next((v for ((k, v),) in cert['subject'] if k == 'commonName'))
-                    if '.google' not in commonname and not commonname.endswith('.appspot.com'):
+                    fields = commonname.split('.')
+                    if not (('google' in fields and all(len(x) <=3 for x in fields[fields.index('google')+1:])) or commonname.endswith('appspot.com')):
                         raise ssl.SSLError("Host name '%s' doesn't match certificate host '%s'" % (address[0], commonname))
                 # put ssl socket object to output queobj
                 queobj.put(ssl_sock)
@@ -1078,7 +1082,8 @@ class HTTPUtil(object):
                 queobj.get()
         host, port = address
         result = None
-        create_connection = _create_ssl_connection if not self.ssl_obfuscate and not self.ssl_validate else _create_openssl_connection
+        # create_connection = _create_ssl_connection if not self.ssl_obfuscate and not self.ssl_validate else _create_openssl_connection
+        create_connection = _create_ssl_connection
         addresses = [(x, port) for x in self.dns_resolve(host)]
         for i in range(self.max_retry):
             window = min((self.max_window+1)//2 + i, len(addresses))
@@ -1631,13 +1636,6 @@ def gae_urlfetch(method, url, headers, payload, fetchserver, **kwargs):
         if response.status in (400, 405):
             # filter by some firewall
             common.GAE_CRLF = 0
-        if response.status == 403:
-            sock = getattr(response.fp, '_sock', None)
-            if sock:
-                ipaddr = sock.getpeername()[0]
-                logging.warn('http_util.request fetchserver=%r return 403, remove %r from GAE_HOSTS', fetchserver, ipaddr)
-                common.GAE_HOSTS.remove(ipaddr)
-            del sock
         return response
     data = response.read(4)
     if len(data) < 4:
@@ -1882,12 +1880,12 @@ class GAEProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             need_resolve_remote += [x for x in google_hosts if not re.match(r'\d+\.\d+\.\d+\.\d+', x)]
         for dnsserver in ('8.8.4.4', '168.95.1.1', '114.114.114.114', '114.114.115.115'):
             for host in need_resolve_remote:
-                logging.info('resolve remote host=%r from dnsserver=%r', host, dnsserver)
+                logging.debug('resolve remote host=%r from dnsserver=%r', host, dnsserver)
                 try:
                     iplist = DNSUtil.remote_resolve(dnsserver, host, timeout=3)
                     if iplist:
                         resolved_iplist += iplist
-                        logging.info('resolve remote host=%r to iplist=%s', host, iplist)
+                        logging.debug('resolve remote host=%r to iplist=%s', host, iplist)
                 except (socket.error, OSError) as e:
                     logging.exception('resolve remote host=%r dnsserver=%r failed: %s', host, dnsserver, e)
         resolved_iplist = list(set(resolved_iplist))
