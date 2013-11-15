@@ -314,7 +314,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.set_status(500)
 
             self._headers = HTTPHeaders.parse(header_data)
-            logging.debug('_close_flag: %s' % self._close_flag)
             if "Content-Length" in self._headers:
                 if "," in self._headers["Content-Length"]:
                     # Proxies sometimes cause Content-Length headers to get
@@ -364,6 +363,8 @@ class ProxyHandler(tornado.web.RequestHandler):
             conn_header = self._headers.get("Connection")
             if conn_header and (conn_header.lower() == "keep-alive"):
                 self._close_flag = False
+            logging.debug('_close_flag: %s' % self._close_flag)
+            self.upstream.set_close_callback(None)
             self.finish()
 
         _sent_request()
@@ -373,6 +374,7 @@ class ProxyHandler(tornado.web.RequestHandler):
     def on_finish(self):
         if hasattr(self, 'upstream'):
             if self.upstream.closed() or self._close_flag:
+                logging.debug('close remote connection, closed: %s flag: %s' % (self.upstream.closed(), self._close_flag))
                 self.upstream.close()
                 self.request.connection.stream.close()
             else:
@@ -381,14 +383,17 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.upstream._last_active = time.time()
                 self.upstream.set_close_callback(None)
                 UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
+                logging.debug('pooling remote connection')
 
     def on_connection_close(self):
         logging.debug('client connection closed')
         self._close_flag = True
-        self.finish()
+        if not self._finished:
+            self.finish()
 
     @gen.coroutine
     def on_upstream_close(self):
+        logging.debug('remote connection closed')
         if not self._finished:
             if not self._headers_written:
                 if self._proxy_retry < 3:
