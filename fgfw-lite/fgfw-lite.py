@@ -408,9 +408,10 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.upstream.set_close_callback(None)
                 UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
                 logging.debug('pooling remote connection')
-        # if self._success and self._proxy_retry > 1:
-            # TODO: request blocked by firewall, add temp rules to PARENT_PROXY
-            # PARENT_PROXY.gfwlist.append(autoproxy_rule('||%s' % self.request.host.split(':')[0]))
+        #  TODO: request blocked by firewall, add temp rules to PARENT_PROXY
+        if (self._success and self._proxy_retry > 1) or (not self._success and self.request.method == 'CONNECT'):
+            logging.info('add autoproxy rule: ||%s' % self.request.host.split(':')[0])
+        #     PARENT_PROXY.gfwlist.append(autoproxy_rule('||%s' % self.request.host.split(':')[0]))
 
     def on_connection_close(self):
         logging.debug('client connection closed')
@@ -418,9 +419,8 @@ class ProxyHandler(tornado.web.RequestHandler):
         if hasattr(self, 'upstream'):
             self.upstream.set_close_callback(None)
             self.upstream.close()
-        # if self._success and self._proxy_retry > 1:
-            # TODO: request blocked by firewall, add temp rules to PARENT_PROXY
-            # PARENT_PROXY.gfwlist.append(autoproxy_rule('||%s' % self.request.host.split(':')[0]))
+        if not self._finished:
+            self.finish()
 
     @gen.coroutine
     def on_upstream_close(self):
@@ -456,6 +456,8 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         def client_write(data):
             self._headers_written = True
+            if len(data) > 128:
+                self._success = True
             if not client.closed():
                 client.write(data)
 
@@ -508,7 +510,7 @@ class autoproxy_rule(object):
             elif rule.startswith('|https://'):
                 i = rule.find('/', 9)
                 regex = rule[9:] if i == -1 else rule[9:i]
-                regex = r'^(?:https://)?%s' % regex.replace('.', r'\.').replace('*', '[^/]*')
+                regex = r'^(?:https://)?%s(?:[:/]|$)' % regex.replace('.', r'\.').replace('*', '[^/]*')
                 return re.compile(regex)
             else:
                 regex = rule.replace('.', r'\.').replace('?', r'\?').replace('*', '.*').replace('^', r'[^\w%._-]')
