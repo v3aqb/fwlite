@@ -492,10 +492,7 @@ class autoproxy_rule(object):
     def __init__(self, arg):
         super(autoproxy_rule, self).__init__()
         if not isinstance(arg, str):
-            if isinstance(arg, bytes):
-                arg = arg.decode()
-            else:
-                raise TypeError("invalid type: must be a string(or bytes)")
+            arg = str(arg)
         self.rule = arg.strip()
         if len(self.rule) < 3 or self.rule.startswith('!') or self.rule.startswith('[') or '#' in self.rule:
             raise TypeError("invalid autoproxy_rule: %s" % self.rule)
