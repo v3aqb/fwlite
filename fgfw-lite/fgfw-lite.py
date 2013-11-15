@@ -278,16 +278,18 @@ class ProxyHandler(tornado.web.RequestHandler):
         client = self.request.connection.stream
         self._client_write_buffer = []
 
+        def _do_client_write(data):
+            if not client.closed():
+                client.write(data)
+
         def _client_write(data):
             if self._headers_written:
-                if not client.closed():
-                    client.write(data)
+                _do_client_write(data)
             else:
                 self._client_write_buffer.append(data)
                 if len(b''.join(self._client_write_buffer)) > 512000:
-                    if not client.closed():
-                        client.write(b''.join(self._client_write_buffer))
-                    self._client_write_buffer = []
+                    while self._client_write_buffer:
+                        _do_client_write(self._client_write_buffer.pop(0))
                     self._headers_written = True
 
         def _sent_request():
@@ -342,9 +344,6 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 content_length = None
 
-            # _client_write(b''.join(write_buffer))
-            # self._headers_written = True
-
             if self.request.method == "HEAD" or self._status_code == 304 or \
                     100 <= self._status_code < 200 or self._status_code == 204:
                 _finish()
@@ -374,9 +373,9 @@ class ProxyHandler(tornado.web.RequestHandler):
                 _finish()
 
         def _finish(data=None):
-            if self._client_write_buffer and not client.closed():
-                client.write(b''.join(self._client_write_buffer))
-                self._client_write_buffer = []
+            if self._client_write_buffer:
+                while self._client_write_buffer:
+                    _do_client_write(self._client_write_buffer.pop(0))
                 self._headers_written = True
             self._success = True
             conn_header = self._headers.get("Connection")
@@ -409,9 +408,9 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.upstream.set_close_callback(None)
                 UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
                 logging.debug('pooling remote connection')
-        if self._success and self._proxy_retry > 1:
+        # if self._success and self._proxy_retry > 1:
             # TODO: request blocked by firewall, add temp rules to PARENT_PROXY
-            pass
+            # PARENT_PROXY.gfwlist.append(autoproxy_rule('||%s' % self.request.host.split(':')[0]))
 
     def on_connection_close(self):
         logging.debug('client connection closed')
@@ -419,6 +418,9 @@ class ProxyHandler(tornado.web.RequestHandler):
         if hasattr(self, 'upstream'):
             self.upstream.set_close_callback(None)
             self.upstream.close()
+        # if self._success and self._proxy_retry > 1:
+            # TODO: request blocked by firewall, add temp rules to PARENT_PROXY
+            # PARENT_PROXY.gfwlist.append(autoproxy_rule('||%s' % self.request.host.split(':')[0]))
 
     @gen.coroutine
     def on_upstream_close(self):
@@ -450,13 +452,11 @@ class ProxyHandler(tornado.web.RequestHandler):
     def connect(self):
         def upstream_write(data):
             if not upstream.closed():
-                logging.debug('connect remote write %s' % len(data))
                 upstream.write(data)
 
         def client_write(data):
-            self._success = self._headers_written = True
+            self._headers_written = True
             if not client.closed():
-                logging.debug('connect client write %s' % len(data))
                 client.write(data)
 
         client = self.request.connection.stream
