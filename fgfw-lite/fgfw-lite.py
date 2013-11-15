@@ -275,6 +275,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
+        logging.debug('GET')
         client = self.request.connection.stream
         self._client_write_buffer = []
 
@@ -394,6 +395,9 @@ class ProxyHandler(tornado.web.RequestHandler):
             self._timeout = None
 
     def on_finish(self):
+        logging.debug('on finish')
+        logging.debug('self._success? %s' % self._success)
+        logging.debug('retry? %s' % self._proxy_retry)
         self.remove_timeout()
         if hasattr(self, 'upstream'):
             if self.upstream.closed() or self._close_flag:
@@ -429,6 +433,8 @@ class ProxyHandler(tornado.web.RequestHandler):
         if not self.upstream.closed():
             self.upstream.set_close_callback(None)
             self.upstream.close()
+        logging.debug('request finished? %s' % self._finished)
+        logging.debug('headers_written? %s' % self._headers_written)
         if not self._finished:
             if not self._headers_written:
                 if self._proxy_retry < 3:
@@ -458,11 +464,13 @@ class ProxyHandler(tornado.web.RequestHandler):
             self._headers_written = True
             if len(data) > 128:
                 self._success = True
+                self.remove_timeout()
             if not client.closed():
                 client.write(data)
-
+        logging.debug('CONNECT')
         client = self.request.connection.stream
         upstream = self.upstream
+        self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + 4, stack_context.wrap(self.on_upstream_close))
         if self.pptype and 'http' in self.pptype:
             s = [b'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version), ]
             if 'Proxy-Authorization' not in self.request.headers and self.ppusername:
