@@ -831,34 +831,38 @@ class goagentHandler(FGFWProxyHandler):
             listen_ip = '127.0.0.1'
             listen_port = listen
 
-        proxy = SConfigParser()
-        proxy.read('./goagent/proxy.ini')
-        proxy.set('listen', 'ip', listen_ip)
-        proxy.set('listen', 'port', listen_port)
+        goagent = SConfigParser()
+        goagent.read('./goagent/proxy.ini')
+        goagent.set('listen', 'ip', listen_ip)
+        goagent.set('listen', 'port', listen_port)
 
         if self.enable:
             conf.addparentproxy('GoAgent', ('http', '127.0.0.1', int(listen_port), None, None))
 
-        proxy.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_cn'))
-        proxy.set('gae', 'appid', conf.userconf.dget('goagent', 'goagentGAEAppid', 'goagent'))
-        proxy.set("gae", "password", conf.userconf.dget('goagent', 'goagentGAEpassword', ''))
-        proxy.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
-        proxy.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
-        proxy.set('gae', 'options', conf.userconf.dget('goagent', 'options', ''))
-        proxy.set('pac', 'enable', '0')
-        proxy.set('paas', 'fetchserver', conf.userconf.dget('goagent', 'paasfetchserver', ''))
+        goagent.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_cn'))
+        goagent.set('gae', 'appid', conf.userconf.dget('goagent', 'goagentGAEAppid', 'goagent'))
+        goagent.set("gae", "password", conf.userconf.dget('goagent', 'goagentGAEpassword', ''))
+        goagent.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
+        goagent.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
+        goagent.set('gae', 'options', conf.userconf.dget('goagent', 'options', ''))
+        goagent.set('pac', 'enable', '0')
+        goagent.set('paas', 'fetchserver', conf.userconf.dget('goagent', 'paasfetchserver', ''))
         if conf.userconf.dget('goagent', 'paasfetchserver'):
-            proxy.set('paas', 'enable', '1')
+            goagent.set('paas', 'enable', '1')
             if self.enable:
                 conf.addparentproxy('GoAgent-PAAS', ('http', '127.0.0.1', 8088, None, None))
-
+        if conf.userconf.dget('goagent', 'proxy'):
+            goagent.set('proxy', 'enable', '1')
+            host, port = conf.userconf.dget('goagent', 'proxy').rsplit(':')
+            goagent.set('proxy', 'host', host)
+            goagent.set('proxy', 'port', port)
         if '-hide' in sys.argv[1:]:
-            proxy.set('listen', 'visible', '0')
+            goagent.set('listen', 'visible', '0')
         else:
-            proxy.set('listen', 'visible', '1')
+            goagent.set('listen', 'visible', '1')
 
         with open('./goagent/proxy.ini', 'w') as configfile:
-            proxy.write(configfile)
+            goagent.write(configfile)
 
         if not os.path.isfile('./goagent/CA.crt'):
             self.createCA()
