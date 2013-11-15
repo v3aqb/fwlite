@@ -56,7 +56,7 @@ except ImportError:
     ipaddress.ip_network = ipaddress.IPNetwork
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 WORKINGDIR = '/'.join(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')).split('/')[:-1])
 if ' ' in WORKINGDIR:
@@ -100,6 +100,8 @@ for item in ['./fgfw-lite/redirector.txt', './userconf.ini', './fgfw-lite/local.
         f.write(data)
 
 UPSTREAM_POOL = {}
+ctimer = []
+TIMEOUT = 4
 
 
 class HTTPProxyConnection(HTTPConnection):
@@ -170,6 +172,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         self._proxy_retry = 0
         self._timeout = None
         self._client_write_buffer = []
+        self._success = False
         # transparent proxy
         if self.request.method != 'CONNECT' and self.request.uri.startswith('/') and self.request.host != "127.0.0.1":
             self.request.uri = 'http://%s%s' % (self.request.host, self.request.uri)
@@ -217,12 +220,14 @@ class ProxyHandler(tornado.web.RequestHandler):
                     item.close()
         if not hasattr(self, 'upstream'):
             logging.debug('connecting to server')
-            self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + 5, stack_context.wrap(self.on_upstream_close))
+            self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + TIMEOUT, stack_context.wrap(self.on_upstream_close))
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             self.upstream = tornado.iostream.IOStream(s)
             self.upstream.set_close_callback(self.on_upstream_close)
             if self.pptype is None:
+                t = time.time()
                 yield gen.Task(self.upstream.connect, (self.request.host.rsplit(':', 1)[0], self.requestport))
+                ctimer.append(time.time() - t)
             elif self.pptype == 'http':
                 yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
             elif self.pptype == 'https':
@@ -373,10 +378,10 @@ class ProxyHandler(tornado.web.RequestHandler):
                 client.write(b''.join(self._client_write_buffer))
                 self._client_write_buffer = []
                 self._headers_written = True
+            self._success = True
             conn_header = self._headers.get("Connection")
             if conn_header and (conn_header.lower() == "keep-alive"):
                 self._close_flag = False
-            logging.debug('_close_flag: %s' % self._close_flag)
             self.upstream.set_close_callback(None)
             self.finish()
 
@@ -394,19 +399,26 @@ class ProxyHandler(tornado.web.RequestHandler):
         if hasattr(self, 'upstream'):
             if self.upstream.closed() or self._close_flag:
                 logging.debug('close remote connection, closed: %s flag: %s' % (self.upstream.closed(), self._close_flag))
+                self.upstream.set_close_callback(None)
                 self.upstream.close()
                 self.request.connection.stream.close()
-            else:
+            elif self._success:
                 if self.upstream_name not in UPSTREAM_POOL:
                     UPSTREAM_POOL[self.upstream_name] = []
                 self.upstream._last_active = time.time()
                 self.upstream.set_close_callback(None)
                 UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
                 logging.debug('pooling remote connection')
+        if self._success and self._proxy_retry > 1:
+            # TODO: request blocked by firewall, add temp rules to PARENT_PROXY
+            pass
 
     def on_connection_close(self):
         logging.debug('client connection closed')
         self._close_flag = True
+        if hasattr(self, 'upstream'):
+            self.upstream.set_close_callback(None)
+            self.upstream.close()
         if not self._finished:
             self.finish()
 
@@ -433,6 +445,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                     logging.warning('%s %s FAILED!' % (self.request.method, self.request.uri))
                     self.send_error(504)
             else:
+                if self.request.method != 'CONNECT':
+                    logging.warning('%s %s FAILED!' % (self.request.method, self.request.uri))
                 self.finish()
 
     @tornado.web.asynchronous
@@ -518,7 +532,7 @@ class autoproxy_rule(object):
     def match(self, uri):
         # url must be something like https://www.google.com
         if self._ptrn.search(uri):
-            logging.info('Autoproxy Rule match {}'.format(self.rule))
+            logging.debug('Autoproxy Rule match {}'.format(self.rule))
             return True
         return False
 
@@ -690,6 +704,12 @@ def updater():
             lastupdate = conf.version.dgetfloat('Update', 'LastUpdate', 0)
             if time.time() - lastupdate > conf.UPDATE_INTV * 60 * 60:
                 update(auto=True)
+        global TIMEOUT, ctimer
+        if len(ctimer) > 40:
+            logging.info('max connection time: %ss in %s' % (max(ctimer), len(ctimer)))
+            TIMEOUT = sum(ctimer) / len(ctimer) * 20 + max(ctimer)
+            logging.info('timeout set to: %s' % TIMEOUT)
+            ctimer = []
 
 
 def update(auto=False):
