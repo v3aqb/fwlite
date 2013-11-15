@@ -310,9 +310,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 logging.debug('sending request body')
                 client.read_bytes(int(content_length), end_body, streaming_callback=self.upstream.write)
             else:
-                if self.pptype is None:
-                    self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + 10, stack_context.wrap(self.on_upstream_close))
-                self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
+                end_body()
 
         def end_body(data=None):
             logging.debug('reading response header')
@@ -419,7 +417,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         #  TODO: request blocked by firewall, add temp rules to PARENT_PROXY
         if (self._success and self._proxy_retry > 1) or (not self._success and self.request.method == 'CONNECT'):
             logging.info('add autoproxy rule: ||%s' % self.request.host.split(':')[0])
-        #     PARENT_PROXY.gfwlist.append(autoproxy_rule('||%s' % self.request.host.split(':')[0]))
+            PARENT_PROXY.gfwlist.append(autoproxy_rule('||%s' % self.request.host.split(':')[0]))
 
     def on_connection_close(self):
         logging.debug('client connection closed')
@@ -718,7 +716,7 @@ def updater():
         global TIMEOUT, ctimer
         if len(ctimer) > 40:
             logging.info('max connection time: %ss in %s' % (max(ctimer), len(ctimer)))
-            TIMEOUT = sum(ctimer) / len(ctimer) * 20 + max(ctimer)
+            TIMEOUT = sum(ctimer) / len(ctimer) * 20 + 2
             logging.info('timeout set to: %s' % TIMEOUT)
             ctimer = []
 
