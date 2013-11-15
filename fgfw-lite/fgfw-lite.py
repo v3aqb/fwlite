@@ -171,7 +171,6 @@ class ProxyHandler(tornado.web.RequestHandler):
         self._close_flag = True
         self._proxy_retry = 0
         self._timeout = None
-        self._client_write_buffer = []
         self._success = False
         # transparent proxy
         if self.request.method != 'CONNECT' and self.request.uri.startswith('/') and self.request.host != "127.0.0.1":
