@@ -20,7 +20,7 @@
 
 from __future__ import print_function, unicode_literals
 
-__version__ = '0.3.4.0'
+__version__ = '0.3.5.0'
 
 import sys
 import os
@@ -220,14 +220,15 @@ class ProxyHandler(tornado.web.RequestHandler):
                     item.close()
         if not hasattr(self, 'upstream'):
             logging.debug('connecting to server')
-            self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + TIMEOUT, stack_context.wrap(self.on_upstream_close))
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             self.upstream = tornado.iostream.IOStream(s)
             self.upstream.set_close_callback(self.on_upstream_close)
             if self.pptype is None:
+                self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + TIMEOUT, stack_context.wrap(self.on_upstream_close))
                 t = time.time()
                 yield gen.Task(self.upstream.connect, (self.request.host.rsplit(':', 1)[0], self.requestport))
                 ctimer.append(time.time() - t)
+                self.remove_timeout()
             elif self.pptype == 'http':
                 yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
             elif self.pptype == 'https':
@@ -271,7 +272,6 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 self.send_error(501)
             logging.debug('remote server connected')
-            self.remove_timeout()
 
     @tornado.web.asynchronous
     def get(self):
@@ -311,13 +311,18 @@ class ProxyHandler(tornado.web.RequestHandler):
                 logging.debug('sending request body')
                 client.read_bytes(int(content_length), end_body, streaming_callback=self.upstream.write)
             else:
+                if self.pptype is None:
+                    self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + 10, stack_context.wrap(self.on_upstream_close))
                 self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def end_body(data=None):
             logging.debug('reading response header')
+            if self.pptype is None:
+                self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + 10, stack_context.wrap(self.on_upstream_close))
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def _on_headers(data=None):
+            self.remove_timeout()
             _client_write(data)
             data = unicode(data, 'latin1')
             first_line, _, header_data = data.partition("\n")
@@ -470,7 +475,8 @@ class ProxyHandler(tornado.web.RequestHandler):
         logging.debug('CONNECT')
         client = self.request.connection.stream
         upstream = self.upstream
-        self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + 4, stack_context.wrap(self.on_upstream_close))
+        if self.pptype is None:
+            self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + 4, stack_context.wrap(self.on_upstream_close))
         if self.pptype and 'http' in self.pptype:
             s = [b'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version), ]
             if 'Proxy-Authorization' not in self.request.headers and self.ppusername:
