@@ -419,8 +419,6 @@ class ProxyHandler(tornado.web.RequestHandler):
         if hasattr(self, 'upstream'):
             self.upstream.set_close_callback(None)
             self.upstream.close()
-        if not self._finished:
-            self.finish()
 
     @gen.coroutine
     def on_upstream_close(self):
@@ -447,17 +445,18 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 if self.request.method != 'CONNECT':
                     logging.warning('%s %s FAILED!' % (self.request.method, self.request.uri))
-                self.finish()
 
     @tornado.web.asynchronous
     def connect(self):
         def upstream_write(data):
             if not upstream.closed():
+                logging.debug('connect remote write %s' % len(data))
                 upstream.write(data)
 
         def client_write(data):
-            self._headers_written = True
+            self._success = self._headers_written = True
             if not client.closed():
+                logging.debug('connect client write %s' % len(data))
                 client.write(data)
 
         client = self.request.connection.stream
