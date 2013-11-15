@@ -168,6 +168,7 @@ class ProxyHandler(tornado.web.RequestHandler):
     def prepare(self):
         self._close_flag = True
         self._proxy_retry = 0
+        self._client_write_buffer = []
         # transparent proxy
         if self.request.method != 'CONNECT' and self.request.uri.startswith('/') and self.request.host != "127.0.0.1":
             self.request.uri = 'http://%s%s' % (self.request.host, self.request.uri)
@@ -253,7 +254,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                         yield gen.Task(upstream.read_bytes, 4)
                     elif data[3] == b'\x03':  # read host addr
                         data = yield gen.Task(upstream.read_bytes, 1)
-                        yield gen.Task(upstream.read_bytes, ord(data[0]))
+                        yield gen.Task(upstream.read_bytes, ord(data))
                     elif data[3] == b'\x04':  # read ipv6 addr
                         yield gen.Task(upstream.read_bytes, 16)
                     yield gen.Task(upstream.read_bytes, 2)  # read port
@@ -269,10 +270,19 @@ class ProxyHandler(tornado.web.RequestHandler):
     @tornado.web.asynchronous
     def get(self):
         client = self.request.connection.stream
+        self._client_write_buffer = []
 
         def _client_write(data):
-            if not client.closed():
-                client.write(data)
+            if self._headers_written:
+                if not client.closed():
+                    client.write(data)
+            else:
+                self._client_write_buffer.append(data)
+                if len(b''.join(self._client_write_buffer)) > 512000:
+                    if not client.closed():
+                        client.write(b''.join(self._client_write_buffer))
+                    self._client_write_buffer = []
+                    self._headers_written = True
 
         def _sent_request():
             logging.debug('remote server connected, sending http request')
@@ -295,13 +305,11 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def end_body(data=None):
-            # self.upstream.write(b'\r\n\r\n')
             logging.debug('reading response header')
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def _on_headers(data=None):
             _client_write(data)
-            self._headers_written = True
             data = unicode(data, 'latin1')
             first_line, _, header_data = data.partition("\n")
             first_line = first_line.split()
@@ -360,6 +368,10 @@ class ProxyHandler(tornado.web.RequestHandler):
                 _finish()
 
         def _finish(data=None):
+            if self._client_write_buffer and not client.closed():
+                client.write(b''.join(self._client_write_buffer))
+                self._client_write_buffer = []
+                self._headers_written = True
             conn_header = self._headers.get("Connection")
             if conn_header and (conn_header.lower() == "keep-alive"):
                 self._close_flag = False
@@ -394,18 +406,22 @@ class ProxyHandler(tornado.web.RequestHandler):
     @gen.coroutine
     def on_upstream_close(self):
         logging.debug('remote connection closed')
+        if not self.upstream.closed():
+            self.upstream.close()
         if not self._finished:
             if not self._headers_written:
                 if self._proxy_retry < 3:
-                    self._proxy_retry += 1
+                    logging.warning('%s %s Failed, retry...' % (self.request.method, self.request.uri))
                     self.clear()
-                    self.getparent(forceproxy=True)
+                    self.getparent(forceproxy=False if self._proxy_retry == 0 else True)
+                    self._proxy_retry += 1
                     yield self.get_remote_conn()
                     if self.request.method == 'CONNECT':
                         self.connect()
                     else:
                         self.get()
                 else:
+                    logging.warning('%s %s FAILED!' % (self.request.method, self.request.uri))
                     self.send_error(504)
             else:
                 self.finish()
