@@ -219,15 +219,15 @@ class ProxyHandler(tornado.web.RequestHandler):
                     item.close()
         if not hasattr(self, 'upstream'):
             logging.debug('connecting to server')
+            if self.ppname == 'direct':
+                self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + TIMEOUT, stack_context.wrap(self.on_upstream_close))
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             self.upstream = tornado.iostream.IOStream(s)
             self.upstream.set_close_callback(self.on_upstream_close)
             if self.pptype is None:
-                self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + TIMEOUT, stack_context.wrap(self.on_upstream_close))
                 t = time.time()
                 yield gen.Task(self.upstream.connect, (self.request.host.rsplit(':', 1)[0], self.requestport))
                 ctimer.append(time.time() - t)
-                self.remove_timeout()
             elif self.pptype == 'http':
                 yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
             elif self.pptype == 'https':
@@ -271,6 +271,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 self.send_error(501)
             logging.debug('remote server connected')
+            self.remove_timeout()
 
     @tornado.web.asynchronous
     def get(self):
@@ -314,7 +315,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         def end_body(data=None):
             logging.debug('reading response header')
-            if self.pptype is None:
+            if self.ppname == 'direct':
                 self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + 10, stack_context.wrap(self.on_upstream_close))
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
@@ -415,7 +416,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
                 logging.debug('pooling remote connection')
         #  TODO: request blocked by firewall, add temp rules to PARENT_PROXY
-        if (self._success and self._proxy_retry > 1) or (not self._success and self.request.method == 'CONNECT'):
+        if (self._success and self._proxy_retry > 1 and self.ppname != 'direct') or (not self._success and self.request.method == 'CONNECT' and self.ppname == 'direct'):
             logging.info('add autoproxy rule: ||%s' % self.request.host.split(':')[0])
             o = autoproxy_rule('||%s' % self.request.host.split(':')[0])
             o.expire = time.time() + 60 * 2
@@ -432,7 +433,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @gen.coroutine
     def on_upstream_close(self):
-        logging.debug('remote connection closed')
+        logging.debug('on_upstream_close closed? %s' % self.upstream.closed())
         self.remove_timeout()
         if not self.upstream.closed():
             self.upstream.set_close_callback(None)
@@ -474,7 +475,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         logging.debug('CONNECT')
         client = self.request.connection.stream
         upstream = self.upstream
-        if self.pptype is None:
+        if self.ppname == 'direct':
             self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + 4, stack_context.wrap(self.on_upstream_close))
         if self.pptype and 'http' in self.pptype:
             s = [b'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version), ]
