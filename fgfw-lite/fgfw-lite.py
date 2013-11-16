@@ -417,7 +417,9 @@ class ProxyHandler(tornado.web.RequestHandler):
         #  TODO: request blocked by firewall, add temp rules to PARENT_PROXY
         if (self._success and self._proxy_retry > 1) or (not self._success and self.request.method == 'CONNECT'):
             logging.info('add autoproxy rule: ||%s' % self.request.host.split(':')[0])
-            PARENT_PROXY.gfwlist.append(autoproxy_rule('||%s' % self.request.host.split(':')[0]))
+            o = autoproxy_rule('||%s' % self.request.host.split(':')[0])
+            o.expire = time.time() + 60 * 2
+            PARENT_PROXY.gfwlist_force.append(o)
 
     def on_connection_close(self):
         logging.debug('client connection closed')
@@ -681,7 +683,15 @@ class parent_proxy(object):
 
         # select parent via uri
 
-        a = any(rule.match(uri) for rule in self.gfwlist_force)
+        def if_gfwlist_force():
+            for rule in self.gfwlist_force:
+                if hasattr(rule, 'expire') and time.time() > rule.expire:
+                    self.gfwlist_force.remove(rule)
+                    logging.debug('%s expired' % rule.rule)
+                elif rule.match(uri):
+                    return True
+
+        a = if_gfwlist_force()
 
         if not a and ifhost_in_china():
             return ('direct', conf.parentdict.get('direct'))
