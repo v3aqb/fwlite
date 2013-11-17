@@ -446,7 +446,8 @@ class SSLConnection(object):
     def close(self):
         if self._makefile_refs < 1:
             self._connection = None
-            socket.socket.close(self._sock)
+            if self._sock:
+                socket.socket.close(self._sock)
         else:
             self._makefile_refs -= 1
 
@@ -864,6 +865,7 @@ class HTTPUtil(object):
         # openssl s_server -accept 443 -key CA.crt -cert CA.crt
         # set_ciphers as Modern Browsers
         self.max_window = max_window
+        self.max_window_map = {}
         self.max_retry = max_retry
         self.max_timeout = max_timeout
         self.tcp_connection_time = collections.defaultdict(float)
@@ -879,15 +881,6 @@ class HTTPUtil(object):
             self.ssl_context.set_session_id(binascii.b2a_hex(os.urandom(10)))
             if hasattr(OpenSSL.SSL, 'SESS_CACHE_BOTH'):
                 self.ssl_context.set_session_cache_mode(OpenSSL.SSL.SESS_CACHE_BOTH)
-            else:
-                try:
-                    import ctypes
-                    SSL_CTRL_SET_SESS_CACHE_MODE = 44
-                    SESS_CACHE_BOTH = 0x3
-                    ctx = ctypes.c_void_p.from_address(id(self.ssl_context)+ctypes.sizeof(ctypes.c_int)+ctypes.sizeof(ctypes.c_voidp))
-                    ctypes.cdll.ssleay32.SSL_CTX_ctrl(ctx, SSL_CTRL_SET_SESS_CACHE_MODE, SESS_CACHE_BOTH, None)
-                except Exception as e:
-                    logging.warning('SSL_CTX_set_session_cache_mode failed: %r', e)
         else:
             self.ssl_context = None
         if self.ssl_validate:
@@ -952,8 +945,9 @@ class HTTPUtil(object):
             get_connection_time = lambda addr: self.ssl_connection_time.__getitem__(addr) or self.tcp_connection_time.__getitem__(addr)
         else:
             get_connection_time = self.tcp_connection_time.__getitem__
+        max_window = self.max_window_map.get(host, self.max_window)
         for i in range(self.max_retry):
-            window = min((self.max_window+1)//2 + i, len(addresses))
+            window = min((max_window+1)//2 + i, len(addresses))
             addresses.sort(key=get_connection_time)
             addrs = addresses[:window] + random.sample(addresses, window)
             queobj = Queue.Queue()
@@ -1085,8 +1079,9 @@ class HTTPUtil(object):
         # create_connection = _create_ssl_connection if not self.ssl_obfuscate and not self.ssl_validate else _create_openssl_connection
         create_connection = _create_ssl_connection
         addresses = [(x, port) for x in self.dns_resolve(host)]
+        max_window = self.max_window_map.get(host, self.max_window)
         for i in range(self.max_retry):
-            window = min((self.max_window+1)//2 + i, len(addresses))
+            window = min((max_window+1)//2 + i, len(addresses))
             addresses.sort(key=self.ssl_connection_time.__getitem__)
             addrs = addresses[:window] + random.sample(addresses, window)
             queobj = Queue.Queue()
@@ -1101,37 +1096,6 @@ class HTTPUtil(object):
                     if i == 0:
                         # only output first error
                         logging.warning('create_ssl_connection to %s return %r, try again.', addrs, result)
-
-    def create_connection_withdata(self, address, timeout=None, source_address=None, data=None):
-        assert isinstance(data, str) and data
-        host, port = address
-        # result = None
-        addresses = [(x, port) for x in self.dns_resolve(host)]
-        if port == 443:
-            get_connection_time = lambda addr: self.ssl_connection_time.get(addr) or self.tcp_connection_time.get(addr)
-        else:
-            get_connection_time = self.tcp_connection_time.get
-        for i in range(self.max_retry):
-            window = min((self.max_window+1)//2 + i, len(addresses))
-            addresses.sort(key=get_connection_time)
-            addrs = addresses[:window] + random.sample(addresses, window)
-            socks = []
-            for addr in addrs:
-                sock = socket.socket(socket.AF_INET if ':' not in address[0] else socket.AF_INET6)
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 32*1024)
-                sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, True)
-                sock.setblocking(0)
-                sock.connect_ex(addr)
-                socks.append(sock)
-            # something happens :D
-            (_, outs, _) = select.select([], socks, [], 5)
-            if outs:
-                sock = outs[0]
-                sock.setblocking(1)
-                socks.remove(sock)
-                any(s.close() for s in socks)
-                return sock
 
     def create_connection_withproxy(self, address, timeout=None, source_address=None, proxy=None):
         assert isinstance(proxy, str)
@@ -1347,6 +1311,7 @@ class Common(object):
         self.GAE_PROFILE = self.CONFIG.get('gae', 'profile')
         self.GAE_MODE = self.CONFIG.get('gae', 'mode')
         self.GAE_HOSTS = self.CONFIG.get('gae', 'hosts')
+        self.GAE_WINDOW = self.CONFIG.getint('gae', 'window') if self.CONFIG.has_option('gae', 'window') else self.CONFIG.getint(self.GAE_PROFILE, 'window')
         self.GAE_CRLF = self.CONFIG.getint('gae', 'crlf')
         self.GAE_VALIDATE = self.CONFIG.getint('gae', 'validate')
         self.GAE_OBFUSCATE = self.CONFIG.getint('gae', 'obfuscate') if self.CONFIG.has_option('gae', 'obfuscate') else 0
@@ -1573,7 +1538,7 @@ class RC4FileObject(object):
 
 
 try:
-    from Crypto.Cipher._ARC4 import new as _Crypto_Cipher_ARC4_new
+    from Crypto.Cipher.ARC4 import new as _Crypto_Cipher_ARC4_new
     def rc4crypt(data, key):
         return _Crypto_Cipher_ARC4_new(key).encrypt(data) if key else data
     class RC4FileObject(object):
@@ -1878,7 +1843,7 @@ class GAEProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if len(resolved_iplist) < 20 or len(set(x.split('.', 1)[0] for x in resolved_iplist)) == 1:
             logging.warning('local google_hosts=%s is too short, try remote_resolve', google_hosts)
             need_resolve_remote += [x for x in google_hosts if not re.match(r'\d+\.\d+\.\d+\.\d+', x)]
-        for dnsserver in ('8.8.4.4', '168.95.1.1', '114.114.114.114', '114.114.115.115'):
+        for dnsserver in ('114.114.114.114', '114.114.115.115'):
             for host in need_resolve_remote:
                 logging.debug('resolve remote host=%r from dnsserver=%r', host, dnsserver)
                 try:
@@ -1950,6 +1915,7 @@ class GAEProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             common.GAE_HOSTS = self.__class__.resolve_google_iplist(common.GAE_HOSTS)
             for appid in common.GAE_APPIDS:
                 http_util.dns['%s.appspot.com' % appid] = common.GAE_HOSTS
+                http_util.max_window_map['%s.appspot.com' % appid] = common.GAE_WINDOW
             logging.info('GOOGLE_HOSTS=%s', common.GOOGLE_HOSTS)
             logging.info('GAE_HOSTS=%s', common.GAE_HOSTS)
 
