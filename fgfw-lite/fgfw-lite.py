@@ -316,7 +316,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         def end_body(data=None):
             logging.debug('reading response header')
             if self.ppname == 'direct':
-                self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + 10, stack_context.wrap(self.on_upstream_close))
+                self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + TIMEOUT, stack_context.wrap(self.on_upstream_close))
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def _on_headers(data=None):
@@ -476,7 +476,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         client = self.request.connection.stream
         upstream = self.upstream
         if self.ppname == 'direct':
-            self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + 4, stack_context.wrap(self.on_upstream_close))
+            self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + TIMEOUT, stack_context.wrap(self.on_upstream_close))
         if self.pptype and 'http' in self.pptype:
             s = [b'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version), ]
             if 'Proxy-Authorization' not in self.request.headers and self.ppusername:
@@ -727,7 +727,7 @@ def updater():
         global TIMEOUT, ctimer
         if len(ctimer) > 40:
             logging.info('max connection time: %ss in %s' % (max(ctimer), len(ctimer)))
-            TIMEOUT = sum(ctimer) / len(ctimer) * 20 + 2
+            TIMEOUT = sum(ctimer) / len(ctimer) * 20 + max(2, max(ctimer))
             logging.info('timeout set to: %s' % TIMEOUT)
             ctimer = []
 
