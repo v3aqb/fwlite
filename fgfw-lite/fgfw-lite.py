@@ -35,7 +35,6 @@ import base64
 import hashlib
 import socket
 import struct
-import random
 import urllib2
 import tornado.ioloop
 import tornado.iostream
@@ -963,13 +962,13 @@ class shadowsocksHandler(FGFWProxyHandler):
         FGFWProxyHandler.__init__(self)
 
     def _config(self):
-        self.filelist = [['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/local.py', './shadowsocks/local.py'],
-                         ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/encrypt.py', './shadowsocks/encrypt.py'],
-                         ['https://github.com/clowwindy/shadowsocks/raw/master/shadowsocks/utils.py', './shadowsocks/utils.py']]
+        self.filelist = [['https://github.com/v3aqb/fgfw-lite/raw/master/shadowsocks/local.py', './shadowsocks/local.py'],
+                         ['https://github.com/v3aqb/fgfw-lite/raw/master/shadowsocks/encrypt.py', './shadowsocks/encrypt.py'],
+                         ['https://github.com/v3aqb/fgfw-lite/raw/master/shadowsocks/utils.py', './shadowsocks/utils.py']]
         self.cmd = '{} -B {}/shadowsocks/local.py'.format(PYTHON2, WORKINGDIR)
         self.cwd = '%s/shadowsocks' % WORKINGDIR
         self.enable = conf.userconf.dgetbool('shadowsocks', 'enable', False)
-        self.enableupdate = conf.userconf.dgetbool('shadowsocks', 'update', False)
+        self.enableupdate = conf.userconf.dgetbool('shadowsocks', 'update', True)
         if self.enable:
             lst = []
             if sys.platform.startswith('win'):
@@ -998,22 +997,29 @@ class shadowsocksHandler(FGFWProxyHandler):
                     break
 
             if not self.cmd.endswith('shadowsocks.exe'):
-                server = conf.userconf.dget('shadowsocks', 'server', '127.0.0.1')
-                server_port = conf.userconf.dget('shadowsocks', 'server_port', '8388')
-                if not server_port.isdigit():
-                    portlst = []
-                    for item in server_port.split(','):
+                import random
+                import json
+                config = {}
+                config['server'] = conf.userconf.dget('shadowsocks', 'server', '127.0.0.1').strip('"')
+                config['server_port'] = conf.userconf.dget('shadowsocks', 'server_port', '8388')
+                config['password'] = conf.userconf.dget('shadowsocks', 'password', 'barfoo!').strip('"')
+                config['method'] = conf.userconf.dget('shadowsocks', 'method', 'aes-256-cfb').strip('"')
+                config['local_port'] = 1080
+                portlst = []
+                if not config['server_port'].isdigit():
+                    for item in config['server_port'].split(','):
                         if item.strip().isdigit():
-                            portlst.append(item.strip())
+                            portlst.append(int(item.strip()))
                         else:
                             a, b = item.strip().split('-')
                             for i in range(int(a), int(b) + 1):
-                                portlst.append(str(i))
-                    server_port = random.choice(portlst)
-
-                password = conf.userconf.dget('shadowsocks', 'password', 'barfoo!')
-                method = conf.userconf.dget('shadowsocks', 'method', 'aes-256-cfb')
-                self.cmd = '{} -s {} -p {} -l 1080 -k {} -m {}'.format(self.cmd, server, server_port, password, method.strip('"'))
+                                portlst.append(i)
+                    config['server_port'] = portlst
+                else:
+                    config['server_port'] = int(config['server_port'])
+                with open('./shadowsocks/config.json', 'wb') as f:
+                    f.write(json.dumps(config, indent=4, separators=(',', ': ')))
+                self.cmd = '{} -c {}'.format(self.cmd, os.path.abspath('./shadowsocks/config.json'))
             conf.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
 
 
