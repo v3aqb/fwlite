@@ -20,7 +20,7 @@
 
 from __future__ import print_function, unicode_literals
 
-__version__ = '0.3.5.0'
+__version__ = '0.3.5.1'
 
 import sys
 import os
@@ -437,6 +437,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         if not self.upstream.closed():
             self.upstream.set_close_callback(None)
             self.upstream.close()
+            ctimer.append(TIMEOUT)
         logging.debug('request finished? %s' % self._finished)
         logging.debug('headers_written? %s' % self._headers_written)
         if not self._finished:
@@ -726,7 +727,7 @@ def updater():
         global TIMEOUT, ctimer
         if len(ctimer) > 40:
             logging.info('max connection time: %ss in %s' % (max(ctimer), len(ctimer)))
-            TIMEOUT = sum(ctimer) / len(ctimer) * 20 + max(2, max(ctimer))
+            TIMEOUT = min(sum(ctimer) / len(ctimer) * 20 + max(2, max(ctimer)), 20)
             logging.info('timeout set to: %s' % TIMEOUT)
             ctimer = []
 
