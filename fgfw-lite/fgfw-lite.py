@@ -787,6 +787,10 @@ class FGFWProxyHandler(object):
         except Exception:
             pass
 
+    def stop(self):
+        self.enable = False
+        self.restart()
+
     def _update(self):
         self._listfileupdate()
 
@@ -1160,7 +1164,7 @@ class Config(object):
 
     def confsave(self):
         self.version.write(open('version.ini', 'w'))
-        self.userconf.write(open('userconf.ini', 'w'))
+        self.userconf.read('userconf.ini')
 
     def addparentproxy(self, name, proxy):
         '''
