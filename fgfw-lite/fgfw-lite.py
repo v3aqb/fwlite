@@ -28,6 +28,7 @@ import subprocess
 import shlex
 import time
 import re
+import errno
 from threading import Thread
 import atexit
 import platform
@@ -104,6 +105,80 @@ TIMEOUT = 4
 
 
 class HTTPProxyConnection(HTTPConnection):
+    def __init__(self, stream, address, request_callback, no_keep_alive=False,
+                 xheaders=False, protocol=None):
+        self.stream = stream
+        self.address = address
+        # Save the socket's address family now so we know how to
+        # interpret self.address even after the stream is closed
+        # and its socket attribute replaced with None.
+        self.address_family = stream.socket.family
+        self.request_callback = request_callback
+        self.no_keep_alive = no_keep_alive
+        self.xheaders = xheaders
+        self.protocol = protocol
+        self._clear_request_state()
+        # Save stack context here, outside of any request.  This keeps
+        # contexts from one request from leaking into the next.
+        self._header_callback = stack_context.wrap(self._on_headers)
+        self.stream.set_close_callback(self._on_connection_close)
+        self.stream.read_until(b"\r\n\r\n", self._header_callback)
+
+    def _handle_events(self, fd, events):
+        if self.stream.closed():
+            gen_log.warning("Got events for closed stream %d", fd)
+            return
+        try:
+            if events & self.stream.io_loop.READ:
+                self.stream._handle_read()
+            if self.stream.closed():
+                return
+            if events & self.stream.io_loop.WRITE:
+                if self.stream._connecting:
+                    self.stream._handle_connect()
+                self.stream._handle_write()
+            if self.stream.closed():
+                return
+            if events & self.stream.io_loop.ERROR:
+                self.stream.error = self.stream.get_fd_error()
+                # We may have queued up a user callback in _handle_read or
+                # _handle_write, so don't close the IOStream until those
+                # callbacks have had a chance to run.
+                self.stream.io_loop.add_callback(self.stream.close)
+                return
+            state = self.stream.io_loop.ERROR
+            if self.stream.reading():
+                state |= self.stream.io_loop.READ
+            if self.stream.writing():
+                state |= self.stream.io_loop.WRITE
+            # if state == self.stream.io_loop.ERROR:
+            #     state |= self.stream.io_loop.READ
+            if state != self.stream._state:
+                assert self.stream._state is not None, \
+                    "shouldn't happen: _handle_events without self._state"
+                self.stream._state = state
+                self.stream.io_loop.update_handler(self.stream.fileno(), self.stream._state)
+        except Exception:
+            gen_log.error("Uncaught exception, closing connection.",
+                          exc_info=True)
+            self.stream.close(exc_info=True)
+            raise
+
+    def read_from_fd(self):
+        if self.stream._read_buffer_size >= 327680:
+            return None
+        try:
+            chunk = self.stream.socket.recv(self.stream.read_chunk_size)
+        except socket.error as e:
+            if e.args[0] in (errno.EWOULDBLOCK, errno.EAGAIN):
+                return None
+            else:
+                raise
+        if not chunk:
+            self.stream.close()
+            return None
+        return chunk
+
     def _on_headers(self, data):
         try:
             data = unicode(data.decode('latin1'))
@@ -115,6 +190,11 @@ class HTTPProxyConnection(HTTPConnection):
                 raise _BadRequestException("Malformed HTTP request line")
             if not version.startswith("HTTP/"):
                 raise _BadRequestException("Malformed HTTP version in HTTP Request-Line")
+
+            if method != 'CONNECT':
+                # overwrite self.stream.read_from_fd, force a block when _read_buffer_size >= 1048576
+                setattr(self.stream, 'read_from_fd', self.read_from_fd)
+                setattr(self.stream, '_handle_events', self._handle_events)
             try:
                 headers = HTTPHeaders.parse(data[eol:])
             except ValueError:
@@ -131,12 +211,6 @@ class HTTPProxyConnection(HTTPConnection):
             self._request = HTTPRequest(
                 connection=self, method=method, uri=uri, version=version,
                 headers=headers, remote_ip=remote_ip, protocol=self.protocol)
-
-            content_length = headers.get("Content-Length")
-            if content_length:
-                content_length = int(content_length)
-                if content_length > self.stream.max_buffer_size:
-                    raise _BadRequestException("Content-Length too long")
 
             self.request_callback(self._request)
         except _BadRequestException as e:
@@ -292,6 +366,20 @@ class ProxyHandler(tornado.web.RequestHandler):
                         _do_client_write(self._client_write_buffer.pop(0))
                     self._headers_written = True
 
+        def body_transfer(s, d, callback):
+            def read_from():
+                if self.__content_length > 0:
+                    s.read_bytes(min(self.__content_length, 65536), write_to)
+                    self.__content_length -= min(self.__content_length, 65536)
+                else:
+                    callback()
+
+            def write_to(data=None):
+                if not d.closed():
+                    d.write(data, read_from)
+
+            read_from()
+
         def _sent_request():
             logging.debug('remote server connected, sending http request')
             if self.pptype == 'http' or self.pptype == 'https':
@@ -308,7 +396,8 @@ class ProxyHandler(tornado.web.RequestHandler):
             content_length = self.request.headers.get("Content-Length")
             if content_length:
                 logging.debug('sending request body')
-                client.read_bytes(int(content_length), end_body, streaming_callback=self.upstream.write)
+                self.__content_length = int(content_length)
+                body_transfer(client, self.upstream, end_body)
             else:
                 end_body()
 
