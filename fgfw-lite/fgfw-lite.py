@@ -292,6 +292,20 @@ class ProxyHandler(tornado.web.RequestHandler):
                         _do_client_write(self._client_write_buffer.pop(0))
                     self._headers_written = True
 
+        def body_transfer(s, d, callback):
+            def read_from():
+                if self.__content_length > 0:
+                    s.read_bytes(min(self.__content_length, 65536), write_to)
+                    self.__content_length -= min(self.__content_length, 65536)
+                else:
+                    callback()
+
+            def write_to(data=None):
+                if not d.closed():
+                    d.write(data, read_from)
+
+            read_from()
+
         def _sent_request():
             logging.debug('remote server connected, sending http request')
             if self.pptype == 'http' or self.pptype == 'https':
@@ -308,7 +322,8 @@ class ProxyHandler(tornado.web.RequestHandler):
             content_length = self.request.headers.get("Content-Length")
             if content_length:
                 logging.debug('sending request body')
-                client.read_bytes(int(content_length), end_body, streaming_callback=self.upstream.write)
+                self.__content_length = int(content_length)
+                body_transfer(client, self.upstream, end_body)
             else:
                 end_body()
 
