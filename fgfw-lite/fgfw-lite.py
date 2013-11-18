@@ -105,25 +105,6 @@ TIMEOUT = 4
 
 
 class HTTPProxyConnection(HTTPConnection):
-    def __init__(self, stream, address, request_callback, no_keep_alive=False,
-                 xheaders=False, protocol=None):
-        self.stream = stream
-        self.address = address
-        # Save the socket's address family now so we know how to
-        # interpret self.address even after the stream is closed
-        # and its socket attribute replaced with None.
-        self.address_family = stream.socket.family
-        self.request_callback = request_callback
-        self.no_keep_alive = no_keep_alive
-        self.xheaders = xheaders
-        self.protocol = protocol
-        self._clear_request_state()
-        # Save stack context here, outside of any request.  This keeps
-        # contexts from one request from leaking into the next.
-        self._header_callback = stack_context.wrap(self._on_headers)
-        self.stream.set_close_callback(self._on_connection_close)
-        self.stream.read_until(b"\r\n\r\n", self._header_callback)
-
     def _handle_events(self, fd, events):
         if self.stream.closed():
             gen_log.warning("Got events for closed stream %d", fd)
@@ -191,8 +172,8 @@ class HTTPProxyConnection(HTTPConnection):
             if not version.startswith("HTTP/"):
                 raise _BadRequestException("Malformed HTTP version in HTTP Request-Line")
 
-            if method != 'CONNECT':
-                # overwrite self.stream.read_from_fd, force a block when _read_buffer_size >= 1048576
+            if method == 'POST':
+                # overwrite self.stream.read_from_fd, force a block
                 setattr(self.stream, 'read_from_fd', self.read_from_fd)
                 setattr(self.stream, '_handle_events', self._handle_events)
             try:
