@@ -1,5 +1,2 @@
-||google.com
-||google.com.hk
-||googlecode.com
 ||feedly.com
 @@||dl.google.com
