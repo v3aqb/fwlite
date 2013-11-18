@@ -176,6 +176,8 @@ class HTTPProxyConnection(HTTPConnection):
                 # overwrite self.stream.read_from_fd, force a block
                 setattr(self.stream, 'read_from_fd', self.read_from_fd)
                 setattr(self.stream, '_handle_events', self._handle_events)
+                self.stream.io_loop.remove_handler(self.stream.fileno())
+                self.stream._state = None
             try:
                 headers = HTTPHeaders.parse(data[eol:])
             except ValueError:
