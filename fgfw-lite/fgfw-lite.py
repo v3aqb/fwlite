@@ -1018,6 +1018,8 @@ class shadowsocksHandler(FGFWProxyHandler):
                     config['server_port'] = portlst
                 else:
                     config['server_port'] = int(config['server_port'])
+                if config['server'].startswith('['):
+                    config['server'] = json.loads(config['server'])
                 with open('./shadowsocks/config.json', 'wb') as f:
                     f.write(json.dumps(config, indent=4, separators=(',', ': ')))
                 self.cmd = '{} -c {}'.format(self.cmd, os.path.abspath('./shadowsocks/config.json'))
