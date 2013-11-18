@@ -183,6 +183,8 @@ class HTTPProxyConnection(HTTPConnection):
             except ValueError:
                 # Probably from split() if there was no ':' in the line
                 raise _BadRequestException("Malformed HTTP headers")
+            if method == 'POST':
+                headers["Connection"] = "close"
 
             # HTTPRequest wants an IP, not a full socket address
             if self.address_family in (socket.AF_INET, socket.AF_INET6):
