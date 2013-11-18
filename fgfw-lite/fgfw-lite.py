@@ -608,7 +608,7 @@ class parent_proxy(object):
                     self.gfwlist.append(o)
 
         for line in open('./fgfw-lite/local.txt'):
-            add_rule(line)
+            add_rule(line, force=True)
 
         for line in open('./fgfw-lite/cloud.txt'):
             add_rule(line, force=True)
