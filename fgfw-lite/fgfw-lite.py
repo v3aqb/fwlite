@@ -44,6 +44,13 @@ from tornado import gen, stack_context
 from tornado.httputil import HTTPHeaders
 from tornado.httpserver import HTTPConnection, HTTPServer, _BadRequestException, HTTPRequest
 try:
+    from tornado_pyuv import UVLoop
+    tornado.ioloop.IOLoop.configure(UVLoop)
+except ImportError:
+    pass
+else:
+    print('UVLoop')
+try:
     import configparser
 except ImportError:
     import ConfigParser as configparser
