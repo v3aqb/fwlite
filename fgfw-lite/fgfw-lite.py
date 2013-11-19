@@ -336,6 +336,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         logging.debug('GET')
         client = self.request.connection.stream
         self._client_write_buffer = []
+        self._close_flag = True
 
         def _do_client_write(data):
             if not client.closed():
@@ -382,11 +383,11 @@ class ProxyHandler(tornado.web.RequestHandler):
             if content_length:
                 logging.debug('sending request body')
                 self.__content_length = int(content_length)
-                body_transfer(client, self.upstream, end_body)
+                body_transfer(client, self.upstream, read_headers)
             else:
-                end_body()
+                read_headers()
 
-        def end_body(data=None):
+        def read_headers(data=None):
             logging.debug('reading response header')
             if self.ppname == 'direct':
                 self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + TIMEOUT, stack_context.wrap(self.on_upstream_close))
@@ -403,6 +404,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.set_status(int(first_line[1]), ' '.join(first_line[2:]))
                 else:
                     self.set_status(int(first_line[1]))
+                if self.request.supports_http_1_1():
+                    self.request.version = first_line[0]
             except ValueError:
                 self.set_status(500)
 
@@ -456,8 +459,12 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self._headers_written = True
             self._success = True
             conn_header = self._headers.get("Connection")
-            if conn_header and (conn_header.lower() == "keep-alive"):
-                self._close_flag = False
+            if conn_header:
+                conn_header = conn_header.lower()
+            if self.request.supports_http_1_1():
+                self._close_flag = conn_header == 'close'
+            else:
+                self._close_flag = conn_header != 'keep_alive'
             self.upstream.set_close_callback(None)
             self.finish()
 
@@ -506,7 +513,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @gen.coroutine
     def on_upstream_close(self):
-        logging.debug('on_upstream_close closed? %s' % self.upstream.closed())
+        logging.debug('on_upstream_close upstream closed? %s' % self.upstream.closed())
         self.remove_timeout()
         if not self.upstream.closed():
             self.upstream.set_close_callback(None)
