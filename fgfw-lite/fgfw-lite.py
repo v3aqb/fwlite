@@ -221,8 +221,8 @@ class HTTPProxyServer(HTTPServer):
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ('GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT', 'OPTIONS')
 
-    def getparent(self, forceproxy=False):
-        self.ppname, pp = PARENT_PROXY.parentproxy(self.request.uri, self.request.host.rsplit(':', 1)[0], forceproxy)
+    def getparent(self, level=1):
+        self.ppname, pp = PARENT_PROXY.parentproxy(self.request.uri, self.request.host.rsplit(':', 1)[0], level)
         self.pptype, self.pphost, self.ppport, self.ppusername, self.pppassword = pp
         if self.pptype == 'socks5':
             self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
@@ -502,7 +502,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.upstream.set_close_callback(None)
                 UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
                 logging.debug('pooling remote connection')
-        #  TODO: request blocked by firewall, add temp rules to PARENT_PROXY
         if (self._success and self._proxy_retry > 1 and self.ppname != 'direct') or (not self._success and self.request.method == 'CONNECT' and self.ppname == 'direct'):
             logging.info('add autoproxy rule: ||%s' % self.request.host.split(':')[0])
             o = autoproxy_rule('||%s' % self.request.host.split(':')[0])
@@ -530,10 +529,10 @@ class ProxyHandler(tornado.web.RequestHandler):
         logging.debug('headers_written? %s' % self._headers_written)
         if not self._finished:
             if not self._headers_written:
-                if self._proxy_retry < 3:
+                if self._proxy_retry < 4:
                     logging.warning('%s %s Failed, retry...' % (self.request.method, self.request.uri))
                     self.clear()
-                    self.getparent(forceproxy=False if self._proxy_retry == 0 else True)
+                    self.getparent(level=3 if self.ppname == 'direct' else 0)
                     self._proxy_retry += 1
                     yield self.get_remote_conn()
                     if self.request.method == 'CONNECT':
@@ -582,13 +581,14 @@ class ProxyHandler(tornado.web.RequestHandler):
 
 
 class ForceProxyHandler(ProxyHandler):
-    def getparent(self, forceproxy=True):
-        self.ppname, pp = PARENT_PROXY.parentproxy(self.request.uri, self.request.host.rsplit(':', 1)[0], forceproxy)
+    def getparent(self, level=3):
+        self.ppname, pp = PARENT_PROXY.parentproxy(self.request.uri, self.request.host.rsplit(':', 1)[0], level)
         self.pptype, self.pphost, self.ppport, self.ppusername, self.pppassword = pp
         if self.pptype == 'socks5':
             self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
         else:
             self.upstream_name = self.ppname if self.pphost else '{}-{}'.format(self.request.host, str(self.requestport))
+
         logging.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
 
 
@@ -738,7 +738,11 @@ class parent_proxy(object):
 
             self.chinanet.append(ipaddress.ip_network('{}/{}'.format(starting_ip, mask2)))
 
-    def parentproxy(self, uri, host, forceproxy=False):
+    def parentproxy(self, uri, host, level=1):
+    # 0 -- direct
+    # 1 -- proxy if force, direct if ip in china or override, proxy if gfwlist
+    # 2 -- proxy if force, direct if ip in china or override, proxy if all
+    # 3 -- proxy
         '''
             decide which parentproxy to use.
             url:  'https://www.google.com'
@@ -771,7 +775,6 @@ class parent_proxy(object):
         parentlist.remove('direct')
 
         # select parent via uri
-
         def if_gfwlist_force():
             for rule in self.gfwlist_force:
                 if hasattr(rule, 'expire') and time.time() > rule.expire:
@@ -782,11 +785,21 @@ class parent_proxy(object):
 
         a = if_gfwlist_force()
 
+        forceproxy = False
+        if level == 0:
+            return ('direct', conf.parentdict.get('direct'))
+        elif level == 1:
+            pass
+        elif level == 2:
+            forceproxy = True
+        else:
+            a = True
+
         if not a and ifhost_in_china():
             return ('direct', conf.parentdict.get('direct'))
 
         if a or forceproxy or any(rule.match(uri) for rule in self.gfwlist):
-            if any(rule.match(uri) for rule in self.override):
+            if not a and any(rule.match(uri) for rule in self.override):
                 return ('direct', conf.parentdict.get('direct'))
             if parentlist:
                 if len(parentlist) == 1:
