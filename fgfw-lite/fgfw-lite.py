@@ -147,6 +147,8 @@ class HTTPProxyConnection(HTTPConnection):
 
     def read_from_fd(self):
         if self.stream._read_buffer_size >= 327680:
+            if sys.platform.startswith('win'):
+                time.sleep(0.003)
             return None
         try:
             chunk = self.stream.socket.recv(self.stream.read_chunk_size)
