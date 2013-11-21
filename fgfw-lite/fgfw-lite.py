@@ -782,17 +782,18 @@ class parent_proxy(object):
                 elif rule.match(uri):
                     return True
 
-        a = if_gfwlist_force()
-
         forceproxy = False
+
         if level == 0:
             return ('direct', conf.parentdict.get('direct'))
         elif level == 1:
             pass
         elif level == 2:
             forceproxy = True
-        else:
+        if level == 3:
             a = True
+        else:
+            a = if_gfwlist_force()
 
         if not a and ifhost_in_china():
             return ('direct', conf.parentdict.get('direct'))
