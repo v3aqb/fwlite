@@ -105,6 +105,24 @@ ctimer = []
 TIMEOUT = 4
 
 
+class Application(tornado.web.Application):
+    def log_request(self, handler):
+        if "log_function" in self.settings:
+            self.settings["log_function"](handler)
+            return
+        if handler.request.method == 'CONNECT':
+            return
+        if handler.get_status() < 400:
+            log_method = logging.info
+        elif handler.get_status() < 500:
+            log_method = logging.warning
+        else:
+            log_method = logging.error
+        request_time = 1000.0 * handler.request.request_time()
+        log_method("%d %s %.2fms", handler.get_status(),
+                   handler._request_summary(), request_time)
+
+
 class HTTPProxyConnection(HTTPConnection):
     def _handle_events(self, fd, events):
         if self.stream.closed():
@@ -249,7 +267,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         # redirector
         new_url = REDIRECTOR.get(self.request.uri)
         if new_url:
-            logging.debug('redirecting to %s' % new_url)
+            logging.info('redirecting to %s' % new_url)
             if new_url.startswith('403'):
                 self.send_error(status_code=403)
             else:
@@ -658,11 +676,11 @@ class redirector(object):
             if 'xn--' in q:
                 q = q.decode('idna')
             result = 'https://www.google.com/search?q=%s&ie=utf-8&oe=utf-8&aq=t&rls=org.mozilla:zh-CN:official' % urllib2.quote(q.encode('utf-8'))
-            logging.info('Match redirect rule addressbar-search')
+            logging.debug('Match redirect rule addressbar-search')
             return result
         for rule, result in self.lst:
             if rule.match(uri):
-                logging.info('Match redirect rule {}, {}'.format(rule.rule, result))
+                logging.debug('Match redirect rule {}, {}'.format(rule.rule, result))
                 if rule.override:
                     return None
                 if result == 'forcehttps':
@@ -1199,10 +1217,10 @@ class fgfwproxy(FGFWProxyHandler):
         the tornado IOLoop will be started immediately.
         """
         print("Starting HTTP proxy on port {} and {}".format(port, str(int(port) + 1)))
-        app = tornado.web.Application([(r'.*', ProxyHandler), ])
+        app = Application([(r'.*', ProxyHandler), ])
         http_server = HTTPProxyServer(app)
         http_server.listen(8118)
-        app2 = tornado.web.Application([(r'.*', ForceProxyHandler), ])
+        app2 = Application([(r'.*', ForceProxyHandler), ])
         http_server2 = HTTPProxyServer(app2)
         http_server2.listen(8119)
         ioloop = tornado.ioloop.IOLoop.instance()
