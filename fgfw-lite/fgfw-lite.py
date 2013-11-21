@@ -1123,7 +1123,7 @@ class shadowsocksHandler(FGFWProxyHandler):
                     config['server'] = json.loads(config['server'])
                 with open('./shadowsocks/config.json', 'wb') as f:
                     f.write(json.dumps(config, indent=4, separators=(',', ': ')))
-                self.cmd = '{} -c {}'.format(self.cmd, os.path.abspath('./shadowsocks/config.json'))
+                self.cmd = '{} -c {}'.format(self.cmd, '%s/shadowsocks/config.json' % WORKINGDIR)
             conf.addparentproxy('shadowsocks', 'socks5://127.0.0.1:1080')
 
 
