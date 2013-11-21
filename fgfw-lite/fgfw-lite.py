@@ -37,6 +37,7 @@ import hashlib
 import socket
 import struct
 import urllib2
+import urlparse
 import tornado.ioloop
 import tornado.iostream
 import tornado.web
@@ -216,15 +217,25 @@ class HTTPProxyServer(HTTPServer):
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ('GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT', 'OPTIONS')
 
-    def getparent(self, level=1):
+    def _getparent(self, level=1):
         self.ppname, pp = PARENT_PROXY.parentproxy(self.request.uri, self.request.host.rsplit(':', 1)[0], level)
-        self.pptype, self.pphost, self.ppport, self.ppusername, self.pppassword = pp
+        p = urlparse.urlparse(pp)
+        self.pptype, self.pphost, self.ppport, self.ppusername, self.pppassword = (p.scheme or None, p.hostname or p.path or None, p.port, p.username, p.password)
+        if self.pphost:
+            if self.pptype is None:
+                self.pptype = 'http'
+            r = re.match(r'^(.*)\:(\d+)$', self.pphost)
+            if r:
+                self.pphost, self.ppport = r.group(1), int(r.group(2))
         if self.pptype == 'socks5':
             self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
         else:
             self.upstream_name = self.ppname if self.pphost else '{}-{}'.format(self.request.host, str(self.requestport))
 
         logging.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
+
+    def getparent(self, level=1):
+        self._getparent(level)
 
     @gen.coroutine
     def prepare(self):
@@ -577,14 +588,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
 class ForceProxyHandler(ProxyHandler):
     def getparent(self, level=3):
-        self.ppname, pp = PARENT_PROXY.parentproxy(self.request.uri, self.request.host.rsplit(':', 1)[0], level)
-        self.pptype, self.pphost, self.ppport, self.ppusername, self.pppassword = pp
-        if self.pptype == 'socks5':
-            self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
-        else:
-            self.upstream_name = self.ppname if self.pphost else '{}-{}'.format(self.request.host, str(self.requestport))
-
-        logging.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
+        self._getparent(level)
 
 
 class autoproxy_rule(object):
@@ -946,7 +950,7 @@ class goagentHandler(FGFWProxyHandler):
         goagent.set('listen', 'port', listen_port)
 
         if self.enable:
-            conf.addparentproxy('GoAgent', ('http', '127.0.0.1', int(listen_port), None, None))
+            conf.addparentproxy('GoAgent', 'http://127.0.0.1:%s' % listen_port)
 
         goagent.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_cn'))
         goagent.set('gae', 'appid', conf.userconf.dget('goagent', 'goagentGAEAppid', 'goagent'))
@@ -959,7 +963,7 @@ class goagentHandler(FGFWProxyHandler):
         if conf.userconf.dget('goagent', 'paasfetchserver'):
             goagent.set('paas', 'enable', '1')
             if self.enable:
-                conf.addparentproxy('GoAgent-PAAS', ('http', '127.0.0.1', 8088, None, None))
+                conf.addparentproxy('GoAgent-PAAS', 'http://127.0.0.1:8088')
         if conf.userconf.dget('goagent', 'proxy'):
             goagent.set('proxy', 'enable', '1')
             host, port = conf.userconf.dget('goagent', 'proxy').rsplit(':')
@@ -1119,7 +1123,7 @@ class shadowsocksHandler(FGFWProxyHandler):
                 with open('./shadowsocks/config.json', 'wb') as f:
                     f.write(json.dumps(config, indent=4, separators=(',', ': ')))
                 self.cmd = '{} -c {}'.format(self.cmd, os.path.abspath('./shadowsocks/config.json'))
-            conf.addparentproxy('shadowsocks', ('socks5', '127.0.0.1', 1080, None, None))
+            conf.addparentproxy('shadowsocks', 'socks5://127.0.0.1:1080')
 
 
 class cowHandler(FGFWProxyHandler):
@@ -1157,7 +1161,7 @@ class cowHandler(FGFWProxyHandler):
         with open(filepath, 'w') as f:
             f.write('\n'.join(configfile))
         if self.enable:
-            conf.addparentproxy('cow', ('http', '127.0.0.1', 8117, None, None))
+            conf.addparentproxy('cow', 'http://127.0.0.1:8117')
 
 
 class fgfwproxy(FGFWProxyHandler):
@@ -1281,7 +1285,7 @@ class Config(object):
         self.parentdict[name] = proxy
 
 conf = Config()
-conf.addparentproxy('direct', (None, None, None, None, None))
+conf.addparentproxy('direct', '')
 
 
 @atexit.register
@@ -1304,7 +1308,7 @@ def main():
         port = conf.userconf.dget('https', 'port', '443')
         user = conf.userconf.dget('https', 'user', None)
         passwd = conf.userconf.dget('https', 'passwd', None)
-        conf.addparentproxy('https', ('https', host, int(port), user, passwd))
+        conf.addparentproxy('https', 'https://%s%s:%s' % ('%s:%s@' % (user, passwd) if user else '', host, port))
     if conf.userconf.dgetbool('cow', 'enable', True):
         cowHandler()
     updatedaemon = Thread(target=updater)
