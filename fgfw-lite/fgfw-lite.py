@@ -374,6 +374,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         def _do_client_write(data):
             if not client.closed():
                 client.write(data)
+                self._headers_written = True
 
         def _client_write(data):
             if self._headers_written:
@@ -383,7 +384,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                 if len(b''.join(self._client_write_buffer)) > 512000:
                     while self._client_write_buffer:
                         _do_client_write(self._client_write_buffer.pop(0))
-                    self._headers_written = True
 
         def body_transfer(s, d, callback):
             def read_from():
@@ -491,7 +491,6 @@ class ProxyHandler(tornado.web.RequestHandler):
             if self._client_write_buffer:
                 while self._client_write_buffer:
                     _do_client_write(self._client_write_buffer.pop(0))
-                self._headers_written = True
             self._success = True
             conn_header = self._headers.get("Connection")
             if conn_header:
