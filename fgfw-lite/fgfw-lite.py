@@ -102,7 +102,9 @@ for item in ['./fgfw-lite/redirector.txt', './userconf.ini', './fgfw-lite/local.
 
 UPSTREAM_POOL = {}
 ctimer = []
-TIMEOUT = 4
+rtimer = []
+CTIMEOUT = 5
+RTIMEOUT = 5
 
 
 class Application(tornado.web.Application):
@@ -309,7 +311,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         if not hasattr(self, 'upstream'):
             logging.debug('connecting to server')
             if self.ppname == 'direct':
-                self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + TIMEOUT, stack_context.wrap(self.on_upstream_close))
+                self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + CTIMEOUT, stack_context.wrap(self.on_upstream_close))
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             self.upstream = tornado.iostream.IOStream(s)
             self.upstream.set_close_callback(self.on_upstream_close)
@@ -420,12 +422,14 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         def read_headers(data=None):
             logging.debug('reading response header')
+            self.__t = time.time()
             if self.ppname == 'direct':
-                self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + TIMEOUT, stack_context.wrap(self.on_upstream_close))
+                self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + RTIMEOUT, stack_context.wrap(self.on_upstream_close))
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def _on_headers(data=None):
             self.remove_timeout()
+            rtimer.append(time.time() - self.__t)
             _client_write(data)
             data = unicode(data, 'latin1')
             first_line, _, header_data = data.partition("\n")
@@ -548,7 +552,6 @@ class ProxyHandler(tornado.web.RequestHandler):
         if not self.upstream.closed():
             self.upstream.set_close_callback(None)
             self.upstream.close()
-            ctimer.append(TIMEOUT)
         logging.debug('request finished? %s' % self._finished)
         logging.debug('headers_written? %s' % self._headers_written)
         if not self._finished:
@@ -581,13 +584,15 @@ class ProxyHandler(tornado.web.RequestHandler):
             if len(data) > 128:
                 self._success = True
                 self.remove_timeout()
+                rtimer.append(time.time() - self.__t)
             if not client.closed():
                 client.write(data)
         logging.debug('CONNECT')
         client = self.request.connection.stream
         upstream = self.upstream
+        self.__t = time.time()
         if self.ppname == 'direct':
-            self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + TIMEOUT, stack_context.wrap(self.on_upstream_close))
+            self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + RTIMEOUT, stack_context.wrap(self.on_upstream_close))
         if self.pptype and 'http' in self.pptype:
             s = [b'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version), ]
             if 'Proxy-Authorization' not in self.request.headers and self.ppusername:
@@ -838,17 +843,26 @@ PARENT_PROXY.config()
 
 def updater():
     while 1:
-        time.sleep(90)
+        time.sleep(30)
         if conf.userconf.dgetbool('FGFW_Lite', 'autoupdate'):
             lastupdate = conf.version.dgetfloat('Update', 'LastUpdate', 0)
             if time.time() - lastupdate > conf.UPDATE_INTV * 60 * 60:
                 update(auto=True)
-        global TIMEOUT, ctimer
-        if len(ctimer) > 40:
+        global CTIMEOUT, ctimer, RTIMEOUT, rtimer
+        if ctimer:
             logging.info('max connection time: %ss in %s' % (max(ctimer), len(ctimer)))
-            TIMEOUT = min(sum(ctimer) / len(ctimer) * 20 + max(2, max(ctimer)), 20)
-            logging.info('timeout set to: %s' % TIMEOUT)
+            CTIMEOUT = min(max(3, max(ctimer) * 5), 15)
+            logging.info('conn timeout set to: %s' % CTIMEOUT)
             ctimer = []
+        else:
+            CTIMEOUT = min(CTIMEOUT + 2, 15)
+        if rtimer:
+            logging.info('max read time: %ss in %s' % (max(rtimer), len(rtimer)))
+            RTIMEOUT = min(max(4, max(rtimer) * 10), 15)
+            logging.info('read timeout set to: %s' % RTIMEOUT)
+            rtimer = []
+        else:
+            RTIMEOUT = min(RTIMEOUT + 2, 15)
 
 
 def update(auto=False):
