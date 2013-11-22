@@ -1183,8 +1183,15 @@ class cowHandler(FGFWProxyHandler):
         configfile = []
         configfile.append('listen = %s' % conf.userconf.dget('cow', 'listen', '127.0.0.1:8117'))
         for key, item in conf.parentdict.items():
-            pptype, pphost, ppport, ppusername, pppassword = item
-            if key == 'direct' or key == 'cow':
+            p = urlparse.urlparse(item)
+            pptype, pphost, ppport, ppusername, pppassword = (p.scheme or None, p.hostname or p.path or None, p.port, p.username, p.password)
+            if pphost:
+                if pptype is None:
+                    pptype = 'http'
+                r = re.match(r'^(.*)\:(\d+)$', pphost)
+                if r:
+                    pphost, ppport = r.group(1), int(r.group(2))
+            if pptype is None or key == 'cow':
                 continue
             if pptype == 'http':
                 configfile.append('httpParent = %s:%s' % (pphost, ppport))
