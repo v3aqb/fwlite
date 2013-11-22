@@ -388,8 +388,8 @@ class ProxyHandler(tornado.web.RequestHandler):
         def body_transfer(s, d, callback):
             def read_from():
                 if self.__content_length > 0:
-                    self.__content_length -= min(self.__content_length, 65536)
                     s.read_bytes(min(self.__content_length, 65536), write_to)
+                    self.__content_length -= min(self.__content_length, 65536)
                 else:
                     callback()
 
