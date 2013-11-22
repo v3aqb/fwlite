@@ -1182,20 +1182,10 @@ class cowHandler(FGFWProxyHandler):
         configfile = []
         configfile.append('listen = %s' % conf.userconf.dget('cow', 'listen', '127.0.0.1:8117'))
         for key, item in conf.parentdict.items():
-            p = urlparse.urlparse(item)
-            pptype, pphost, ppport, ppusername, pppassword = (p.scheme or None, p.hostname or p.path or None, p.port, p.username, p.password)
-            if pphost:
-                if pptype is None:
-                    pptype = 'http'
-                r = re.match(r'^(.*)\:(\d+)$', pphost)
-                if r:
-                    pphost, ppport = r.group(1), int(r.group(2))
-            if pptype is None or key == 'cow':
+            if not item or key == 'cow':
                 continue
-            if pptype == 'http':
-                configfile.append('httpParent = %s:%s' % (pphost, ppport))
-            if pptype == 'socks5':
-                configfile.append('socksParent = %s:%s' % (pphost, ppport))
+            configfile.append('proxy = %s' % item)
+
         if sys.platform.startswith('win'):
             filepath = '%s/cow/rc.txt' % WORKINGDIR
         else:
