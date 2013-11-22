@@ -310,7 +310,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                     item.close()
         if not hasattr(self, 'upstream'):
             logging.debug('connecting to server')
-            if self.ppname == 'direct':
+            if self.ppname == 'none':
                 self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + CTIMEOUT, stack_context.wrap(self.on_upstream_close))
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             self.upstream = tornado.iostream.IOStream(s)
@@ -423,7 +423,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         def read_headers(data=None):
             logging.debug('reading response header')
             self.__t = time.time()
-            if self.ppname == 'direct':
+            if self.ppname == 'none':
                 self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + RTIMEOUT, stack_context.wrap(self.on_upstream_close))
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
@@ -559,7 +559,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 if self._proxy_retry < 4:
                     logging.warning('%s %s Failed, retry...' % (self.request.method, self.request.uri))
                     self.clear()
-                    self.getparent(level=3 if self.ppname == 'direct' else 0)
+                    self.getparent(level=3 if self.ppname in ('none', 'direct') else 0)
                     self._proxy_retry += 1
                     yield self.get_remote_conn()
                     if self.request.method == 'CONNECT':
@@ -591,7 +591,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         client = self.request.connection.stream
         upstream = self.upstream
         self.__t = time.time()
-        if self.ppname == 'direct':
+        if self.ppname == 'none':
             self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + RTIMEOUT, stack_context.wrap(self.on_upstream_close))
         if self.pptype and 'http' in self.pptype:
             s = [b'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version), ]
@@ -760,18 +760,7 @@ class parent_proxy(object):
 
             self.chinanet.append(ipaddress.ip_network('{}/{}'.format(starting_ip, mask2)))
 
-    def parentproxy(self, uri, host, level=1):
-    # 0 -- direct
-    # 1 -- proxy if force, direct if ip in china or override, proxy if gfwlist
-    # 2 -- proxy if force, direct if ip in china or override, proxy if all
-    # 3 -- proxy if not override
-        '''
-            decide which parentproxy to use.
-            url:  'https://www.google.com'
-            domain: 'www.google.com'
-        '''
-        # return ('direct', conf.parentdict.get('direct'))
-
+    def ifgfwed(self, uri, host, level=1):
         def ifhost_in_china():
             if not host:
                 return None
@@ -788,15 +777,6 @@ class parent_proxy(object):
             self.hostinchina[host] = False
             return False
 
-        parentlist = conf.parentdict.keys()
-        if uri.startswith('ftp://'):
-            if 'GoAgent' in parentlist:
-                parentlist.remove('GoAgent')
-        if 'cow' in parentlist:
-            parentlist.remove('cow')
-        parentlist.remove('direct')
-
-        # select parent via uri
         def if_gfwlist_force():
             for rule in self.gfwlist_force:
                 if hasattr(rule, 'expire') and time.time() > rule.expire:
@@ -808,7 +788,7 @@ class parent_proxy(object):
         forceproxy = False
 
         if level == 0:
-            return ('direct', conf.parentdict.get('direct'))
+            return False
         elif level == 1:
             pass
         elif level == 2:
@@ -819,11 +799,34 @@ class parent_proxy(object):
             a = if_gfwlist_force()
 
         if not a and ifhost_in_china():
-            return ('direct', conf.parentdict.get('direct'))
+            return None
 
         if a or forceproxy or any(rule.match(uri) for rule in self.gfwlist):
             if any(rule.match(uri) for rule in self.override):
-                return ('direct', conf.parentdict.get('direct'))
+                return False
+            return True
+
+    def parentproxy(self, uri, host, level=1):
+    # 0 -- direct
+    # 1 -- proxy if force, direct if ip in china or override, proxy if gfwlist
+    # 2 -- proxy if force, direct if ip in china or override, proxy if all
+    # 3 -- proxy if not override
+        '''
+            decide which parentproxy to use.
+            url:  'https://www.google.com'
+            domain: 'www.google.com'
+        '''
+        # return ('direct', conf.parentdict.get('direct'))
+
+        f = self.ifgfwed(uri, host, level)
+        parentlist = conf.parentdict.keys()
+        if 'cow' in parentlist:
+            parentlist.remove('cow')
+        parentlist.remove('direct')
+
+        if f is False:
+            return ('direct', conf.parentdict.get('direct'))
+        if f is True:
             if parentlist:
                 if len(parentlist) == 1:
                     return (parentlist[0], conf.parentdict.get(parentlist[0]))
@@ -835,7 +838,7 @@ class parent_proxy(object):
                 logging.warning('No parent proxy available, direct connection is used')
         if 'cow' in conf.parentdict.keys() and not uri.startswith('ftp://'):
             return ('cow', conf.parentdict.get('cow'))
-        return ('direct', conf.parentdict.get('direct'))
+        return ('none', conf.parentdict.get('direct'))
 
 PARENT_PROXY = parent_proxy()
 PARENT_PROXY.config()
