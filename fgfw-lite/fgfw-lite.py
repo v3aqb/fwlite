@@ -308,7 +308,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                     item.close()
         if not hasattr(self, 'upstream'):
             logging.debug('connecting to server')
-            if self.ppname == 'direct':
+            if self.ppname == 'none':
                 self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + TIMEOUT, stack_context.wrap(self.on_upstream_close))
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             self.upstream = tornado.iostream.IOStream(s)
@@ -420,7 +420,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         def read_headers(data=None):
             logging.debug('reading response header')
-            if self.ppname == 'direct':
+            if self.ppname == 'none':
                 self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + TIMEOUT, stack_context.wrap(self.on_upstream_close))
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
@@ -556,7 +556,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 if self._proxy_retry < 4:
                     logging.warning('%s %s Failed, retry...' % (self.request.method, self.request.uri))
                     self.clear()
-                    self.getparent(level=3 if self.ppname == 'direct' else 0)
+                    self.getparent(level=3 if self.ppname in ('none', 'direct') else 0)
                     self._proxy_retry += 1
                     yield self.get_remote_conn()
                     if self.request.method == 'CONNECT':
@@ -586,7 +586,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         logging.debug('CONNECT')
         client = self.request.connection.stream
         upstream = self.upstream
-        if self.ppname == 'direct':
+        if self.ppname == 'none':
             self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + TIMEOUT, stack_context.wrap(self.on_upstream_close))
         if self.pptype and 'http' in self.pptype:
             s = [b'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version), ]
@@ -833,7 +833,7 @@ class parent_proxy(object):
                 logging.warning('No parent proxy available, direct connection is used')
         if 'cow' in conf.parentdict.keys() and not uri.startswith('ftp://'):
             return ('cow', conf.parentdict.get('cow'))
-        return ('direct', conf.parentdict.get('direct'))
+        return ('none', conf.parentdict.get('direct'))
 
 PARENT_PROXY = parent_proxy()
 PARENT_PROXY.config()
