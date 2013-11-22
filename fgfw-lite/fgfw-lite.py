@@ -755,18 +755,7 @@ class parent_proxy(object):
 
             self.chinanet.append(ipaddress.ip_network('{}/{}'.format(starting_ip, mask2)))
 
-    def parentproxy(self, uri, host, level=1):
-    # 0 -- direct
-    # 1 -- proxy if force, direct if ip in china or override, proxy if gfwlist
-    # 2 -- proxy if force, direct if ip in china or override, proxy if all
-    # 3 -- proxy if not override
-        '''
-            decide which parentproxy to use.
-            url:  'https://www.google.com'
-            domain: 'www.google.com'
-        '''
-        # return ('direct', conf.parentdict.get('direct'))
-
+    def ifgfwed(self, uri, host, level=1):
         def ifhost_in_china():
             if not host:
                 return None
@@ -783,15 +772,6 @@ class parent_proxy(object):
             self.hostinchina[host] = False
             return False
 
-        parentlist = conf.parentdict.keys()
-        if uri.startswith('ftp://'):
-            if 'GoAgent' in parentlist:
-                parentlist.remove('GoAgent')
-        if 'cow' in parentlist:
-            parentlist.remove('cow')
-        parentlist.remove('direct')
-
-        # select parent via uri
         def if_gfwlist_force():
             for rule in self.gfwlist_force:
                 if hasattr(rule, 'expire') and time.time() > rule.expire:
@@ -803,7 +783,7 @@ class parent_proxy(object):
         forceproxy = False
 
         if level == 0:
-            return ('direct', conf.parentdict.get('direct'))
+            return False
         elif level == 1:
             pass
         elif level == 2:
@@ -814,11 +794,34 @@ class parent_proxy(object):
             a = if_gfwlist_force()
 
         if not a and ifhost_in_china():
-            return ('direct', conf.parentdict.get('direct'))
+            return None
 
         if a or forceproxy or any(rule.match(uri) for rule in self.gfwlist):
             if any(rule.match(uri) for rule in self.override):
-                return ('direct', conf.parentdict.get('direct'))
+                return False
+            return True
+
+    def parentproxy(self, uri, host, level=1):
+    # 0 -- direct
+    # 1 -- proxy if force, direct if ip in china or override, proxy if gfwlist
+    # 2 -- proxy if force, direct if ip in china or override, proxy if all
+    # 3 -- proxy if not override
+        '''
+            decide which parentproxy to use.
+            url:  'https://www.google.com'
+            domain: 'www.google.com'
+        '''
+        # return ('direct', conf.parentdict.get('direct'))
+
+        f = self.ifgfwed(uri, host, level)
+        parentlist = conf.parentdict.keys()
+        if 'cow' in parentlist:
+            parentlist.remove('cow')
+        parentlist.remove('direct')
+
+        if f is False:
+            return ('direct', conf.parentdict.get('direct'))
+        if f is True:
             if parentlist:
                 if len(parentlist) == 1:
                     return (parentlist[0], conf.parentdict.get(parentlist[0]))
