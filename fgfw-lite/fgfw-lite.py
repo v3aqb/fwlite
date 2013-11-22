@@ -759,7 +759,7 @@ class parent_proxy(object):
     # 0 -- direct
     # 1 -- proxy if force, direct if ip in china or override, proxy if gfwlist
     # 2 -- proxy if force, direct if ip in china or override, proxy if all
-    # 3 -- proxy
+    # 3 -- proxy if not override
         '''
             decide which parentproxy to use.
             url:  'https://www.google.com'
@@ -817,7 +817,7 @@ class parent_proxy(object):
             return ('direct', conf.parentdict.get('direct'))
 
         if a or forceproxy or any(rule.match(uri) for rule in self.gfwlist):
-            if not a and any(rule.match(uri) for rule in self.override):
+            if any(rule.match(uri) for rule in self.override):
                 return ('direct', conf.parentdict.get('direct'))
             if parentlist:
                 if len(parentlist) == 1:
