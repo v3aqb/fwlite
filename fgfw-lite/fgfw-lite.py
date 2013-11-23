@@ -1092,6 +1092,48 @@ class goagentHandler(FGFWProxyHandler):
         return 0
 
 
+class snovaHandler(FGFWProxyHandler):
+    """docstring for ClassName"""
+    def __init__(self, arg=''):
+        FGFWProxyAbs.__init__(self)
+        self.arg = arg
+
+    def _config(self):
+        self.cmd = '%s/snova/bin/start.%s' % (WORKINGDIR, 'bat' if sys.platform.startswith('win') else 'sh')
+        self.cwd = '%s/snova' % WORKINGDIR
+        self.enable = conf.getconfbool('snova', 'enable', False)
+        proxy = SConfigParser()
+        proxy.optionxform = str
+        proxy.read('./snova/conf/snova.conf')
+
+        worknodes = conf.getconf('snova', 'GAEworknodes')
+        if worknodes:
+            worknodes = worknodes.split('|')
+            for i in range(len(worknodes)):
+                proxy.set('GAE', 'WorkerNode[%s]' % i, worknodes[i])
+            proxy.set('GAE', 'Enable', '1')
+            if self.enable:
+                conf.addparentproxy('snova-gae', 'http://127.0.0.1:48101')
+        else:
+            proxy.set('GAE', 'Enable', '0')
+
+        worknodes = conf.getconf('snova', 'C4worknodes')
+        if worknodes:
+            worknodes = worknodes.split('|')
+            for i in range(len(worknodes)):
+                proxy.set('C4', 'WorkerNode[%s]' % i, worknodes[i])
+            proxy.set('C4', 'Enable', '1')
+            if self.enable:
+                fgfwproxy.addparentproxy('snova-c4', 'http://127.0.0.1:48102')
+        else:
+            proxy.set('C4', 'Enable', '0')
+
+        proxy.set('SPAC', 'Enable', '0')
+        proxy.set('Misc', 'RC4Key', conf.getconf('snova', 'RC4Key', '8976501f8451f03c5c4067b47882f2e5'))
+        with open('./snova/conf/snova.conf', 'w') as configfile:
+            proxy.write(configfile)
+
+
 class shadowsocksHandler(FGFWProxyHandler):
     """docstring for ClassName"""
     def __init__(self):
@@ -1333,6 +1375,8 @@ def main():
         fgfwproxy()
     if conf.userconf.dgetbool('goagent', 'enable', True):
         goagentHandler()
+    if conf.userconf.dgetbool('snova', 'enable', False):
+        snovaHandler()
     if conf.userconf.dgetbool('shadowsocks', 'enable', False):
         shadowsocksHandler()
     if conf.userconf.dgetbool('https', 'enable', False):
