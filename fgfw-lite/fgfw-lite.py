@@ -18,7 +18,7 @@
 # You should have received a copy of the GNU General Public License along
 # with this program; if not, see <http://www.gnu.org/licenses>.
 
-from __future__ import print_function, unicode_literals
+from __future__ import print_function, unicode_literals, division
 
 __version__ = '0.3.5.1'
 
@@ -551,6 +551,9 @@ class ProxyHandler(tornado.web.RequestHandler):
         if not self.upstream.closed():
             self.upstream.set_close_callback(None)
             self.upstream.close()
+            global CTIMEOUT, RTIMEOUT
+            CTIMEOUT = min(CTIMEOUT + 1, 15)
+            RTIMEOUT = min(RTIMEOUT + 2, 15)
         logging.debug('request finished? %s' % self._finished)
         logging.debug('headers_written? %s' % self._headers_written)
         if not self._finished:
@@ -854,18 +857,14 @@ def updater():
         global CTIMEOUT, ctimer, RTIMEOUT, rtimer
         if ctimer:
             logging.info('max connection time: %ss in %s' % (max(ctimer), len(ctimer)))
-            CTIMEOUT = min(max(3, max(ctimer) * 5), 15)
+            CTIMEOUT = (min(max(3, max(ctimer) * 5), 15) * 2 + RTIMEOUT) / 3
             logging.info('conn timeout set to: %s' % CTIMEOUT)
             ctimer = []
-        else:
-            CTIMEOUT = min(CTIMEOUT + 2, 15)
         if rtimer:
             logging.info('max read time: %ss in %s' % (max(rtimer), len(rtimer)))
-            RTIMEOUT = min(max(4, max(rtimer) * 10), 15)
+            RTIMEOUT = max((min(max(4, max(rtimer) * 10), 15) * 2 + RTIMEOUT) / 3, CTIMEOUT)
             logging.info('read timeout set to: %s' % RTIMEOUT)
             rtimer = []
-        else:
-            RTIMEOUT = min(RTIMEOUT + 2, 15)
 
 
 def update(auto=False):
