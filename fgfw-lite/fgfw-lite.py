@@ -423,7 +423,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         def read_headers(data=None):
             logging.debug('reading response header')
             self.__t = time.time()
-            if self.ppname == 'none':
+            if self.ppname != 'direct':
                 self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + RTIMEOUT, stack_context.wrap(self.on_upstream_close))
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
@@ -590,7 +590,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         client = self.request.connection.stream
         upstream = self.upstream
         self.__t = time.time()
-        if self.ppname == 'none':
+        if self.ppname != 'direct':
             self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + RTIMEOUT, stack_context.wrap(self.on_upstream_close))
         if self.pptype and 'http' in self.pptype:
             s = [b'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version), ]
