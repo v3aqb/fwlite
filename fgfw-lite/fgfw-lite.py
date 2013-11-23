@@ -558,10 +558,10 @@ class ProxyHandler(tornado.web.RequestHandler):
         logging.debug('headers_written? %s' % self._headers_written)
         if not self._finished:
             if not self._headers_written:
-                if self._proxy_retry < 4:
+                if self._proxy_retry < 4 and self.ppname != 'direct':
                     logging.warning('%s %s Failed, retry...' % (self.request.method, self.request.uri))
                     self.clear()
-                    self.getparent(level=3 if self.ppname in ('none', 'direct') else 0)
+                    self.getparent(level=3)
                     self._proxy_retry += 1
                     yield self.get_remote_conn()
                     if self.request.method == 'CONNECT':
