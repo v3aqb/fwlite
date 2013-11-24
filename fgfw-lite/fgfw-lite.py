@@ -20,7 +20,7 @@
 
 from __future__ import print_function, unicode_literals, division
 
-__version__ = '0.3.5.1'
+__version__ = '0.3.5.2'
 
 import sys
 import os
@@ -77,24 +77,11 @@ if not os.path.isfile('./userconf.ini'):
     with open('./userconf.ini', 'w') as f:
         f.write(open('./userconf.sample.ini').read())
 
-if not os.path.isfile('./fgfw-lite/redirector.txt'):
-    with open('./fgfw-lite/redirector.txt', 'w') as f:
-        f.write('''\
-|http://www.google.com/search forcehttps
-|http://www.google.com/url forcehttps
-|http://news.google.com forcehttps
-|http://appengine.google.com forcehttps
-|http://www.google.com.hk/url forcehttps
-|http://www.google.com.hk/search forcehttps
-/^http://www\.google\.com/?$/ forcehttps
-|http://*.googlecode.com forcehttps
-|http://*.wikipedia.org forcehttps
-''')
 if not os.path.isfile('./fgfw-lite/local.txt'):
     with open('./fgfw-lite/local.txt', 'w') as f:
         f.write('! local gfwlist config\n! rules: https://adblockplus.org/zh_CN/filters\n')
 
-for item in ['./fgfw-lite/redirector.txt', './userconf.ini', './fgfw-lite/local.txt']:
+for item in ['./userconf.ini', './fgfw-lite/local.txt']:
     with open(item) as f:
         data = open(item).read()
     with open(item, 'w') as f:
@@ -663,18 +650,8 @@ class autoproxy_rule(object):
 
 class redirector(object):
     """docstring for redirector"""
-    def config(self):
+    def __init__(self):
         self.lst = []
-
-        for line in open('./fgfw-lite/redirector.txt'):
-            line = line.strip()
-            if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
-                try:
-                    o = autoproxy_rule(line.split()[0])
-                except TypeError:
-                    pass
-                else:
-                    self.lst.append((o, line.split()[1]))
 
     def get(self, uri, host=None):
         searchword = re.match(r'^http://([\w-]+)/$', uri)
@@ -695,7 +672,6 @@ class redirector(object):
                 return result
 
 REDIRECTOR = redirector()
-REDIRECTOR.config()
 
 
 class parent_proxy(object):
@@ -705,19 +681,29 @@ class parent_proxy(object):
         self.override = []
         self.gfwlist_force = []
         self.hostinchina = {}
+        REDIRECTOR.lst = []
 
         def add_rule(line, force=False):
-            try:
-                o = autoproxy_rule(line)
-            except TypeError as e:
-                logging.debug('create autoproxy rule failed: %s' % e)
-            else:
-                if o.override:
-                    self.override.append(o)
-                elif force:
-                    self.gfwlist_force.append(o)
+            line = line.strip()
+            if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
+                try:
+                    o = autoproxy_rule(line.split()[0])
+                except TypeError:
+                    pass
                 else:
-                    self.gfwlist.append(o)
+                    REDIRECTOR.lst.append((o, line.split()[1]))
+            else:
+                try:
+                    o = autoproxy_rule(line)
+                except TypeError as e:
+                    logging.debug('create autoproxy rule failed: %s' % e)
+                else:
+                    if o.override:
+                        self.override.append(o)
+                    elif force:
+                        self.gfwlist_force.append(o)
+                    else:
+                        self.gfwlist.append(o)
 
         for line in open('./fgfw-lite/local.txt'):
             add_rule(line, force=True)
@@ -881,7 +867,6 @@ def restart():
         item.config()
         item.restart()
     PARENT_PROXY.config()
-    REDIRECTOR.config()
 
 
 class FGFWProxyHandler(object):
