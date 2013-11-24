@@ -113,6 +113,26 @@ class Application(tornado.web.Application):
 
 
 class HTTPProxyConnection(HTTPConnection):
+    def __init__(self, stream, address, request_callback, no_keep_alive=False,
+                 xheaders=False, protocol=None):
+        self.stream = stream
+        self.address = address
+        # Save the socket's address family now so we know how to
+        # interpret self.address even after the stream is closed
+        # and its socket attribute replaced with None.
+        self.address_family = stream.socket.family
+        self.request_callback = request_callback
+        self.no_keep_alive = no_keep_alive
+        self.xheaders = xheaders
+        self.protocol = protocol
+        self._clear_request_state()
+        # Save stack context here, outside of any request.  This keeps
+        # contexts from one request from leaking into the next.
+        self._header_callback = stack_context.wrap(self._on_headers)
+        self.stream.set_close_callback(self._on_connection_close)
+        self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + CTIMEOUT, stack_context.wrap(self.close))
+        self.stream.read_until(b"\r\n\r\n", self._header_callback)
+
     def _handle_events(self, fd, events):
         if self.stream.closed():
             logging.warning("Got events for closed stream %d", fd)
@@ -171,6 +191,7 @@ class HTTPProxyConnection(HTTPConnection):
         return chunk
 
     def _on_headers(self, data):
+        self._timeout.callback = None
         try:
             data = unicode(data.decode('latin1'))
             eol = data.find("\r\n")
@@ -497,8 +518,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     def remove_timeout(self):
         if self._timeout is not None:
-            tornado.ioloop.IOLoop.current().remove_timeout(self._timeout)
-            self._timeout = None
+            self._timeout.callback = None
 
     def on_finish(self):
         logging.debug('on finish')
@@ -1259,10 +1279,10 @@ class fgfwproxy(FGFWProxyHandler):
         """
         print("Starting HTTP proxy on port {} and {}".format(port, str(int(port) + 1)))
         app = Application([(r'.*', ProxyHandler), ])
-        http_server = HTTPProxyServer(app)
+        http_server = HTTPProxyServer(app, no_keep_alive=True)
         http_server.listen(8118)
         app2 = Application([(r'.*', ForceProxyHandler), ])
-        http_server2 = HTTPProxyServer(app2)
+        http_server2 = HTTPProxyServer(app2, no_keep_alive=True)
         http_server2.listen(8119)
         ioloop = tornado.ioloop.IOLoop.instance()
         if start_ioloop:
