@@ -115,7 +115,7 @@ class Application(tornado.web.Application):
 class HTTPProxyConnection(HTTPConnection):
     def _handle_events(self, fd, events):
         if self.stream.closed():
-            gen_log.warning("Got events for closed stream %d", fd)
+            logging.warning("Got events for closed stream %d", fd)
             return
         try:
             if events & self.stream.io_loop.READ:
@@ -148,7 +148,7 @@ class HTTPProxyConnection(HTTPConnection):
                 self.stream._state = state
                 self.stream.io_loop.update_handler(self.stream.fileno(), self.stream._state)
         except Exception:
-            gen_log.error("Uncaught exception, closing connection.",
+            logging.error("Uncaught exception, closing connection.",
                           exc_info=True)
             self.stream.close(exc_info=True)
             raise
@@ -225,6 +225,7 @@ class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ('GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT', 'OPTIONS')
 
     def _getparent(self, level=1):
+        default_port = {'http': 80, 'https': 443, 'socks5': 1080, }
         self.ppname, pp = PARENT_PROXY.parentproxy(self.request.uri, self.request.host.rsplit(':', 1)[0], level)
         p = urlparse.urlparse(pp)
         self.pptype, self.pphost, self.ppport, self.ppusername, self.pppassword = (p.scheme or None, p.hostname or p.path or None, p.port, p.username, p.password)
@@ -234,6 +235,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             r = re.match(r'^(.*)\:(\d+)$', self.pphost)
             if r:
                 self.pphost, self.ppport = r.group(1), int(r.group(2))
+        self.ppport = self.ppport or default_port.get(self.pptype)
         if self.pptype == 'socks5':
             self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
         else:
@@ -329,9 +331,9 @@ class ProxyHandler(tornado.web.RequestHandler):
 
                     assert data[1] == b'\x00'  # no auth needed or auth passed
                     req = b''.join([b"\x05\x01\x00\x03",
-                                     chr(len(self.request.host.rsplit(':', 1)[0])).encode(),
-                                     self.request.host.rsplit(':', 1)[0].encode(),
-                                     struct.pack(b">H", self.requestport)])
+                                    chr(len(self.request.host.rsplit(':', 1)[0])).encode(),
+                                    self.request.host.rsplit(':', 1)[0].encode(),
+                                    struct.pack(b">H", self.requestport)])
                     self.upstream.write(req)
                     data = yield gen.Task(self.upstream.read_bytes, 4)
                     assert data[1] == b'\x00'
@@ -882,9 +884,6 @@ class FGFWProxyHandler(object):
         self.daemon.start()
 
     def config(self):
-        self._config()
-
-    def _config(self):
         self.cmd = ''
         self.cwd = ''
         self.filelist = []
@@ -947,16 +946,19 @@ class goagentHandler(FGFWProxyHandler):
     def __init__(self):
         FGFWProxyHandler.__init__(self)
 
-    def _config(self):
-        self.filelist = [['https://github.com/goagent/goagent/raw/3.0/local/proxy.py', './goagent/proxy.py'],
-                         ['https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.ini'],
-                         ['https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'],
+    def config(self):
+        self.filelist = [('https://github.com/goagent/goagent/raw/3.0/local/proxy.py', './goagent/proxy.py'),
+                         ('https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.ini'),
+                         ('https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'),
                          ]
         self.cwd = '%s/goagent' % WORKINGDIR
         self.cmd = '{} {}/goagent/proxy.py'.format(PYTHON2, WORKINGDIR)
         self.enable = conf.userconf.dgetbool('goagent', 'enable', True)
         self.enableupdate = conf.userconf.dgetbool('goagent', 'update', True)
+        if self.enable:
+            self._config()
 
+    def _config(self):
         goagent = SConfigParser()
         goagent.read('./goagent/proxy.ini')
 
@@ -965,7 +967,7 @@ class goagentHandler(FGFWProxyHandler):
 
         goagent.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_cn'))
         goagent.set('gae', 'mode', conf.userconf.dget('goagent', 'mode', 'https'))
-        goagent.set('gae', 'appid', conf.userconf.dget('goagent', 'GAEAppid', 'goagent'))
+        goagent.set('gae', 'appid', conf.userconf.dget('goagent', 'GAEAppid', 'appid'))
         goagent.set("gae", "password", conf.userconf.dget('goagent', 'GAEpassword', ''))
         goagent.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
         goagent.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
@@ -976,8 +978,7 @@ class goagentHandler(FGFWProxyHandler):
             goagent.set('paas', 'enable', '1')
             goagent.set('paas', 'password', conf.userconf.dget('goagent', 'paaspassword', '123456'))
             goagent.set('paas', 'fetchserver', conf.userconf.dget('goagent', 'paasfetchserver', ''))
-            if self.enable:
-                conf.addparentproxy('GoAgent-PAAS', 'http://127.0.0.1:8088')
+            conf.addparentproxy('GoAgent-PAAS', 'http://127.0.0.1:8088')
         else:
             goagent.set('paas', 'enable', '0')
         if conf.userconf.dget('goagent', 'proxy'):
@@ -1076,41 +1077,44 @@ class goagentHandler(FGFWProxyHandler):
 class snovaHandler(FGFWProxyHandler):
     """docstring for ClassName"""
     def __init__(self, arg=''):
-        FGFWProxyAbs.__init__(self)
+        FGFWProxyHandler.__init__(self)
         self.arg = arg
 
-    def _config(self):
+    def config(self):
         self.cmd = '%s/snova/bin/start.%s' % (WORKINGDIR, 'bat' if sys.platform.startswith('win') else 'sh')
         self.cwd = '%s/snova' % WORKINGDIR
-        self.enable = conf.getconfbool('snova', 'enable', False)
+        self.enable = conf.userconf.dgetbool('snova', 'enable', False)
+        self.enableupdate = False
+        if self.enable:
+            self._config()
+
+    def _config(self):
         proxy = SConfigParser()
         proxy.optionxform = str
         proxy.read('./snova/conf/snova.conf')
 
-        worknodes = conf.getconf('snova', 'GAEworknodes')
+        worknodes = conf.userconf.get('snova', 'GAEworknodes')
         if worknodes:
             worknodes = worknodes.split('|')
             for i in range(len(worknodes)):
                 proxy.set('GAE', 'WorkerNode[%s]' % i, worknodes[i])
             proxy.set('GAE', 'Enable', '1')
-            if self.enable:
-                conf.addparentproxy('snova-gae', 'http://127.0.0.1:48101')
+            conf.userconf.addparentproxy('snova-gae', 'http://127.0.0.1:48101')
         else:
             proxy.set('GAE', 'Enable', '0')
 
-        worknodes = conf.getconf('snova', 'C4worknodes')
+        worknodes = conf.userconf.get('snova', 'C4worknodes')
         if worknodes:
             worknodes = worknodes.split('|')
             for i in range(len(worknodes)):
                 proxy.set('C4', 'WorkerNode[%s]' % i, worknodes[i])
             proxy.set('C4', 'Enable', '1')
-            if self.enable:
-                fgfwproxy.addparentproxy('snova-c4', 'http://127.0.0.1:48102')
+            fgfwproxy.addparentproxy('snova-c4', 'http://127.0.0.1:48102')
         else:
             proxy.set('C4', 'Enable', '0')
 
         proxy.set('SPAC', 'Enable', '0')
-        proxy.set('Misc', 'RC4Key', conf.getconf('snova', 'RC4Key', '8976501f8451f03c5c4067b47882f2e5'))
+        proxy.set('Misc', 'RC4Key', conf.userconf.dget('snova', 'RC4Key', '8976501f8451f03c5c4067b47882f2e5'))
         with open('./snova/conf/snova.conf', 'w') as configfile:
             proxy.write(configfile)
 
@@ -1120,68 +1124,71 @@ class shadowsocksHandler(FGFWProxyHandler):
     def __init__(self):
         FGFWProxyHandler.__init__(self)
 
-    def _config(self):
-        self.filelist = [['https://github.com/v3aqb/fgfw-lite/raw/master/shadowsocks/local.py', './shadowsocks/local.py'],
-                         ['https://github.com/v3aqb/fgfw-lite/raw/master/shadowsocks/encrypt.py', './shadowsocks/encrypt.py'],
-                         ['https://github.com/v3aqb/fgfw-lite/raw/master/shadowsocks/utils.py', './shadowsocks/utils.py']]
+    def config(self):
+        self.filelist = [('https://github.com/v3aqb/fgfw-lite/raw/master/shadowsocks/local.py', './shadowsocks/local.py'),
+                         ('https://github.com/v3aqb/fgfw-lite/raw/master/shadowsocks/encrypt.py', './shadowsocks/encrypt.py'),
+                         ('https://github.com/v3aqb/fgfw-lite/raw/master/shadowsocks/utils.py', './shadowsocks/utils.py'),
+                         ]
         self.cmd = '{} -B {}/shadowsocks/local.py'.format(PYTHON2, WORKINGDIR)
         self.cwd = '%s/shadowsocks' % WORKINGDIR
         self.enable = conf.userconf.dgetbool('shadowsocks', 'enable', False)
         self.enableupdate = conf.userconf.dgetbool('shadowsocks', 'update', True)
         if self.enable:
-            lst = []
-            if sys.platform.startswith('win'):
-                self.cmd = 'c:/python27/python.exe -B %s/shadowsocks/local.py' % WORKINGDIR
-                for cmd in ('ss-local', 'sslocal'):
-                    if 'XP' in platform.platform():
-                        continue
-                    if subprocess.call(shlex.split('where %s' % cmd)) == 0:
-                        self.cmd = cmd
-                        break
-                else:
-                    lst = ['./shadowsocks/ss-local.exe',
-                           './shadowsocks/shadowsocks-local.exe',
-                           './shadowsocks/shadowsocks.exe']
-            elif sys.platform.startswith('linux'):
-                for cmd in ('ss-local', 'sslocal'):
-                    if subprocess.call(shlex.split('which %s' % cmd)) == 0:
-                        self.cmd = cmd
-                        break
-                else:
-                    lst = ['./shadowsocks/ss-local',
-                           './shadowsocks/shadowsocks-local']
-            for f in lst:
-                if os.path.isfile(f):
-                    self.cmd = ''.join([WORKINGDIR, f[1:]])
-                    break
+            self._config()
 
-            if not self.cmd.endswith('shadowsocks.exe'):
-                import random
-                import json
-                config = {}
-                config['server'] = conf.userconf.dget('shadowsocks', 'server', '127.0.0.1').strip('"')
-                config['server_port'] = conf.userconf.dget('shadowsocks', 'server_port', '8388')
-                config['password'] = conf.userconf.dget('shadowsocks', 'password', 'barfoo!').strip('"')
-                config['method'] = conf.userconf.dget('shadowsocks', 'method', 'aes-256-cfb').strip('"')
-                config['local_port'] = 1080
-                portlst = []
-                if not config['server_port'].isdigit():
-                    for item in config['server_port'].split(','):
-                        if item.strip().isdigit():
-                            portlst.append(int(item.strip()))
-                        else:
-                            a, b = item.strip().split('-')
-                            for i in range(int(a), int(b) + 1):
-                                portlst.append(i)
-                    config['server_port'] = portlst
-                else:
-                    config['server_port'] = int(config['server_port'])
-                if config['server'].startswith('['):
-                    config['server'] = json.loads(config['server'])
-                with open('./shadowsocks/config.json', 'wb') as f:
-                    f.write(json.dumps(config, indent=4, separators=(',', ': ')))
-                self.cmd = '{} -c {}'.format(self.cmd, '%s/shadowsocks/config.json' % WORKINGDIR)
-            conf.addparentproxy('shadowsocks', 'socks5://127.0.0.1:1080')
+    def _config(self):
+        lst = []
+        if sys.platform.startswith('win'):
+            self.cmd = 'c:/python27/python.exe -B %s/shadowsocks/local.py' % WORKINGDIR
+            for cmd in ('ss-local', 'sslocal'):
+                if 'XP' in platform.platform():
+                    continue
+                if subprocess.call(shlex.split('where %s' % cmd)) == 0:
+                    self.cmd = cmd
+                    break
+            else:
+                lst = ['./shadowsocks/ss-local.exe',
+                       './shadowsocks/shadowsocks-local.exe',
+                       './shadowsocks/shadowsocks.exe']
+        elif sys.platform.startswith('linux'):
+            for cmd in ('ss-local', 'sslocal'):
+                if subprocess.call(shlex.split('which %s' % cmd)) == 0:
+                    self.cmd = cmd
+                    break
+            else:
+                lst = ['./shadowsocks/ss-local',
+                       './shadowsocks/shadowsocks-local']
+        for f in lst:
+            if os.path.isfile(f):
+                self.cmd = ''.join([WORKINGDIR, f[1:]])
+                break
+
+        if not self.cmd.endswith('shadowsocks.exe'):
+            import json
+            config = {}
+            config['server'] = conf.userconf.dget('shadowsocks', 'server', '127.0.0.1').strip('"')
+            config['server_port'] = conf.userconf.dget('shadowsocks', 'server_port', '8388')
+            config['password'] = conf.userconf.dget('shadowsocks', 'password', 'barfoo!').strip('"')
+            config['method'] = conf.userconf.dget('shadowsocks', 'method', 'aes-256-cfb').strip('"')
+            config['local_port'] = 1080
+            portlst = []
+            if not config['server_port'].isdigit():
+                for item in config['server_port'].split(','):
+                    if item.strip().isdigit():
+                        portlst.append(int(item.strip()))
+                    else:
+                        a, b = item.strip().split('-')
+                        for i in range(int(a), int(b) + 1):
+                            portlst.append(i)
+                config['server_port'] = portlst
+            else:
+                config['server_port'] = int(config['server_port'])
+            if config['server'].startswith('['):
+                config['server'] = json.loads(config['server'])
+            with open('./shadowsocks/config.json', 'wb') as f:
+                f.write(json.dumps(config, indent=4, separators=(',', ': ')))
+            self.cmd = '{} -c {}'.format(self.cmd, '%s/shadowsocks/config.json' % WORKINGDIR)
+        conf.addparentproxy('shadowsocks', 'socks5://127.0.0.1:1080')
 
 
 class cowHandler(FGFWProxyHandler):
@@ -1189,21 +1196,22 @@ class cowHandler(FGFWProxyHandler):
     def __init__(self):
         FGFWProxyHandler.__init__(self)
 
-    def _config(self):
+    def config(self):
         self.filelist = []
         self.cwd = '%s/cow' % WORKINGDIR
 
         self.enable = conf.userconf.dgetbool('cow', 'enable', True)
-        if sys.platform.startswith('win'):
-            self.cmd = '%s/cow/cow.exe' % WORKINGDIR
-        else:
-            self.cmd = '%s/cow/cow' % WORKINGDIR
+        self.enableupdate = False
+        if self.enable:
+            self._config()
+
+    def _config(self):
+        self.cmd = '%s/cow/cow%s' % (WORKINGDIR, '.exe' if sys.platform.startswith('win') else '')
         self.enableupdate = conf.userconf.dgetbool('cow', 'update', False)
         if not os.path.isfile(self.cmd):
             self.enable = False
             return
-        configfile = []
-        configfile.append('listen = %s' % conf.userconf.dget('cow', 'listen', '127.0.0.1:8117'))
+        configfile = ['listen = %s' % conf.userconf.dget('cow', 'listen', '127.0.0.1:8117'), ]
         for key, item in conf.parentdict.items():
             if not item or key == 'cow':
                 continue
@@ -1226,13 +1234,13 @@ class fgfwproxy(FGFWProxyHandler):
         self.arg = arg
 
     def _config(self):
-        self.filelist = [['https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './fgfw-lite/gfwlist.txt'],
-                         ['http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './fgfw-lite/delegated-apnic-latest'],
-                         ['https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/fgfw-lite.py', './fgfw-lite/fgfw-lite.py'],
-                         ['https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/cloud.txt', './fgfw-lite/cloud.txt'],
-                         ['https://github.com/v3aqb/fgfw-lite/raw/master/userconf.sample.ini', './userconf.sample.ini'],
-                         ['https://github.com/v3aqb/fgfw-lite/raw/master/README.md', './README.md'],
-                         ['https://github.com/v3aqb/fgfw-lite/raw/master/Python27/python27.zip', './Python27/python27.zip'],
+        self.filelist = [('https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './fgfw-lite/gfwlist.txt'),
+                         ('http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './fgfw-lite/delegated-apnic-latest'),
+                         ('https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/fgfw-lite.py', './fgfw-lite/fgfw-lite.py'),
+                         ('https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/cloud.txt', './fgfw-lite/cloud.txt'),
+                         ('https://github.com/v3aqb/fgfw-lite/raw/master/userconf.sample.ini', './userconf.sample.ini'),
+                         ('https://github.com/v3aqb/fgfw-lite/raw/master/README.md', './README.md'),
+                         ('https://github.com/v3aqb/fgfw-lite/raw/master/Python27/python27.zip', './Python27/python27.zip'),
                          ]
         self.enable = conf.userconf.dgetbool('fgfwproxy', 'enable', True)
         self.enableupdate = conf.userconf.dgetbool('fgfwproxy', 'update', True)
@@ -1242,10 +1250,7 @@ class fgfwproxy(FGFWProxyHandler):
 
     def start(self):
         if self.enable:
-            if ':' in self.listen:
-                self.run_proxy(self.listen.rsplit(':', 1)[1], address=self.listen.rsplit(':', 1)[0])
-            else:
-                self.run_proxy(self.listen)
+            self.run_proxy(8118)
 
     def run_proxy(self, port, start_ioloop=True):
         """
@@ -1266,9 +1271,6 @@ class fgfwproxy(FGFWProxyHandler):
 
 class SConfigParser(configparser.ConfigParser):
     """docstring for SSafeConfigParser"""
-    def __init__(self):
-        configparser.ConfigParser.__init__(self)
-
     def dget(self, section, option, default=None):
         if default is None:
             default = ''
@@ -1305,6 +1307,13 @@ class SConfigParser(configparser.ConfigParser):
                 raise Exception
         except Exception:
             value = ''
+        return value
+
+    def items(self, section):
+        try:
+            value = configparser.ConfigParser.items(self, section)
+        except Exception:
+            value = []
         return value
 
     def set(self, section, option, value):
@@ -1352,18 +1361,13 @@ def atexit_do():
 
 
 def main():
-    if conf.userconf.dgetbool('fgfwproxy', 'enable', True):
-        fgfwproxy()
-    if conf.userconf.dgetbool('goagent', 'enable', True):
-        goagentHandler()
-    if conf.userconf.dgetbool('snova', 'enable', False):
-        snovaHandler()
-    if conf.userconf.dgetbool('shadowsocks', 'enable', False):
-        shadowsocksHandler()
-    if conf.userconf.dgetbool('https', 'enable', False):
-        conf.addparentproxy('https', conf.userconf.dget('https', 'proxy', ''))
-    if conf.userconf.dgetbool('cow', 'enable', True):
-        cowHandler()
+    fgfwproxy()
+    goagentHandler()
+    snovaHandler()
+    shadowsocksHandler()
+    for k, v in conf.userconf.items('parents'):
+        conf.addparentproxy(k, v)
+    cowHandler()
     updatedaemon = Thread(target=updater)
     updatedaemon.daemon = True
     updatedaemon.start()
