@@ -972,33 +972,29 @@ class goagentHandler(FGFWProxyHandler):
         self.enable = conf.userconf.dgetbool('goagent', 'enable', True)
         self.enableupdate = conf.userconf.dgetbool('goagent', 'update', True)
 
-        listen = conf.userconf.dget('goagent', 'listen', '127.0.0.1:8087')
-        if ':' in listen:
-            listen_ip, listen_port = listen.rsplit(':', 1)
-        else:
-            listen_ip = '127.0.0.1'
-            listen_port = listen
-
         goagent = SConfigParser()
         goagent.read('./goagent/proxy.ini')
-        goagent.set('listen', 'ip', listen_ip)
-        goagent.set('listen', 'port', listen_port)
 
-        if self.enable:
-            conf.addparentproxy('GoAgent', 'http://127.0.0.1:%s' % listen_port)
+        if conf.userconf.dget('goagent', 'GAEAppid', ''):
+            conf.addparentproxy('GoAgent', 'http://127.0.0.1:8087')
 
         goagent.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_cn'))
-        goagent.set('gae', 'appid', conf.userconf.dget('goagent', 'goagentGAEAppid', 'goagent'))
-        goagent.set("gae", "password", conf.userconf.dget('goagent', 'goagentGAEpassword', ''))
+        goagent.set('gae', 'mode', conf.userconf.dget('goagent', 'mode', 'https'))
+        goagent.set('gae', 'appid', conf.userconf.dget('goagent', 'GAEAppid', 'goagent'))
+        goagent.set("gae", "password", conf.userconf.dget('goagent', 'GAEpassword', ''))
         goagent.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
         goagent.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
         goagent.set('gae', 'options', conf.userconf.dget('goagent', 'options', ''))
         goagent.set('pac', 'enable', '0')
-        goagent.set('paas', 'fetchserver', conf.userconf.dget('goagent', 'paasfetchserver', ''))
+
         if conf.userconf.dget('goagent', 'paasfetchserver'):
             goagent.set('paas', 'enable', '1')
+            goagent.set('paas', 'password', conf.userconf.dget('goagent', 'paaspassword', '123456'))
+            goagent.set('paas', 'fetchserver', conf.userconf.dget('goagent', 'paasfetchserver', ''))
             if self.enable:
                 conf.addparentproxy('GoAgent-PAAS', 'http://127.0.0.1:8088')
+        else:
+            goagent.set('paas', 'enable', '0')
         if conf.userconf.dget('goagent', 'proxy'):
             goagent.set('proxy', 'enable', '1')
             host, port = conf.userconf.dget('goagent', 'proxy').rsplit(':')
@@ -1380,11 +1376,7 @@ def main():
     if conf.userconf.dgetbool('shadowsocks', 'enable', False):
         shadowsocksHandler()
     if conf.userconf.dgetbool('https', 'enable', False):
-        host = conf.userconf.dget('https', 'host', '')
-        port = conf.userconf.dget('https', 'port', '443')
-        user = conf.userconf.dget('https', 'user', None)
-        passwd = conf.userconf.dget('https', 'passwd', None)
-        conf.addparentproxy('https', 'https://%s%s:%s' % ('%s:%s@' % (user, passwd) if user else '', host, port))
+        conf.addparentproxy('https', conf.userconf.dget('https', 'proxy', ''))
     if conf.userconf.dgetbool('cow', 'enable', True):
         cowHandler()
     updatedaemon = Thread(target=updater)
