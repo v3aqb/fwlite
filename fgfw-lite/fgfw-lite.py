@@ -1253,7 +1253,7 @@ class fgfwproxy(FGFWProxyHandler):
         FGFWProxyHandler.__init__(self)
         self.arg = arg
 
-    def _config(self):
+    def config(self):
         self.filelist = [('https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './fgfw-lite/gfwlist.txt'),
                          ('http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './fgfw-lite/delegated-apnic-latest'),
                          ('https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/fgfw-lite.py', './fgfw-lite/fgfw-lite.py'),
