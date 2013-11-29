@@ -453,8 +453,10 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.request.version = first_line[0]
             except ValueError:
                 self.set_status(500)
-
-            self._headers = HTTPHeaders.parse(header_data)
+            try:
+                self._headers = HTTPHeaders.parse(header_data)
+            except Exception:
+                self._headers = HTTPHeaders.parse(str('Connection: close'))
             if "Content-Length" in self._headers:
                 if "," in self._headers["Content-Length"]:
                     # Proxies sometimes cause Content-Length headers to get
