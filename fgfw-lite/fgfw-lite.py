@@ -987,7 +987,7 @@ class goagentHandler(FGFWProxyHandler):
         if conf.userconf.dget('goagent', 'GAEAppid', ''):
             conf.addparentproxy('GoAgent', 'http://127.0.0.1:8087')
 
-        goagent.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_cn'))
+        goagent.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'google_hk'))
         goagent.set('gae', 'mode', conf.userconf.dget('goagent', 'mode', 'https'))
         goagent.set('gae', 'appid', conf.userconf.dget('goagent', 'GAEAppid', 'appid'))
         goagent.set("gae", "password", conf.userconf.dget('goagent', 'GAEpassword', ''))
