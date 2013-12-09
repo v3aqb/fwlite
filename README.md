@@ -1,11 +1,11 @@
 fgfw-lite
 ============
 
-fgfw-lite is a proxy server based on tornado framework, select parent proxy automatically based on Autoproxy rules.
+fgfw-lite is a HTTP proxy server help to get around the Great Firewall. It dectets websites blocked by GFW automatically, and forward the request to a uncensored proxy server.
 
 requirements under openSUSE:
 
-    zypper install python-tornado python-pyOpenSSL
+    zypper install python-tornado python-ipaddr
 
 to work with shadowsocks, require either of the following:
 
@@ -16,6 +16,8 @@ to work with shadowsocks, require either of the following:
 goagent https://code.google.com/p/goagent/
 
 shadowsocks https://github.com/clowwindy/shadowsocks
+
+snova https://code.google.com/p/snova/
 
 pybuild https://github.com/goagent/pybuild
 
