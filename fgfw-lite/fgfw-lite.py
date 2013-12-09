@@ -597,14 +597,12 @@ class ProxyHandler(tornado.web.RequestHandler):
             if len(data) > 128:
                 self._success = True
                 self.remove_timeout()
-                rtimer.append(time.time() - self.__t)
             if not client.closed():
                 client.write(data)
         logging.debug('CONNECT')
         client = self.request.connection.stream
         upstream = self.upstream
-        self.__t = time.time()
-        if self.ppname != 'direct':
+        if self.ppname != 'direct':  # detect bad shadowsocks server
             self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + RTIMEOUT, stack_context.wrap(self.on_upstream_close))
         if self.pptype and 'http' in self.pptype:
             s = [b'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version), ]
