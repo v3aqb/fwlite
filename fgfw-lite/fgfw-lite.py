@@ -1055,40 +1055,38 @@ class goagentHandler(FGFWProxyHandler):
 
     def import_ca(self):
         '''
-        ripped from goagent 3.0.0
+        ripped from goagent 3.1.0
         '''
         certfile = os.path.abspath('./goagent/CA.crt')
         dirname, basename = os.path.split(certfile)
         commonname = 'FGFW_Lite CA'
         if sys.platform.startswith('win'):
+            import ctypes
             with open(certfile, 'rb') as fp:
                 certdata = fp.read()
                 if certdata.startswith(b'-----'):
                     begin = b'-----BEGIN CERTIFICATE-----'
                     end = b'-----END CERTIFICATE-----'
                     certdata = base64.b64decode(b''.join(certdata[certdata.find(begin) + len(begin):certdata.find(end)].strip().splitlines()))
-                import ctypes
-                crypt32_handle = ctypes.windll.kernel32.LoadLibraryW('crypt32.dll')
-                crypt32 = ctypes.WinDLL(None, handle=crypt32_handle)
-                store_handle = crypt32.CertOpenStore(10, 0, 0, 0x4000 | 0x10000, 'ROOT')
+                crypt32 = ctypes.WinDLL(b'crypt32.dll'.decode())
+                store_handle = crypt32.CertOpenStore(10, 0, 0, 0x4000 | 0x10000, b'ROOT'.decode())
                 if not store_handle:
                     return -1
                 ret = crypt32.CertAddEncodedCertificateToStore(store_handle, 0x1, certdata, len(certdata), 4, None)
                 crypt32.CertCloseStore(store_handle, 0)
                 del crypt32
-                ctypes.windll.kernel32.FreeLibrary(crypt32_handle)
                 return 0 if ret else -1
         elif sys.platform == 'darwin':
-            return subprocess.call(shlex.split('security find-certificate -a -c "%s" | grep "%s" >/dev/null || security add-trusted-cert -d -r trustRoot -k "/Library/Keychains/System.keychain" "%s"' % (commonname, commonname, certfile)))
+            return os.system(('security find-certificate -a -c "%s" | grep "%s" >/dev/null || security add-trusted-cert -d -r trustRoot -k "/Library/Keychains/System.keychain" "%s"' % (commonname, commonname, certfile.decode('utf-8'))).encode('utf-8'))
         elif sys.platform.startswith('linux'):
             platform_distname = platform.dist()[0]
             if platform_distname == 'Ubuntu':
                 pemfile = "/etc/ssl/certs/%s.pem" % commonname
                 new_certfile = "/usr/local/share/ca-certificates/%s.crt" % commonname
                 if not os.path.exists(pemfile):
-                    return subprocess.call(shlex.split('cp "%s" "%s" && update-ca-certificates' % (certfile, new_certfile)))
+                    return os.system('cp "%s" "%s" && update-ca-certificates' % (certfile, new_certfile))
             elif any(os.path.isfile('%s/certutil' % x) for x in os.environ['PATH'].split(os.pathsep)):
-                return subprocess.call(shlex.split('certutil -L -d sql:$HOME/.pki/nssdb | grep "%s" || certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "%s" -i "%s"' % (commonname, commonname, certfile)))
+                return os.system('certutil -L -d sql:$HOME/.pki/nssdb | grep "%s" || certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "%s" -i "%s"' % (commonname, commonname, certfile))
             else:
                 logging.warning('please install *libnss3-tools* package to import GoAgent root ca')
         return 0
