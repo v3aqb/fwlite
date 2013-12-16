@@ -441,9 +441,8 @@ class ProxyHandler(tornado.web.RequestHandler):
         def _on_headers(data=None):
             self.remove_timeout()
             rtimer.append(time.time() - self.__t)
-            _client_write(data)
-            data = unicode(data, 'latin1')
-            first_line, _, header_data = data.partition("\n")
+            _data = unicode(data, 'latin1')
+            first_line, _, header_data = _data.partition("\n")
             first_line = first_line.split()
             try:
                 if len(first_line) >= 3:
@@ -458,6 +457,9 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self._headers = HTTPHeaders.parse(header_data)
             except Exception:
                 self._headers = HTTPHeaders.parse(str('Connection: close'))
+
+            _client_write(data)
+
             if "Content-Length" in self._headers:
                 if "," in self._headers["Content-Length"]:
                     # Proxies sometimes cause Content-Length headers to get

@@ -4,7 +4,7 @@
 /fgfw-lite/local.txt
 /fgfw-lite/redirector.txt
 /goagent-logo.png
-/goagent/CA.crt
+/goagent/CA.*
 /goagent/certs/
 /.directory
 /userconf.ini
