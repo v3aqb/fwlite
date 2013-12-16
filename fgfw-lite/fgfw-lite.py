@@ -312,12 +312,13 @@ class ProxyHandler(tornado.web.RequestHandler):
             for item in lst:
                 lst.remove(item)
                 if not item.closed():
-                    if time.time() - item._last_active < 60:
-                        logging.debug('reuse connection')
-                        self.upstream = item
-                        self.upstream.set_close_callback(self.on_upstream_close)
-                        break
-                    item.close()
+                    if time.time() - item._last_active > 60:
+                        item.close()
+                        continue
+                    logging.debug('reuse connection')
+                    self.upstream = item
+                    self.upstream.set_close_callback(self.on_upstream_close)
+                    break
         if not hasattr(self, 'upstream'):
             logging.debug('connecting to server')
             if self.ppname == 'none':
@@ -1360,9 +1361,9 @@ class Config(object):
     def addparentproxy(self, name, proxy):
         '''
         {
-            'direct': (None, None, None, None, None),
-            'goagent': ('http', '127.0.0.1', 8087, None, None)
-        }  # type, host, port, username, password
+            'direct': '',
+            'goagent': 'http://127.0.0.1:8087'
+        }
         '''
         self.parentdict[name] = proxy
 
