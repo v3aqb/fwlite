@@ -51,7 +51,7 @@ class Frame(wx.Frame):
             size=wx.DefaultSize, style=wx.DEFAULT_FRAME_STYLE):
         wx.Frame.__init__(self, parent, id, title, pos, size, style)
         self.SetClientSize(wx.Size(632, 480))
-        self.SetIcon = wx.IconFromBitmap(wx.Bitmap(TRAY_ICON))
+        self.SetIcon(wx.IconFromBitmap(wx.Bitmap(TRAY_ICON)))
         self.process = None
         self.Bind(wx.EVT_IDLE, self.OnIdle)
 
@@ -105,14 +105,10 @@ class Frame(wx.Frame):
 
     def OnIdle(self, event):
         if self.process is not None:
-            stream = self.process.GetInputStream()
-            if stream.CanRead():
-                text = stream.read()
-                self.addText(text)
-            stream = self.process.GetErrorStream()
-            if stream.CanRead():
-                text = stream.read()
-                self.addText(text)
+            if self.process.IsErrorAvailable():
+                self.addText(self.process.GetErrorStream().read())
+            if self.process.IsInputAvailable():
+                self.addText(self.process.GetInputStream().read())
 
     def addText(self, text):
         self.consoleText.AppendText(text)
