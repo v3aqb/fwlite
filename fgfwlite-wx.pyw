@@ -112,6 +112,9 @@ class Frame(wx.Frame):
                 self.addText(self.process.GetInputStream().read())
 
     def addText(self, text):
+        console = self.consoleText.GetValue().splitlines()
+        if len(console) > 300:
+            self.consoleText.SetValue('\n'.join(console[len(console) - 500:]))
         self.consoleText.AppendText(text)
 
 
