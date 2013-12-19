@@ -1376,8 +1376,7 @@ conf.addparentproxy('direct', '')
 @atexit.register
 def atexit_do():
     for item in FGFWProxyHandler.ITEMS:
-        item.enable = False
-        item.restart()
+        item.stop()
     conf.confsave()
 
 

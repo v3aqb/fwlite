@@ -42,6 +42,7 @@ class TrayIcon(wx.TaskBarIcon):
         self.win.Show(not self.win.IsShown())
 
     def on_exit(self, event):
+        self.win.process.GetOutputStream().write('exit()\n')
         sys.exit()
 
 
@@ -60,7 +61,7 @@ class Frame(wx.Frame):
         self.consoleText = wx.TextCtrl(panel, style=wx.TE_MULTILINE | wx.TE_READONLY)
         self.consoleText.SetFont(wx.Font(9, wx.SWISS, wx.NORMAL, wx.NORMAL, False, 'monospace'))
 
-        self.inputText = wx.TextCtrl(panel)
+        self.inputText = wx.TextCtrl(panel, style=wx.TE_PROCESS_ENTER)
         self.inputText.SetFont(wx.Font(9, wx.SWISS, wx.NORMAL, wx.NORMAL, False, 'monospace'))
 
         sendbutton = wx.Button(panel, wx.ID_ANY, u'Send')
@@ -90,7 +91,7 @@ class Frame(wx.Frame):
     def on_send(self, event):
         text = self.inputText.GetValue()
         self.inputText.SetValue('')
-        self.consoleText.AppendText(text)
+        self.consoleText.AppendText(text + '\n')
         self.process.GetOutputStream().write(text + '\n')
         self.inputText.SetFocus()
 
