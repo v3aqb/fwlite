@@ -75,8 +75,9 @@ class Frame(wx.Frame):
         panel.SetSizer(box)
 
         # bind event
-        self.Bind(wx.EVT_BUTTON, self.do_send, sendbutton)
+        self.Bind(wx.EVT_BUTTON, self.on_send, sendbutton)
         self.Bind(wx.EVT_CLOSE, self.on_exit)
+        self.Bind(wx.EVT_TEXT_ENTER, self.on_send, self.inputText)
 
         self.startProcess()
 
@@ -86,9 +87,10 @@ class Frame(wx.Frame):
         self.process.Redirect()
         wx.Execute(cmd, wx.EXEC_ASYNC, self.process)
 
-    def do_send(self, event):
+    def on_send(self, event):
         text = self.inputText.GetValue()
         self.inputText.SetValue('')
+        self.consoleText.AppendText(text)
         self.process.GetOutputStream().write(text + '\n')
         self.inputText.SetFocus()
 
@@ -101,16 +103,19 @@ class Frame(wx.Frame):
             self.process.CloseOutput()
             self.process = None
 
-    def OnIdle(self, evt):
+    def OnIdle(self, event):
         if self.process is not None:
             stream = self.process.GetInputStream()
             if stream.CanRead():
                 text = stream.read()
-                self.consoleText.AppendText(text)
+                self.addText(text)
             stream = self.process.GetErrorStream()
             if stream.CanRead():
                 text = stream.read()
-                self.consoleText.AppendText(text)
+                self.addText(text)
+
+    def addText(self, text):
+        self.consoleText.AppendText(text)
 
 
 def main():
