@@ -61,7 +61,7 @@ logging.basicConfig(level=logging.INFO)
 
 WORKINGDIR = '/'.join(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')).split('/')[:-1])
 if ' ' in WORKINGDIR:
-    print('no spacebar allowed in path')
+    logging.error('no spacebar allowed in path')
     sys.exit()
 os.chdir(WORKINGDIR)
 
@@ -975,6 +975,9 @@ class goagentHandler(FGFWProxyHandler):
         self.cmd = '{} {}/goagent/proxy.py'.format(PYTHON2, WORKINGDIR)
         self.enable = conf.userconf.dgetbool('goagent', 'enable', True)
         self.enableupdate = conf.userconf.dgetbool('goagent', 'update', True)
+        t = open('%s/goagent/proxy.py' % WORKINGDIR, 'rb').read()
+        with open('%s/goagent/proxy.py' % WORKINGDIR, 'wb') as f:
+            f.write(t.replace(b'sys.stdout.write', b'sys.stderr.write'))
         if self.enable:
             self._config()
 
@@ -1275,7 +1278,7 @@ class fgfwproxy(FGFWProxyHandler):
         Run proxy on the specified port. If start_ioloop is True (default),
         the tornado IOLoop will be started immediately.
         """
-        print("Starting HTTP proxy on port {} and {}".format(port, str(int(port) + 1)))
+        logging.info("Starting HTTP proxy on port {} and {}".format(port, str(int(port) + 1)))
         app = Application([(r'.*', ProxyHandler), ], transforms=[])
         http_server = HTTPProxyServer(app)
         http_server.listen(8118)
@@ -1373,8 +1376,7 @@ conf.addparentproxy('direct', '')
 @atexit.register
 def atexit_do():
     for item in FGFWProxyHandler.ITEMS:
-        item.enable = False
-        item.restart()
+        item.stop()
     conf.confsave()
 
 
@@ -1393,7 +1395,7 @@ def main():
         try:
             exec(raw_input().strip())
         except Exception as e:
-            print(repr(e))
+            logging.info(repr(e))
 
 if __name__ == "__main__":
     try:
