@@ -6,10 +6,14 @@ from __future__ import print_function, division, unicode_literals
 
 __version__ = '0.1'
 
+import os
 import sys
 import wx
 
-TRAY_ICON = './fgfw-lite/taskbar.ico'
+WORKINGDIR = '/'.join(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')).split('/'))
+os.chdir(WORKINGDIR)
+TRAY_ICON = '%s/fgfw-lite/taskbar.ico' % WORKINGDIR
+PYTHON = '%s/Python27/python27.exe' % WORKINGDIR if sys.platform.startswith('win') else '/usr/bin/env python2.7'
 
 
 def create_menu_item(menu, label, func):
@@ -29,9 +33,10 @@ class TrayIcon(wx.TaskBarIcon):
 
     def CreatePopupMenu(self):
         menu = wx.Menu()
-        create_menu_item(menu, 'Show Toggle', self.showtoggle)
+        create_menu_item(menu, '显示/隐藏', self.showtoggle)
+        create_menu_item(menu, '重新载入', self.reload)
         menu.AppendSeparator()
-        create_menu_item(menu, 'Exit', self.on_exit)
+        create_menu_item(menu, '退出', self.on_exit)
         return menu
 
     def set_icon(self, path):
@@ -40,6 +45,11 @@ class TrayIcon(wx.TaskBarIcon):
 
     def showtoggle(self, event):
         self.win.Show(not self.win.IsShown())
+
+    def reload(self, event):
+        self.win.process.GetOutputStream().write('exit()\n')
+        self.win.consoleText.SetValue('')
+        self.win.startProcess()
 
     def on_exit(self, event):
         self.win.process.GetOutputStream().write('exit()\n')
