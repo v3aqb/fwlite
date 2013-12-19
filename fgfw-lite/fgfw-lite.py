@@ -312,9 +312,6 @@ class ProxyHandler(tornado.web.RequestHandler):
             for item in lst:
                 lst.remove(item)
                 if not item.closed():
-                    if time.time() - item._last_active > 60:
-                        item.close()
-                        continue
                     logging.debug('reuse connection')
                     self.upstream = item
                     self.upstream.set_close_callback(self.on_upstream_close)
