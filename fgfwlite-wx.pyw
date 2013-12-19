@@ -52,6 +52,9 @@ class Frame(wx.Frame):
         wx.Frame.__init__(self, parent, id, title, pos, size, style)
         self.SetClientSize(wx.Size(632, 480))
         self.SetIcon = wx.IconFromBitmap(wx.Bitmap(TRAY_ICON))
+        self.process = None
+        self.Bind(wx.EVT_IDLE, self.OnIdle)
+
         panel = wx.Panel(self, wx.ID_ANY)
 
         self.consoleText = wx.TextCtrl(panel, style=wx.TE_MULTILINE | wx.TE_READONLY)
@@ -75,11 +78,39 @@ class Frame(wx.Frame):
         self.Bind(wx.EVT_BUTTON, self.do_send, sendbutton)
         self.Bind(wx.EVT_CLOSE, self.on_exit)
 
+        self.startProcess()
+
+    def startProcess(self):
+        cmd = '/usr/bin/env python2.7 ./fgfw-lite/fgfw-lite.py'
+        self.process = wx.Process(self)
+        self.process.Redirect()
+        wx.Execute(cmd, wx.EXEC_ASYNC, self.process)
+
     def do_send(self, event):
-        pass
+        text = self.inputText.GetValue()
+        self.inputText.SetValue('')
+        self.process.GetOutputStream().write(text + '\n')
+        self.inputText.SetFocus()
 
     def on_exit(self, event):
         self.Show(False)
+
+    def __del__(self):
+        if self.process is not None:
+            self.process.Detach()
+            self.process.CloseOutput()
+            self.process = None
+
+    def OnIdle(self, evt):
+        if self.process is not None:
+            stream = self.process.GetInputStream()
+            if stream.CanRead():
+                text = stream.read()
+                self.consoleText.AppendText(text)
+            stream = self.process.GetErrorStream()
+            if stream.CanRead():
+                text = stream.read()
+                self.consoleText.AppendText(text)
 
 
 def main():
