@@ -898,25 +898,24 @@ class FGFWProxyHandler(object):
     def __init__(self):
         FGFWProxyHandler.ITEMS.append(self)
         self.subpobj = None
-        self.config()
-        self.daemon = Thread(target=self.start)
-        self.daemon.daemon = True
-        self.daemon.start()
-
-    def config(self):
         self.cmd = ''
         self.cwd = ''
         self.filelist = []
         self.enable = True
         self.enableupdate = True
 
+        self.config()
+        self.daemon = Thread(target=self.start)
+        self.daemon.daemon = True
+        self.daemon.start()
+
+    def config(self):
+        pass
+
     def start(self):
         while 1:
             if self.enable:
-                if self.cwd:
-                    os.chdir(self.cwd)
-                self.subpobj = subprocess.Popen(shlex.split(self.cmd))
-                os.chdir(WORKINGDIR)
+                self.subpobj = subprocess.Popen(shlex.split(self.cmd), cwd=self.cwd)
                 self.subpobj.wait()
             time.sleep(3)
 

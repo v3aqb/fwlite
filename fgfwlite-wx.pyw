@@ -47,12 +47,12 @@ class TrayIcon(wx.TaskBarIcon):
         self.win.Show(not self.win.IsShown())
 
     def reload(self, event):
-        self.win.process.GetOutputStream().write('exit()\n')
+        self.win.process.GetOutputStream().write('sys.exit()\n')
         self.win.consoleText.SetValue('')
         self.win.startProcess()
 
     def on_exit(self, event):
-        self.win.process.GetOutputStream().write('exit()\n')
+        self.win.process.GetOutputStream().write('sys.exit()\n')
         sys.exit()
 
 
@@ -93,7 +93,7 @@ class Frame(wx.Frame):
         self.startProcess()
 
     def startProcess(self):
-        cmd = '/usr/bin/env python2.7 ./fgfw-lite/fgfw-lite.py'
+        cmd = '%s %s/fgfw-lite/fgfw-lite.py -hide' % (PYTHON, WORKINGDIR)
         self.process = wx.Process(self)
         self.process.Redirect()
         wx.Execute(cmd, wx.EXEC_ASYNC, self.process)
