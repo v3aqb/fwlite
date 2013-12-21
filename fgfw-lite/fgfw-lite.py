@@ -262,7 +262,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         else:
             self.upstream_name = self.ppname if self.pphost else '{}-{}'.format(self.request.host, str(self.requestport))
 
-        logging.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
+        logging.info('{} {} via {}'.format(self.request.method, self.uris, self.ppname))
 
     def getparent(self, level=1):
         self._getparent(level)
@@ -276,6 +276,9 @@ class ProxyHandler(tornado.web.RequestHandler):
         # transparent proxy
         if self.request.method != 'CONNECT' and self.request.uri.startswith('/') and self.request.host != "127.0.0.1":
             self.request.uri = 'http://%s%s' % (self.request.host, self.request.uri)
+
+        self.uris = '%s%s' % (self.request.uri.split('?')[0], '?' if len(self.request.uri.split('?')) > 1 else '')
+
         # redirector
         new_url = REDIRECTOR.get(self.request.uri)
         if new_url:
@@ -618,6 +621,9 @@ class ProxyHandler(tornado.web.RequestHandler):
             client_write(b'HTTP/1.1 200 Connection established\r\n\r\n')
             client.read_until_close(upstream.close, upstream_write)
             upstream.read_until_close(client.close, client_write)
+
+    def _request_summary(self):
+        return self.request.method + " " + self.uris + " (" + self.request.remote_ip + ")"
 
 
 class ForceProxyHandler(ProxyHandler):
