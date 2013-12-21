@@ -262,7 +262,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         else:
             self.upstream_name = self.ppname if self.pphost else '{}-{}'.format(self.request.host, str(self.requestport))
 
-        logging.info('{} {} via {}'.format(self.request.method, self.request.uri.split('?')[0], self.ppname))
+        logging.info('{} {} via {}'.format(self.request.method, self.uris, self.ppname))
 
     def getparent(self, level=1):
         self._getparent(level)
@@ -276,6 +276,9 @@ class ProxyHandler(tornado.web.RequestHandler):
         # transparent proxy
         if self.request.method != 'CONNECT' and self.request.uri.startswith('/') and self.request.host != "127.0.0.1":
             self.request.uri = 'http://%s%s' % (self.request.host, self.request.uri)
+
+        self.uris = '%s%s' % (self.request.uri.split('?')[0], '?' if len(self.request.uri.split('?')) > 1 else '')
+
         # redirector
         new_url = REDIRECTOR.get(self.request.uri)
         if new_url:
@@ -619,6 +622,9 @@ class ProxyHandler(tornado.web.RequestHandler):
             client.read_until_close(upstream.close, upstream_write)
             upstream.read_until_close(client.close, client_write)
 
+    def _request_summary(self):
+        return self.request.method + " " + self.uris + " (" + self.request.remote_ip + ")"
+
 
 class ForceProxyHandler(ProxyHandler):
     def getparent(self, level=3):
@@ -898,25 +904,24 @@ class FGFWProxyHandler(object):
     def __init__(self):
         FGFWProxyHandler.ITEMS.append(self)
         self.subpobj = None
-        self.config()
-        self.daemon = Thread(target=self.start)
-        self.daemon.daemon = True
-        self.daemon.start()
-
-    def config(self):
         self.cmd = ''
         self.cwd = ''
         self.filelist = []
         self.enable = True
         self.enableupdate = True
 
+        self.config()
+        self.daemon = Thread(target=self.start)
+        self.daemon.daemon = True
+        self.daemon.start()
+
+    def config(self):
+        pass
+
     def start(self):
         while 1:
             if self.enable:
-                if self.cwd:
-                    os.chdir(self.cwd)
-                self.subpobj = subprocess.Popen(shlex.split(self.cmd))
-                os.chdir(WORKINGDIR)
+                self.subpobj = subprocess.Popen(shlex.split(self.cmd), cwd=self.cwd)
                 self.subpobj.wait()
             time.sleep(3)
 
