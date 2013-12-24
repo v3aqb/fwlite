@@ -1003,12 +1003,12 @@ class goagentHandler(FGFWProxyHandler):
         goagent.set('pac', 'enable', '0')
 
         if conf.userconf.dget('goagent', 'paasfetchserver'):
-            goagent.set('paas', 'enable', '1')
-            goagent.set('paas', 'password', conf.userconf.dget('goagent', 'paaspassword', '123456'))
-            goagent.set('paas', 'fetchserver', conf.userconf.dget('goagent', 'paasfetchserver', ''))
+            goagent.set('php', 'enable', '1')
+            goagent.set('php', 'password', conf.userconf.dget('goagent', 'phppassword', '123456'))
+            goagent.set('php', 'fetchserver', conf.userconf.dget('goagent', 'phpfetchserver', 'http://.com/'))
             conf.addparentproxy('GoAgent-PAAS', 'http://127.0.0.1:8088')
         else:
-            goagent.set('paas', 'enable', '0')
+            goagent.set('php', 'enable', '0')
         if conf.userconf.dget('goagent', 'proxy'):
             goagent.set('proxy', 'enable', '1')
             host, port = conf.userconf.dget('goagent', 'proxy').rsplit(':')
