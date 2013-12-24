@@ -921,7 +921,7 @@ class FGFWProxyHandler(object):
     def start(self):
         while 1:
             if self.enable:
-                self.subpobj = subprocess.Popen(shlex.split(self.cmd), cwd=self.cwd)
+                self.subpobj = subprocess.Popen(shlex.split(self.cmd), cwd=self.cwd, stdin=subprocess.PIPE)
                 self.subpobj.wait()
             time.sleep(3)
 
