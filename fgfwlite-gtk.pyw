@@ -8,7 +8,6 @@ __version__ = '1.6'
 import sys
 import os
 import thread
-import platform
 
 try:
     import pygtk
@@ -31,19 +30,6 @@ try:
 except ImportError:
     sys.exit(gtk.MessageDialog(None, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, u'请安装 python-vte').run())
 
-DESKTOP_FILE = '''\
-#!/usr/bin/env xdg-open
-[Desktop Entry]
-Type=Application
-Name=FGFW-Lite GTK
-Comment=FGFW-Lite GTK Launcher
-Categories=Network;Proxy;
-Exec=/usr/bin/env python "%s"
-Icon=%s/fgfw-lite/taskbar.ico
-Terminal=false
-StartupNotify=true
-''' % (os.path.abspath(__file__), os.path.dirname(os.path.abspath(__file__)))
-
 
 def spawn_later(seconds, target, *args, **kwargs):
     def wrap(*args, **kwargs):
@@ -55,8 +41,19 @@ def spawn_later(seconds, target, *args, **kwargs):
 
 def drop_desktop():
     filename = os.path.abspath(__file__)
-    dirname = os.path.dirname(os.path.abspath(__file__))
-
+    dirname = os.path.dirname(filename)
+    DESKTOP_FILE = '''\
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Type=Application
+Name=FGFW-Lite GTK
+Comment=FGFW-Lite GTK Launcher
+Categories=Network;Proxy;
+Exec=/usr/bin/env python "%s"
+Icon=%s/fgfw-lite/taskbar.ico
+Terminal=false
+StartupNotify=true
+''' % (filename, dirname)
     for dirname in map(os.path.expanduser, ['~/Desktop', u'~/桌面']):
         if os.path.isdir(dirname):
             filename = os.path.join(dirname, 'fgfwlite-gtk.desktop')
@@ -198,8 +195,7 @@ def main():
         __file__ = getattr(os, 'readlink', lambda x: x)(__file__)
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-    if platform.dist()[0] == 'Ubuntu':
-        drop_desktop()
+    drop_desktop()
 
     window = gtk.Window()
     terminal = vte.Terminal()
