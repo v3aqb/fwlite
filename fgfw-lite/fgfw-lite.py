@@ -108,26 +108,6 @@ class Application(tornado.web.Application):
 
 
 class HTTPProxyConnection(HTTPConnection):
-    def __init__(self, stream, address, request_callback, no_keep_alive=False,
-                 xheaders=False, protocol=None):
-        self.stream = stream
-        self.address = address
-        # Save the socket's address family now so we know how to
-        # interpret self.address even after the stream is closed
-        # and its socket attribute replaced with None.
-        self.address_family = stream.socket.family
-        self.request_callback = request_callback
-        self.no_keep_alive = no_keep_alive
-        self.xheaders = xheaders
-        self.protocol = protocol
-        self._clear_request_state()
-        # Save stack context here, outside of any request.  This keeps
-        # contexts from one request from leaking into the next.
-        self._header_callback = stack_context.wrap(self._on_headers)
-        self.stream.set_close_callback(self._on_connection_close)
-        self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + CTIMEOUT, stack_context.wrap(self.close))
-        self.stream.read_until(b"\r\n\r\n", self._header_callback)
-
     def _handle_events(self, fd, events):
         if self.stream.closed():
             logging.warning("Got events for closed stream %d", fd)
@@ -186,7 +166,6 @@ class HTTPProxyConnection(HTTPConnection):
         return chunk
 
     def _on_headers(self, data):
-        self._timeout.callback = None
         try:
             data = unicode(data.decode('latin1'))
             eol = data.find("\r\n")
@@ -795,14 +774,13 @@ class parent_proxy(object):
                 elif rule.match(uri):
                     return True
 
-        forceproxy = False
-
         if level == 0:
             return False
-        elif level == 1:
-            pass
         elif level == 2:
             forceproxy = True
+        else:
+            forceproxy = False
+
         if level == 3:
             a = True
         else:
