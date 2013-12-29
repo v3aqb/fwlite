@@ -20,7 +20,7 @@
 
 from __future__ import print_function, unicode_literals, division
 
-__version__ = '0.3.5.2'
+__version__ = '0.3.5.4'
 
 import sys
 import os
@@ -33,6 +33,7 @@ from threading import Thread
 import atexit
 import platform
 import base64
+import bisect
 import hashlib
 import socket
 import struct
@@ -49,12 +50,6 @@ try:
 except ImportError:
     import ConfigParser as configparser
 configparser.RawConfigParser.OPTCRE = re.compile(r'(?P<option>[^=\s][^=]*)\s*(?P<vi>[=])\s*(?P<value>.*)$')
-try:
-    import ipaddress
-except ImportError:
-    import ipaddr as ipaddress
-    ipaddress.ip_address = ipaddress.IPAddress
-    ipaddress.ip_network = ipaddress.IPNetwork
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -702,6 +697,11 @@ class redirector(object):
 REDIRECTOR = redirector()
 
 
+def ip_from_string(ip):
+    # https://gist.github.com/cslarsen/1595135
+    return reduce(lambda a, b: a << 8 | b, map(int, ip.split(".")))
+
+
 class parent_proxy(object):
     """docstring for parent_proxy"""
     def config(self):
@@ -755,43 +755,37 @@ class parent_proxy(object):
                     logging.warning('./fgfw-lite/gfwlist.txt is corrupted!')
 
         self.chinanet = []
-        self.chinanet.append(ipaddress.ip_network('192.168.0.0/16'))
-        self.chinanet.append(ipaddress.ip_network('172.16.0.0/12'))
-        self.chinanet.append(ipaddress.ip_network('10.0.0.0/8'))
-        self.chinanet.append(ipaddress.ip_network('127.0.0.0/8'))
-        # ripped from https://github.com/fivesheep/chnroutes
-        import math
-        data = open('./fgfw-lite/delegated-apnic-latest').read()
+        self.chinanet.append((ip_from_string('192.168.0.0'), 2 ** (32 - 16)))
+        self.chinanet.append((ip_from_string('172.16.0.0'), 2 ** (32 - 12)))
+        self.chinanet.append((ip_from_string('10.0.0.0'), 2 ** (32 - 8)))
+        self.chinanet.append((ip_from_string('127.0.0.0'), 2 ** (32 - 8)))
 
         cnregex = re.compile(r'apnic\|cn\|ipv4\|[0-9\.]+\|[0-9]+\|[0-9]+\|a.*', re.IGNORECASE)
-        cndata = cnregex.findall(data)
 
-        for item in cndata:
+        for item in cnregex.findall(open('./fgfw-lite/delegated-apnic-latest').read()):
             unit_items = item.split('|')
-            starting_ip = unit_items[3]
+            starting_ip = ip_from_string(unit_items[3])
             num_ip = int(unit_items[4])
+            self.chinanet.append((starting_ip, num_ip))
 
-            #mask in *nix format
-            mask2 = 32 - int(math.log(num_ip, 2))
-
-            self.chinanet.append(ipaddress.ip_network('{}/{}'.format(starting_ip, mask2)))
+        self.chinanet.sort(key=lambda r: r[0])
+        self.iplist = [r[0] for r in self.chinanet]
 
     def ifgfwed(self, uri, host, level=1):
         def ifhost_in_china():
-            if not host:
-                return None
             if host in self.hostinchina:
                 return self.hostinchina.get(host)
             try:
-                ipo = ipaddress.ip_address(socket.gethostbyname(host))
+                i = ip_from_string(socket.gethostbyname(host))
+                a = self.chinanet[bisect.bisect_right(self.iplist, i) - 1]
+                if a[0] <= i < a[0] + a[1]:
+                    logging.info('%s in china' % host)
+                    self.hostinchina[host] = True
+                    return True
+                self.hostinchina[host] = False
+                return False
             except Exception:
                 return None
-            if any(ipo in net for net in self.chinanet):
-                logging.info('%s in china' % host)
-                self.hostinchina[host] = True
-                return True
-            self.hostinchina[host] = False
-            return False
 
         def if_gfwlist_force():
             for rule in self.gfwlist_force:
