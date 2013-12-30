@@ -796,10 +796,10 @@ class parent_proxy(object):
             return True
 
     def parentproxy(self, uri, host, level=1):
-    # 0 -- direct
-    # 1 -- proxy if force, direct if ip in china or override, proxy if gfwlist
-    # 2 -- proxy if force, direct if ip in china or override, proxy if all
-    # 3 -- proxy if not override
+        # 0 -- direct
+        # 1 -- proxy if force, direct if ip in china or override, proxy if gfwlist
+        # 2 -- proxy if force, direct if ip in china or override, proxy if all
+        # 3 -- proxy if not override
         '''
             decide which parentproxy to use.
             url:  'https://www.google.com'
@@ -967,7 +967,7 @@ class goagentHandler(FGFWProxyHandler):
 
         goagent.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'ipv4'))
         goagent.set('gae', 'mode', conf.userconf.dget('goagent', 'mode', 'https'))
-        goagent.set('gae', 'appid', conf.userconf.dget('goagent', 'GAEAppid', 'appid'))
+        goagent.set('gae', 'appid', conf.userconf.dget('goagent', 'GAEAppid', 'goagent'))
         goagent.set("gae", "password", conf.userconf.dget('goagent', 'GAEpassword', ''))
         goagent.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
         goagent.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
