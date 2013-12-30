@@ -108,7 +108,7 @@ class GoAgentGTK:
             self.trayicon.set_from_file(logo_filename)
             self.trayicon.connect('popup-menu', lambda i, b, t: self.make_menu().popup(None, None, gtk.status_icon_position_menu, b, t, self.trayicon))
             self.trayicon.connect('activate', self.show_hide_toggle)
-            self.trayicon.set_tooltip('FGFW-Lite')
+            self.trayicon.set_tooltip('fgfwlite-gtk')
             self.trayicon.set_visible(True)
 
     def make_menu(self):

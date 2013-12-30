@@ -78,7 +78,7 @@ Func setTray()
 	TraySetOnEvent($TRAY_EVENT_PRIMARYDOUBLE, "showHideConsole")
 	TraySetOnEvent($TRAY_EVENT_PRIMARYUP, "showHideConsole")
 	TraySetState()
-	TraySetToolTip("FGFW_Lite")
+	TraySetToolTip("FGFW_Lite An uncensored Internet is a better Internet.")
 	TraySetClick(16)
 
 EndFunc   ;==>setTray
