@@ -330,11 +330,10 @@ class ProxyHandler(tornado.web.RequestHandler):
                         data = yield gen.Task(self.upstream.read_bytes, 2)
 
                     assert data[1] == b'\x00'  # no auth needed or auth passed
-                    req = b''.join([b"\x05\x01\x00\x03",
-                                    chr(len(self.request.host.rsplit(':', 1)[0])).encode(),
-                                    self.request.host.rsplit(':', 1)[0].encode(),
-                                    struct.pack(b">H", self.requestport)])
-                    self.upstream.write(req)
+                    self.upstream.write(b''.join([b"\x05\x01\x00\x03",
+                                        chr(len(self.request.host.rsplit(':', 1)[0])).encode(),
+                                        self.request.host.rsplit(':', 1)[0].encode(),
+                                        struct.pack(b">H", self.requestport)]))
                     data = yield gen.Task(self.upstream.read_bytes, 4)
                     assert data[1] == b'\x00'
                     if data[3] == b'\x01':  # read ipv4 addr
@@ -390,7 +389,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         def _sent_request():
             logging.debug('remote server connected, sending http request')
-            if self.pptype == 'http' or self.pptype == 'https':
+            if self.pptype in ('http', 'https'):
                 s = u'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
                 if self.ppusername and 'Proxy-Authorization' not in self.request.headers:
                     a = '%s:%s' % (self.ppusername, self.pppassword)
@@ -521,7 +520,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.upstream.set_close_callback(None)
                 UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
                 logging.debug('pooling remote connection')
-        if (self._success and self._proxy_retry > 0 and self.ppname != 'direct') or (not self._success and self.request.method == 'CONNECT' and self.ppname == 'direct'):
+        if (self._success and self._proxy_retry and self.ppname != 'direct') or\
+                (not self._success and self.request.method == 'CONNECT' and self.ppname == 'none'):
             logging.info('add autoproxy rule: ||%s' % self.request.host.split(':')[0])
             o = autoproxy_rule('||%s' % self.request.host.split(':')[0])
             o.expire = time.time() + 60 * 2
@@ -538,6 +538,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @gen.coroutine
     def on_upstream_close(self):
+        # possible GFW reset
         logging.debug('on_upstream_close upstream closed? %s' % self.upstream.closed())
         self.remove_timeout()
         if not self.upstream.closed():
@@ -647,7 +648,6 @@ class autoproxy_rule(object):
             return parse(rule)
 
     def match(self, uri):
-        # url must be something like https://www.google.com
         if self._ptrn.search(uri):
             logging.debug('Autoproxy Rule match {}'.format(self.rule))
             return True
@@ -699,8 +699,8 @@ class parent_proxy(object):
             if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
                 try:
                     o = autoproxy_rule(line.split()[0])
-                except TypeError:
-                    pass
+                except TypeError as e:
+                    logging.debug('create autoproxy rule failed: %s' % e)
                 else:
                     REDIRECTOR.lst.append((o, line.split()[1]))
             else:
