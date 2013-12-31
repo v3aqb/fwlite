@@ -107,8 +107,8 @@ class Application(tornado.web.Application):
         else:
             log_method = logging.error
         request_time = 1000.0 * handler.request.request_time()
-        log_method("%d %s %.2fms", handler.get_status(),
-                   handler._request_summary(), request_time)
+        if handler.get_status() not in (200, 304) or request_time > 500:
+            log_method("%d %s %.2fms", handler.get_status(), handler._request_summary(), request_time)
 
 
 class HTTPProxyConnection(HTTPConnection):
