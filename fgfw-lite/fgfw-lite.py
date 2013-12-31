@@ -68,25 +68,29 @@ else:
             PYTHON2 = cmd
             break
 
-if not os.path.isfile('./userconf.ini'):
-    with open('./userconf.ini', 'w') as f:
-        f.write(open('./userconf.sample.ini').read())
-
-if not os.path.isfile('./fgfw-lite/local.txt'):
-    with open('./fgfw-lite/local.txt', 'w') as f:
-        f.write('! local gfwlist config\n! rules: https://adblockplus.org/zh_CN/filters\n')
-
-for item in ['./userconf.ini', './fgfw-lite/local.txt']:
-    with open(item) as f:
-        data = open(item).read()
-    with open(item, 'w') as f:
-        f.write(data)
-
 UPSTREAM_POOL = {}
 ctimer = []
 rtimer = []
 CTIMEOUT = 5
 RTIMEOUT = 5
+
+
+def prestart():
+    print('FGFW_Lite %s' % __version__)
+
+    if not os.path.isfile('./userconf.ini'):
+        with open('./userconf.ini', 'w') as f:
+            f.write(open('./userconf.sample.ini').read())
+
+    if not os.path.isfile('./fgfw-lite/local.txt'):
+        with open('./fgfw-lite/local.txt', 'w') as f:
+            f.write('! local gfwlist config\n! rules: https://adblockplus.org/zh_CN/filters\n')
+
+    for item in ['./userconf.ini', './fgfw-lite/local.txt']:
+        with open(item) as f:
+            data = open(item).read()
+        with open(item, 'w') as f:
+            f.write(data)
 
 
 class Application(tornado.web.Application):
@@ -1002,8 +1006,6 @@ class goagentHandler(FGFWProxyHandler):
         ripped from goagent 2.1.14
         '''
         import OpenSSL
-        ca_vendor = 'FGFW_Lite'
-        keyfile = './goagent/CA.crt'
         key = OpenSSL.crypto.PKey()
         key.generate_key(OpenSSL.crypto.TYPE_RSA, 2048)
         ca = OpenSSL.crypto.X509()
@@ -1013,9 +1015,9 @@ class goagentHandler(FGFWProxyHandler):
         subj.countryName = 'CN'
         subj.stateOrProvinceName = 'Internet'
         subj.localityName = 'Cernet'
-        subj.organizationName = ca_vendor
-        subj.organizationalUnitName = '%s Root' % ca_vendor
-        subj.commonName = '%s Root CA' % ca_vendor
+        subj.organizationName = 'GoAgent'
+        subj.organizationalUnitName = 'GoAgent Root'
+        subj.commonName = 'GoAgent Root CA'
         ca.gmtime_adj_notBefore(0)
         ca.gmtime_adj_notAfter(24 * 60 * 60 * 3652)
         ca.set_issuer(ca.get_subject())
@@ -1025,7 +1027,7 @@ class goagentHandler(FGFWProxyHandler):
             OpenSSL.crypto.X509Extension(b'keyUsage', False, b'keyCertSign, cRLSign'),
             OpenSSL.crypto.X509Extension(b'subjectKeyIdentifier', False, b'hash', subject=ca), ])
         ca.sign(key, 'sha1')
-        with open(keyfile, 'wb') as fp:
+        with open('./goagent/CA.crt', 'wb') as fp:
             fp.write(OpenSSL.crypto.dump_certificate(OpenSSL.crypto.FILETYPE_PEM, ca))
             fp.write(OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, key))
         import shutil
@@ -1358,6 +1360,7 @@ def atexit_do():
 
 
 def main():
+    prestart()
     fgfwproxy()
     goagentHandler()
     snovaHandler()
