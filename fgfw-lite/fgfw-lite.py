@@ -64,7 +64,7 @@ if sys.platform.startswith('win'):
     PYTHON2 = '%s/Python27/python27.exe' % WORKINGDIR
 else:
     for cmd in ('python2.7', 'python27', 'python2'):
-        if subprocess.call(shlex.split('which %s' % cmd)) == 0:
+        if subprocess.call(shlex.split('which %s' % cmd), stdout=subprocess.PIPE) == 0:
             PYTHON2 = cmd
             break
 
@@ -897,6 +897,7 @@ class FGFWProxyHandler(object):
     def start(self):
         while 1:
             if self.enable:
+                logging.info('starting %s' % self.cmd)
                 self.subpobj = subprocess.Popen(shlex.split(self.cmd), cwd=self.cwd, stdin=subprocess.PIPE)
                 self.subpobj.wait()
             time.sleep(3)
@@ -1143,7 +1144,7 @@ class shadowsocksHandler(FGFWProxyHandler):
             for cmd in ('ss-local', 'sslocal'):
                 if 'XP' in platform.platform():
                     continue
-                if subprocess.call(shlex.split('where %s' % cmd)) == 0:
+                if subprocess.call(shlex.split('where %s' % cmd), stdout=subprocess.PIPE) == 0:
                     self.cmd = cmd
                     break
             else:
@@ -1152,7 +1153,7 @@ class shadowsocksHandler(FGFWProxyHandler):
                        './shadowsocks/shadowsocks.exe']
         elif sys.platform.startswith('linux'):
             for cmd in ('ss-local', 'sslocal'):
-                if subprocess.call(shlex.split('which %s' % cmd)) == 0:
+                if subprocess.call(shlex.split('which %s' % cmd), stdout=subprocess.PIPE) == 0:
                     self.cmd = cmd
                     break
             else:
