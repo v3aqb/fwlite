@@ -805,7 +805,7 @@ class parent_proxy(object):
         '''
             decide which parentproxy to use.
             url:  'https://www.google.com'
-            domain: 'www.google.com'
+            host: 'www.google.com'
         '''
         # return ('direct', conf.parentdict.get('direct'))
 
