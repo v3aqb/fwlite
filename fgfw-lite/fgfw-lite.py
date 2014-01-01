@@ -307,7 +307,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.upstream.set_close_callback(self.on_upstream_close)
             if self.pptype is None:
                 t = time.time()
-                yield gen.Task(self.upstream.connect, (self.request.host.rsplit(':', 1)[0], self.requestport))
+                yield gen.Task(self.upstream.connect, (conf.hosts.get(self.request.host.rsplit(':', 1)[0]) or self.request.host.rsplit(':', 1)[0], self.requestport))
                 ctimer.append(time.time() - t)
             elif self.pptype == 'http':
                 yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
@@ -1329,6 +1329,11 @@ class Config(object):
         self.UPDATE_INTV = 6
         self.BACKUP_INTV = 24
         self.parentdict = {}
+        self.hosts = {}
+        if 'hosts' not in self.userconf.sections():
+            self.userconf.add_section('hosts')
+        for host, ip in self.userconf.items('hosts'):
+            self.hosts[host] = ip
 
     def reload(self):
         self.version.read('version.ini')
