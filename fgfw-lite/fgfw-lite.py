@@ -39,6 +39,7 @@ import socket
 import struct
 import urllib2
 import urlparse
+from repoze.lru import lru_cache
 import tornado.ioloop
 import tornado.iostream
 import tornado.web
@@ -691,7 +692,6 @@ class parent_proxy(object):
         self.gfwlist = []
         self.override = []
         self.gfwlist_force = []
-        self.hostinchina = {}
         REDIRECTOR.lst = []
 
         def add_rule(line, force=False):
@@ -754,21 +754,19 @@ class parent_proxy(object):
         self.chinanet.sort(key=lambda r: r[0])
         self.iplist = [r[0] for r in self.chinanet]
 
+    @lru_cache(128)
+    def ifhost_in_china(self, host):
+        try:
+            i = ip_from_string(socket.gethostbyname(host))
+            a = self.chinanet[bisect.bisect_right(self.iplist, i) - 1]
+            if a[0] <= i < a[0] + a[1]:
+                logging.info('%s in china' % host)
+                return True
+            return False
+        except Exception:
+            return None
+
     def ifgfwed(self, uri, host, level=1):
-        def ifhost_in_china():
-            if host in self.hostinchina:
-                return self.hostinchina.get(host)
-            try:
-                i = ip_from_string(socket.gethostbyname(host))
-                a = self.chinanet[bisect.bisect_right(self.iplist, i) - 1]
-                if a[0] <= i < a[0] + a[1]:
-                    logging.info('%s in china' % host)
-                    self.hostinchina[host] = True
-                    return True
-                self.hostinchina[host] = False
-                return False
-            except Exception:
-                return None
 
         def if_gfwlist_force():
             for rule in self.gfwlist_force:
@@ -793,7 +791,7 @@ class parent_proxy(object):
         if any(rule.match(uri) for rule in self.override):
             return False
 
-        if not a and ifhost_in_china():
+        if not a and self.ifhost_in_china(host):
             return None
 
         if a or forceproxy or any(rule.match(uri) for rule in self.gfwlist):

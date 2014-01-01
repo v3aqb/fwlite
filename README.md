@@ -5,7 +5,7 @@ fgfw-lite is a HTTP proxy server help to get around the Great Firewall. It decte
 
 requirements under openSUSE:
 
-    zypper install python-tornado
+    zypper install python-tornado python-repoze.lru
 
 to work with shadowsocks, require either of the following:
 
