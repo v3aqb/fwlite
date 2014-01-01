@@ -552,7 +552,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         if not self._finished:
             if not self._headers_written:
                 if self._proxy_retry < 4 and self.ppname != 'direct':
-                    logging.warning('%s %s Failed, retry...' % (self.request.method, self.request.uri))
+                    logging.warning('%s %s Failed, retry...' % (self.request.method, self.uris))
                     self.clear()
                     self.getparent(level=3)
                     self._proxy_retry += 1
@@ -562,11 +562,11 @@ class ProxyHandler(tornado.web.RequestHandler):
                     else:
                         self.get()
                 else:
-                    logging.warning('%s %s FAILED!' % (self.request.method, self.request.uri))
+                    logging.warning('%s %s FAILED!' % (self.request.method, self.uris))
                     self.send_error(504)
             else:
                 if self.request.method != 'CONNECT':
-                    logging.warning('%s %s FAILED!' % (self.request.method, self.request.uri))
+                    logging.warning('%s %s FAILED!' % (self.request.method, self.uris))
 
     @tornado.web.asynchronous
     def connect(self):
