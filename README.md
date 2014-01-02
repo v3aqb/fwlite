@@ -1,7 +1,7 @@
-fgfw-lite
+FGFW-Lite
 ============
 
-fgfw-lite is a HTTP proxy server help to get around the Great Firewall. It dectets websites blocked by GFW automatically, and forward the request to a uncensored proxy server.
+Starting from a Autoit script, FGFW-Lite is now a cross-platform, highly configureable HTTP proxy server help to get around the Great Firewall. It dectets websites blocked by GFW automatically, and forward the request to a uncensored proxy server.
 
 requirements under openSUSE:
 
