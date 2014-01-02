@@ -53,7 +53,9 @@ except ImportError:
 configparser.RawConfigParser.OPTCRE = re.compile(r'(?P<option>[^=\s][^=]*)\s*(?P<vi>[=])\s*(?P<value>.*)$')
 
 import logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO,
+                    format='FGFW-Lite %(asctime)s %(levelname)s %(message)s',
+                    datefmt='%H:%M:%S', filemode='a+')
 
 WORKINGDIR = '/'.join(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')).split('/')[:-1])
 if ' ' in WORKINGDIR:
