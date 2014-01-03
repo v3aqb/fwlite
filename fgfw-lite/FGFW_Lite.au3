@@ -67,8 +67,6 @@ Func setTray()
 	TrayItemSetOnEvent(-1, "editUserconf")
 	TrayCreateItem("local.txt", $trayMenuLConf)
 	TrayItemSetOnEvent(-1, "editLocal")
-	TrayCreateItem("redirector.txt", $trayMenuLConf)
-	TrayItemSetOnEvent(-1, "editRedirector")
 
 	TrayCreateItem("")
 
@@ -110,10 +108,6 @@ EndFunc   ;==>viewLog
 
 Func editLocal()
 	ShellExecute(@ScriptDir & "\fgfw-lite\local.txt")
-EndFunc   ;==>viewLog
-
-Func editRedirector()
-	ShellExecute(@ScriptDir & "\fgfw-lite\redirector.txt")
 EndFunc   ;==>viewLog
 
 Func flushDNS()
