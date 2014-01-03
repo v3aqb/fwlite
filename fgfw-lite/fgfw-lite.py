@@ -103,15 +103,17 @@ class Application(tornado.web.Application):
             return
         if handler.request.method == 'CONNECT':
             return
+        request_time = 1000.0 * handler.request.request_time()
         if handler.get_status() < 400:
             log_method = logging.info
+            if request_time < 500:
+                log_method = logging.debug
+
         elif handler.get_status() < 500:
             log_method = logging.warning
         else:
             log_method = logging.error
-        request_time = 1000.0 * handler.request.request_time()
-        if handler.get_status() not in (200, 304) or request_time > 500:
-            log_method("%d %s %.2fms", handler.get_status(), handler._request_summary(), request_time)
+        log_method("%d %s %.2fms", handler.get_status(), handler._request_summary(), request_time)
 
 
 class HTTPProxyConnection(HTTPConnection):
@@ -605,7 +607,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             upstream.read_until_close(client.close, client_write)
 
     def _request_summary(self):
-        return self.request.method + " " + self.uris + " (" + self.request.remote_ip + ")"
+        return '%s %s (%s)' % (self.request.method, self.uris, self.request.remote_ip)
 
 
 class ForceProxyHandler(ProxyHandler):
