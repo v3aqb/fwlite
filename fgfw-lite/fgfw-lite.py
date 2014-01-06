@@ -456,8 +456,8 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 content_length = None
 
-            if self.request.method == "HEAD" or self._status_code == 304 or \
-                    100 <= self._status_code < 200 or self._status_code == 204:
+            if self.request.method == "HEAD" or 100 <= self.get_status() < 200 or\
+                    self.get_status() in (204, 304):
                 _finish()
             elif self._headers.get("Transfer-Encoding") == "chunked":
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
