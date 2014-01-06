@@ -543,7 +543,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @gen.coroutine
     def on_upstream_close(self):
-        # possible GFW reset
+        # possible GFW reset or timeout
         logging.debug('on_upstream_close upstream closed? %s' % self.upstream.closed())
         self.remove_timeout()
         if not self.upstream.closed():
