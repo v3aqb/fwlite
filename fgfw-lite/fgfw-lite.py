@@ -256,6 +256,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         self._proxy_retry = 0
         self._timeout = None
         self._success = False
+        self._1stmsg = []
         # transparent proxy
         if self.request.method != 'CONNECT' and self.request.uri.startswith('/') and self.request.host != "127.0.0.1":
             self.request.uri = 'http://%s%s' % (self.request.host, self.request.uri)
@@ -555,7 +556,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         logging.debug('request finished? %s' % self._finished)
         logging.debug('headers_written? %s' % self._headers_written)
         if not self._finished:
-            if not self._headers_written:
+            if not self._headers_written or (self.request.method == 'CONNECT' and not self._success):
                 if self._proxy_retry < 4 and self.ppname != 'direct':
                     logging.warning('%s %s Failed, retry...' % (self.request.method, self.uris))
                     self.clear()
@@ -576,16 +577,26 @@ class ProxyHandler(tornado.web.RequestHandler):
     @tornado.web.asynchronous
     def connect(self):
         def upstream_write(data):
+            if not self._success:
+                self._1stmsg.append(data)
             if not upstream.closed():
                 upstream.write(data)
 
         def client_write(data):
-            self._headers_written = True
-            if len(data) > 128:
-                self._success = True
-                self.remove_timeout()
+            self._success = True
+            self.remove_timeout()
             if not client.closed():
                 client.write(data)
+
+        def forward(data=None):
+            if not self._headers_written:
+                client.write(b'HTTP/1.1 200 Connection established\r\n\r\n')
+                self._headers_written = True
+            if self._1stmsg:
+                upstream.write(b''.join(self._1stmsg))
+            client.read_until_close(upstream.close, upstream_write)
+            upstream.read_until_close(client.close, client_write)
+
         logging.debug('CONNECT')
         client = self.request.connection.stream
         upstream = self.upstream
@@ -598,13 +609,10 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             s.append(b'\r\n'.join(['%s: %s' % (key, value) for key, value in self.request.headers.items()]).encode('utf8'))
             s.append(b'\r\n\r\n')
-            upstream_write(b''.join(s).encode())
-            client.read_until_close(upstream.close, upstream_write)
-            upstream.read_until_close(client.close, client_write)
+            upstream.write(b''.join(s).encode())
+            upstream.read_until(b'\r\n\r\n', forward)
         else:
-            client_write(b'HTTP/1.1 200 Connection established\r\n\r\n')
-            client.read_until_close(upstream.close, upstream_write)
-            upstream.read_until_close(client.close, client_write)
+            forward()
 
     def _request_summary(self):
         return '%s %s (%s)' % (self.request.method, self.uris, self.request.remote_ip)
