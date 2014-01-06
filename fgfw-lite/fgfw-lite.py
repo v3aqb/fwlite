@@ -525,7 +525,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.upstream.set_close_callback(None)
                 UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
                 logging.debug('pooling remote connection')
-        if (self._success and self._proxy_retry and self.ppname != 'direct') or\
+        if (self._success and self.get_status() < 400 and self._proxy_retry and self.ppname not in ('direct', 'none')) or\
                 (not self._success and self.request.method == 'CONNECT' and self.ppname == 'none'):
             logging.info('add autoproxy rule: ||%s' % self.request.host.split(':')[0])
             o = autoproxy_rule('||%s' % self.request.host.split(':')[0])
