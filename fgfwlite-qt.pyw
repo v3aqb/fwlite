@@ -17,7 +17,7 @@ PYTHON = '%s/Python27/python27.exe' % WORKINGDIR if sys.platform.startswith('win
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(480, 480)
+        MainWindow.resize(600, 480)
         self.centralwidget = QtGui.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
         self.verticalLayout = QtGui.QVBoxLayout(self.centralwidget)
@@ -77,6 +77,7 @@ class MainWindow(QtGui.QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.ui.pushButton.clicked.connect(self.send)
+        self.ui.lineEdit.returnPressed.connect(self.send)
         if os.name == 'nt':
             self.ui.textEdit.setStyleSheet("font: 9pt \"Consolas\";")
         else:
