@@ -11,4 +11,5 @@
 |http://*.wikipedia.org forcehttps
 |http://www.youtube.com/watch? forcehttps
 ||feedly.com
+||googleapis.com
 @@||weibo.com
