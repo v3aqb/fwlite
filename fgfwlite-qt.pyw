@@ -77,6 +77,10 @@ class MainWindow(QtGui.QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.ui.pushButton.clicked.connect(self.send)
+        if os.name == 'nt':
+            self.ui.textEdit.setStyleSheet("font: 9pt \"Consolas\";")
+        else:
+            self.ui.textEdit.setStyleSheet("font: 9pt \"Droid Sans Mono\";")
         self.setWindowIcon(QtGui.QIcon(TRAY_ICON))
         self.center()
         self.createActions()
@@ -135,7 +139,7 @@ class MainWindow(QtGui.QMainWindow):
     def update_text(self, text):
         if text:
             if len(self.ui.textEdit.toPlainText().splitlines()) > 300:
-                self.ui.textEdit.clear()
+                self.ui.textEdit.setPlainText(u''.join(self.ui.textEdit.toPlainText().splitlines()[-100:]))
             self.ui.textEdit.moveCursor(QtGui.QTextCursor.End)
             self.ui.textEdit.append(text)
 
@@ -144,10 +148,12 @@ class MainWindow(QtGui.QMainWindow):
             self.hide()
         else:
             self.show()
+            self.activateWindow()
 
     def reload(self):
         self.thread.wtrigger.emit('sys.exit()\n')
         self.thread.wait()
+        self.ui.textEdit.clear()
         self.createProcess()
 
 if __name__ == "__main__":
