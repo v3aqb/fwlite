@@ -10,7 +10,7 @@ requirements under openSUSE:
 to work with shadowsocks, require either of the following:
 
 1. [python2.7](http://www.python.org/getit/) and [M2Crypto](http://chandlerproject.org/Projects/MeTooCrypto#Downloads) is installed.
-2. [shadowsocks-nodejs](https://github.com/clowwindy/shadowsocks-nodejs) or [shadowsocks-libev](https://github.com/madeye/shadowsocks-libev) is installed.(won't work on Windows XP)
+2. [shadowsocks-nodejs](https://github.com/clowwindy/shadowsocks-nodejs) or [shadowsocks-libev](https://github.com/madeye/shadowsocks-libev) is installed.(Windows Vista+ or Linux)
 3. compiled shadowsocks client binary in ./shadowsocks folder.
 
 goagent https://code.google.com/p/goagent/
