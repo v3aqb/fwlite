@@ -421,7 +421,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         def read_headers(data=None):
             logging.debug('reading response header')
             self.__t = time.time()
-            if self.ppname != 'direct':
+            if self.ppname not in ('direct', 'GoAgent'):
                 self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + RTIMEOUT, stack_context.wrap(self.on_upstream_close))
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
