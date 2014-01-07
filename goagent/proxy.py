@@ -35,7 +35,7 @@
 #      cuixin            <steven.cuixin@gmail.com>
 #      s2marine0         <s2marine0@gmail.com>
 
-__version__ = '3.1.2'
+__version__ = '3.1.4'
 
 import sys
 import os
@@ -1344,7 +1344,8 @@ class HTTPUtil(object):
         else:
             host, _, port = netloc.rpartition(':')
             port = int(port)
-        path += '?' + query
+        if query:
+            path += '?' + query
 
         if 'Host' not in headers:
             headers['Host'] = host
