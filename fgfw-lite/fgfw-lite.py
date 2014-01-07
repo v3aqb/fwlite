@@ -266,9 +266,13 @@ class ProxyHandler(tornado.web.RequestHandler):
         # redirector
         new_url = REDIRECTOR.get(self.request.uri)
         if new_url:
-            logging.info('redirecting to %s' % new_url)
+            logging.info('redirecting %s to %s' % (self.uris, new_url))
             if new_url.startswith('403'):
                 self.send_error(status_code=403)
+            if new_url.startswith('adblock'):
+                self.set_header('Content-type', 'image/gif')
+                self._write_buffer.append(b'GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x01D\x00;')
+                self.finish()
             else:
                 self.redirect(new_url)
             return
