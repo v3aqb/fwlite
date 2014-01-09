@@ -140,7 +140,7 @@ class MainWindow(QtGui.QMainWindow):
     def update_text(self, text):
         if text:
             if len(self.ui.textEdit.toPlainText().splitlines()) > 300:
-                self.ui.textEdit.setPlainText(u''.join(self.ui.textEdit.toPlainText().splitlines()[-100:]))
+                self.ui.textEdit.setPlainText(u'\n'.join(self.ui.textEdit.toPlainText().splitlines()[-100:]))
             self.ui.textEdit.moveCursor(QtGui.QTextCursor.End)
             self.ui.textEdit.append(text)
 
