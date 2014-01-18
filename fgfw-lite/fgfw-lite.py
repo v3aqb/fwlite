@@ -294,9 +294,64 @@ class ProxyHandler(tornado.web.RequestHandler):
         yield self.get_remote_conn()
 
     @gen.coroutine
+    def connect_remote_with_proxy(self):
+        logging.debug('connecting to server')
+        if self.ppname == 'none':
+            self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + CTIMEOUT, stack_context.wrap(self.on_upstream_close))
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+        self.upstream = tornado.iostream.IOStream(s)
+        self.upstream.set_close_callback(self.on_upstream_close)
+        if self.pptype is None:
+            t = time.time()
+            yield gen.Task(self.upstream.connect, (conf.hosts.get(self.request.host.rsplit(':', 1)[0]) or self.request.host.rsplit(':', 1)[0], self.requestport))
+            ctimer.append(time.time() - t)
+        elif self.pptype == 'http':
+            yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
+        elif self.pptype == 'https':
+            self.upstream = tornado.iostream.SSLIOStream(s)
+            self.upstream.set_close_callback(self.on_upstream_close)
+            yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
+        elif self.pptype == 'socks5':
+            logging.debug('connecting to socks5 server')
+            yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
+            try:
+                self.upstream.set_nodelay(True)
+                self.upstream.write(b"\x05\x02\x00\x02" if self.ppusername else b"\x05\x01\x00")
+                data = yield gen.Task(self.upstream.read_bytes, 2)
+                if data == b'\x05\x02':  # basic auth
+                    self.upstream.write(b''.join([b"\x01",
+                                                 chr(len(self.ppusername)).encode(),
+                                                 self.ppusername.encode(),
+                                                 chr(len(self.pppassword)).encode(),
+                                                 self.pppassword.encode()]))
+                    data = yield gen.Task(self.upstream.read_bytes, 2)
+
+                assert data[1] == b'\x00'  # no auth needed or auth passed
+                self.upstream.write(b''.join([b"\x05\x01\x00\x03",
+                                    chr(len(self.request.host.rsplit(':', 1)[0])).encode(),
+                                    self.request.host.rsplit(':', 1)[0].encode(),
+                                    struct.pack(b">H", self.requestport)]))
+                data = yield gen.Task(self.upstream.read_bytes, 4)
+                assert data[1] == b'\x00'
+                if data[3] == b'\x01':  # read ipv4 addr
+                    yield gen.Task(self.upstream.read_bytes, 4)
+                elif data[3] == b'\x03':  # read host addr
+                    data = yield gen.Task(self.upstream.read_bytes, 1)
+                    yield gen.Task(self.upstream.read_bytes, ord(data))
+                elif data[3] == b'\x04':  # read ipv6 addr
+                    yield gen.Task(self.upstream.read_bytes, 16)
+                yield gen.Task(self.upstream.read_bytes, 2)  # read port
+                self.upstream.set_nodelay(False)
+            except Exception:
+                self.send_error(504, 'connect to socks5 proxy server failed')
+        else:
+            self.send_error(501)
+        logging.debug('remote server connected')
+        self.remove_timeout()
+
+    @gen.coroutine
     def get_remote_conn(self):
-        if hasattr(self, 'upstream'):
-            del self.upstream
+        self.upstream = None
         if self.request.method != 'CONNECT':
             lst = UPSTREAM_POOL.get(self.upstream_name, [])
             for item in lst:
@@ -306,60 +361,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.upstream = item
                     self.upstream.set_close_callback(self.on_upstream_close)
                     break
-        if not hasattr(self, 'upstream'):
-            logging.debug('connecting to server')
-            if self.ppname == 'none':
-                self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + CTIMEOUT, stack_context.wrap(self.on_upstream_close))
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-            self.upstream = tornado.iostream.IOStream(s)
-            self.upstream.set_close_callback(self.on_upstream_close)
-            if self.pptype is None:
-                t = time.time()
-                yield gen.Task(self.upstream.connect, (conf.hosts.get(self.request.host.rsplit(':', 1)[0]) or self.request.host.rsplit(':', 1)[0], self.requestport))
-                ctimer.append(time.time() - t)
-            elif self.pptype == 'http':
-                yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
-            elif self.pptype == 'https':
-                self.upstream = tornado.iostream.SSLIOStream(s)
-                self.upstream.set_close_callback(self.on_upstream_close)
-                yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
-            elif self.pptype == 'socks5':
-                logging.debug('connecting to socks5 server')
-                yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
-                try:
-                    self.upstream.set_nodelay(True)
-                    self.upstream.write(b"\x05\x02\x00\x02" if self.ppusername else b"\x05\x01\x00")
-                    data = yield gen.Task(self.upstream.read_bytes, 2)
-                    if data == b'\x05\x02':  # basic auth
-                        self.upstream.write(b''.join([b"\x01",
-                                                     chr(len(self.ppusername)).encode(),
-                                                     self.ppusername.encode(),
-                                                     chr(len(self.pppassword)).encode(),
-                                                     self.pppassword.encode()]))
-                        data = yield gen.Task(self.upstream.read_bytes, 2)
-
-                    assert data[1] == b'\x00'  # no auth needed or auth passed
-                    self.upstream.write(b''.join([b"\x05\x01\x00\x03",
-                                        chr(len(self.request.host.rsplit(':', 1)[0])).encode(),
-                                        self.request.host.rsplit(':', 1)[0].encode(),
-                                        struct.pack(b">H", self.requestport)]))
-                    data = yield gen.Task(self.upstream.read_bytes, 4)
-                    assert data[1] == b'\x00'
-                    if data[3] == b'\x01':  # read ipv4 addr
-                        yield gen.Task(self.upstream.read_bytes, 4)
-                    elif data[3] == b'\x03':  # read host addr
-                        data = yield gen.Task(self.upstream.read_bytes, 1)
-                        yield gen.Task(self.upstream.read_bytes, ord(data))
-                    elif data[3] == b'\x04':  # read ipv6 addr
-                        yield gen.Task(self.upstream.read_bytes, 16)
-                    yield gen.Task(self.upstream.read_bytes, 2)  # read port
-                    self.upstream.set_nodelay(False)
-                except Exception:
-                    self.send_error(504, 'connect to socks5 proxy server failed')
-            else:
-                self.send_error(501)
-            logging.debug('remote server connected')
-            self.remove_timeout()
+        if self.upstream is None:
+            yield self.connect_remote_with_proxy()
 
     @tornado.web.asynchronous
     def get(self):
@@ -590,9 +593,12 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.remove_timeout()
             if not client.closed():
                 client.write(data)
+
         logging.debug('CONNECT')
+
         client = self.request.connection.stream
         upstream = self.upstream
+
         if self.ppname != 'direct':  # detect bad shadowsocks server
             self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + RTIMEOUT, stack_context.wrap(self.on_upstream_close))
         if self.pptype and 'http' in self.pptype:
