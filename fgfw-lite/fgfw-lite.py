@@ -234,8 +234,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         p = urlparse.urlparse(pp)
         self.pptype, self.pphost, self.ppport, self.ppusername, self.pppassword = (p.scheme or None, p.hostname or p.path or None, p.port, p.username, p.password)
         if self.pphost:
-            if self.pptype is None:
-                self.pptype = 'http'
+            self.pptype = self.pptype or 'http'
             r = re.match(r'^(.*)\:(\d+)$', self.pphost)
             if r:
                 self.pphost, self.ppport = r.group(1), int(r.group(2))
