@@ -1264,9 +1264,14 @@ class fgfwproxy(FGFWProxyHandler):
 
     def start(self):
         if self.enable:
-            self.run_proxy(8118)
+            if self.listen.isdigit():
+                port = self.listen
+                addr = ''
+            else:
+                addr, port = self.listen.rsplit(':', 1)
+            self.run_proxy(int(port), address=addr)
 
-    def run_proxy(self, port, start_ioloop=True):
+    def run_proxy(self, port=8118, address='', start_ioloop=True):
         """
         Run proxy on the specified port. If start_ioloop is True (default),
         the tornado IOLoop will be started immediately.
@@ -1274,10 +1279,10 @@ class fgfwproxy(FGFWProxyHandler):
         logging.info("Starting HTTP proxy on port {} and {}".format(port, str(int(port) + 1)))
         app = Application([(r'.*', ProxyHandler), ], transforms=[])
         http_server = HTTPProxyServer(app)
-        http_server.listen(8118)
+        http_server.listen(port, address=address)
         app2 = Application([(r'.*', ForceProxyHandler), ], transforms=[])
         http_server2 = HTTPProxyServer(app2)
-        http_server2.listen(8119)
+        http_server2.listen(port + 1, address=address)
         ioloop = tornado.ioloop.IOLoop.instance()
         if start_ioloop:
             ioloop.start()
