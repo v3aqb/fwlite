@@ -34,7 +34,6 @@ import atexit
 import platform
 import base64
 import bisect
-import hashlib
 import socket
 import struct
 import urllib2
@@ -230,8 +229,10 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     def _getparent(self, level=1):
         default_port = {'http': 80, 'https': 443, 'socks5': 1080, }
-        self.ppname, pp = PARENT_PROXY.parentproxy(self.request.uri, self.request.host.rsplit(':', 1)[0], level)
-        p = urlparse.urlparse(pp)
+        if not self._proxylist:
+            self._proxylist = PARENT_PROXY.parentproxy(self.request.uri, self.request.host.rsplit(':', 1)[0], level)
+        self.ppname = self._proxylist.pop(0)
+        p = urlparse.urlparse(conf.parentdict.get(self.ppname))
         self.pptype, self.pphost, self.ppport, self.ppusername, self.pppassword = (p.scheme or None, p.hostname or p.path or None, p.port, p.username, p.password)
         if self.pphost:
             self.pptype = self.pptype or 'http'
@@ -255,6 +256,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         self._proxy_retry = 0
         self._timeout = None
         self._success = False
+        self._proxylist = []
         # transparent proxy
         if self.request.method != 'CONNECT' and self.request.uri.startswith('/') and self.request.host != "127.0.0.1":
             self.request.uri = 'http://%s%s' % (self.request.host, self.request.uri)
@@ -295,7 +297,7 @@ class ProxyHandler(tornado.web.RequestHandler):
     @gen.coroutine
     def connect_remote_with_proxy(self):
         logging.debug('connecting to server')
-        if self.ppname == 'none':
+        if self._proxylist:  # on connection timeout
             self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + CTIMEOUT, stack_context.wrap(self.on_upstream_close))
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         self.upstream = tornado.iostream.IOStream(s)
@@ -531,11 +533,11 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.upstream.set_close_callback(None)
                 UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
                 logging.debug('pooling remote connection')
-        if (self._success and self.get_status() < 400 and self._proxy_retry and self.ppname not in ('direct', 'none')) or\
-                (not self._success and self.request.method == 'CONNECT' and self.ppname == 'none'):
+        if all((self._success, self.get_status() < 400, self._proxy_retry)) or\
+                all((self.request.method == 'CONNECT', not self._success, self.ppname == 'direct', self._proxylist)):
             logging.info('add autoproxy rule: ||%s' % self.request.host.split(':')[0])
             o = autoproxy_rule('||%s' % self.request.host.split(':')[0])
-            o.expire = time.time() + 60 * 2
+            o.expire = time.time() + 60 * 2 if self.request.method != 'CONNECT' else time.time() + 60 * 10
             PARENT_PROXY.gfwlist_force.append(o)
 
     def on_connection_close(self):
@@ -562,11 +564,11 @@ class ProxyHandler(tornado.web.RequestHandler):
         logging.debug('headers_written? %s' % self._headers_written)
         if not self._finished:
             if not self._headers_written:
-                if self._proxy_retry < 4 and self.ppname != 'direct':
+                if self._proxylist:
                     logging.warning('%s %s Failed, retry...' % (self.request.method, self.uris))
                     self.clear()
-                    self.getparent(level=3)
                     self._proxy_retry += 1
+                    self.getparent()
                     yield self.get_remote_conn()
                     if self.request.method == 'CONNECT':
                         self.connect()
@@ -784,6 +786,8 @@ class parent_proxy(object):
     def ifgfwed(self, uri, host, level=1):
 
         def if_gfwlist_force():
+            if level == 3:
+                return True
             for rule in self.gfwlist_force:
                 if hasattr(rule, 'expire') and time.time() > rule.expire:
                     self.gfwlist_force.remove(rule)
@@ -798,10 +802,7 @@ class parent_proxy(object):
         else:
             forceproxy = False
 
-        if level == 3:
-            a = True
-        else:
-            a = if_gfwlist_force()
+        a = if_gfwlist_force()
 
         if any(rule.match(uri) for rule in self.override):
             return False
@@ -811,6 +812,8 @@ class parent_proxy(object):
 
         if a or forceproxy or any(rule.match(uri) for rule in self.gfwlist):
             return True
+
+        return None
 
     def parentproxy(self, uri, host, level=1):
         # 0 -- direct
@@ -825,26 +828,21 @@ class parent_proxy(object):
         # return ('direct', conf.parentdict.get('direct'))
 
         f = self.ifgfwed(uri, host, level)
-        parentlist = conf.parentdict.keys()
-        if 'cow' in parentlist:
-            parentlist.remove('cow')
-        parentlist.remove('direct')
+        parentlist = conf.parentlist[:]
 
         if f is False:
-            return ('direct', conf.parentdict.get('direct'))
+            return ['direct']
         if f is True:
+            if 'cow' in parentlist:
+                parentlist.remove('cow')
+            parentlist.remove('direct')
             if parentlist:
-                if len(parentlist) == 1:
-                    return (parentlist[0], conf.parentdict.get(parentlist[0]))
-                else:
-                    hosthash = hashlib.md5(host).hexdigest()
-                    ppname = parentlist[int(hosthash, 16) % len(parentlist)]
-                    return (ppname, conf.parentdict.get(ppname))
+                return parentlist
             else:
                 logging.warning('No parent proxy available, direct connection is used')
         if 'cow' in conf.parentdict.keys() and not uri.startswith('ftp://'):
-            return ('cow', conf.parentdict.get('cow'))
-        return ('none', conf.parentdict.get('direct'))
+            return ['cow']
+        return parentlist
 
 PARENT_PROXY = parent_proxy()
 PARENT_PROXY.config()
@@ -1349,6 +1347,7 @@ class Config(object):
         self.UPDATE_INTV = 6
         self.BACKUP_INTV = 24
         self.parentdict = {}
+        self.parentlist = []
         self.hosts = {}
         if 'hosts' not in self.userconf.sections():
             self.userconf.add_section('hosts')
@@ -1371,6 +1370,7 @@ class Config(object):
         }
         '''
         self.parentdict[name] = proxy
+        self.parentlist.append(name)
 
 conf = Config()
 conf.addparentproxy('direct', '')
