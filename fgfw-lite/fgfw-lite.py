@@ -671,10 +671,7 @@ class autoproxy_rule(object):
             return parse(rule)
 
     def match(self, uri):
-        if self._ptrn.search(uri):
-            logging.debug('Autoproxy Rule match {}'.format(self.rule))
-            return True
-        return False
+        return bool(self._ptrn.search(uri))
 
 
 class redirector(object):
@@ -688,9 +685,8 @@ class redirector(object):
             q = searchword.group(1)
             if 'xn--' in q:
                 q = q.decode('idna')
-            result = 'https://www.google.com/search?q=%s&ie=utf-8&oe=utf-8&aq=t&rls=org.mozilla:zh-CN:official' % urllib2.quote(q.encode('utf-8'))
             logging.debug('Match redirect rule addressbar-search')
-            return result
+            return 'https://www.google.com/search?q=%s&ie=utf-8&oe=utf-8&aq=t&rls=org.mozilla:zh-CN:official' % urllib2.quote(q.encode('utf-8'))
         for rule, result in self.lst:
             if rule.match(uri):
                 logging.debug('Match redirect rule {}, {}'.format(rule.rule, result))
@@ -722,11 +718,10 @@ class parent_proxy(object):
             line = line.strip()
             if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
                 try:
-                    o = autoproxy_rule(line.split()[0])
+                    rule, result = line.split()
+                    REDIRECTOR.lst.append((autoproxy_rule(rule), result))
                 except TypeError as e:
                     logging.debug('create autoproxy rule failed: %s' % e)
-                else:
-                    REDIRECTOR.lst.append((o, line.split()[1]))
             else:
                 try:
                     o = autoproxy_rule(line)
@@ -754,12 +749,7 @@ class parent_proxy(object):
                 for line in base64.b64decode(data).splitlines():
                     add_rule(line)
             except TypeError:
-                f.seek(0)
-                if f.readline().startswith('[AutoProxy'):
-                    for line in f:
-                        add_rule(line)
-                else:
-                    logging.warning('./fgfw-lite/gfwlist.txt is corrupted!')
+                logging.warning('./fgfw-lite/gfwlist.txt is corrupted!')
 
         self.chinanet = []
         self.chinanet.append((ip_from_string('192.168.0.0'), 2 ** (32 - 16)))
@@ -790,6 +780,7 @@ class parent_proxy(object):
         except Exception:
             return None
 
+    @lru_cache(256)
     def ifgfwed(self, uri, host, level=1):
 
         def if_gfwlist_force():
@@ -801,6 +792,7 @@ class parent_proxy(object):
                     logging.debug('%s expired' % rule.rule)
                 elif rule.match(uri):
                     return True
+            return False
 
         if level == 0:
             return False
@@ -823,16 +815,15 @@ class parent_proxy(object):
         return None
 
     def parentproxy(self, uri, host, level=1):
-        # 0 -- direct
-        # 1 -- proxy if force, direct if ip in china or override, proxy if gfwlist
-        # 2 -- proxy if force, direct if ip in china or override, proxy if all
-        # 3 -- proxy if not override
         '''
             decide which parentproxy to use.
             url:  'https://www.google.com'
             host: 'www.google.com'
+            level: 0 -- direct
+                   1 -- proxy if force, direct if ip in china or override, proxy if gfwlist
+                   2 -- proxy if force, direct if ip in china or override, proxy if all
+                   3 -- proxy if not override
         '''
-        # return ('direct', conf.parentdict.get('direct'))
 
         f = self.ifgfwed(uri, host, level)
         parentlist = conf.parentlist[:]
@@ -939,8 +930,7 @@ class FGFWProxyHandler(object):
 
     def _listfileupdate(self):
         if len(self.filelist) > 0:
-            for i in range(len(self.filelist)):
-                url, path = self.filelist[i]
+            for url, path in self.filelist:
                 etag = conf.version.dget('Update', path.replace('./', '').replace('/', '-'), '')
                 self.updateViaHTTP(url, etag, path)
 
@@ -1022,7 +1012,7 @@ class goagentHandler(FGFWProxyHandler):
 
     def createCA(self):
         '''
-        ripped from goagent 2.1.14
+        ripped from goagent 2.1.14 with modification
         '''
         import OpenSSL
         key = OpenSSL.crypto.PKey()
@@ -1036,7 +1026,7 @@ class goagentHandler(FGFWProxyHandler):
         subj.localityName = 'Cernet'
         subj.organizationName = 'GoAgent'
         subj.organizationalUnitName = 'GoAgent Root'
-        subj.commonName = 'GoAgent Root CA'
+        subj.commonName = 'GoAgent CA'
         ca.gmtime_adj_notBefore(0)
         ca.gmtime_adj_notAfter(24 * 60 * 60 * 3652)
         ca.set_issuer(ca.get_subject())
@@ -1060,7 +1050,7 @@ class goagentHandler(FGFWProxyHandler):
         '''
         certfile = os.path.abspath('./goagent/CA.crt')
         dirname, basename = os.path.split(certfile)
-        commonname = 'FGFW_Lite CA'
+        commonname = 'GoAgent CA'
         if sys.platform.startswith('win'):
             import ctypes
             with open(certfile, 'rb') as fp:
