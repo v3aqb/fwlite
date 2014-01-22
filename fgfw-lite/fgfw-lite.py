@@ -75,6 +75,7 @@ ctimer = []
 rtimer = []
 CTIMEOUT = 5
 RTIMEOUT = 5
+BLOCKEDSITES = set()
 
 
 def prestart():
@@ -537,8 +538,14 @@ class ProxyHandler(tornado.web.RequestHandler):
                 all((self.request.method == 'CONNECT', not self._success, self.ppname == 'direct', self._proxylist)):
             logging.info('add autoproxy rule: ||%s' % self.request.host.split(':')[0])
             o = autoproxy_rule('||%s' % self.request.host.split(':')[0])
-            o.expire = time.time() + 60 * 2 if self.request.method != 'CONNECT' else time.time() + 60 * 10
+            o.expire = time.time() + 60 * 2 if self.request.method != 'CONNECT' else time.time() + 60 * 15
+            if self.request.host in BLOCKEDSITES:
+                o.expire = time.time() + 60 * 60
+            else:
+                BLOCKEDSITES.add(self.request.host)
             PARENT_PROXY.gfwlist_force.append(o)
+        if self._success and self.ppname == 'direct':
+            BLOCKEDSITES.discard(self.request.host)
 
     def on_connection_close(self):
         logging.debug('client connection closed')
