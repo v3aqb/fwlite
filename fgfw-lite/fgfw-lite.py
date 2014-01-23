@@ -1179,7 +1179,14 @@ class shadowsocksHandler(FGFWProxyHandler):
             config['server_port'] = conf.userconf.dget('shadowsocks', 'server_port', '8388')
             config['password'] = conf.userconf.dget('shadowsocks', 'password', 'barfoo!').strip('"')
             config['method'] = conf.userconf.dget('shadowsocks', 'method', 'aes-256-cfb').strip('"')
-            config['local_port'] = 1080
+            listen = conf.userconf.dget('shadowsocks', 'listen', '1080')
+            if listen.isdigit():
+                config['local_port'] = int(listen)
+                config['local'] = '127.0.0.1'
+            else:
+                config['local'] = listen.rsplit(':', 1)[0]
+                config['local_port'] = int(listen.rsplit(':', 1)[1])
+
             portlst = []
             if not config['server_port'].isdigit():
                 for item in config['server_port'].split(','):
@@ -1261,7 +1268,7 @@ class fgfwproxy(FGFWProxyHandler):
         if self.enable:
             if self.listen.isdigit():
                 port = self.listen
-                addr = ''
+                addr = '127.0.0.1'
             else:
                 addr, port = self.listen.rsplit(':', 1)
             self.run_proxy(int(port), address=addr)
