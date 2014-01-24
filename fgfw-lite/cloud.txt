@@ -10,6 +10,13 @@
 |http://www.blogger.com forcehttps
 |http://*.wikipedia.org forcehttps
 |http://www.youtube.com/watch? forcehttps
-||feedly.com
+||google.com
+||google.com.hk
+||google-analytics.com
 ||googleapis.com
+||googlecode.com
+||googlevideo.com
+||googleusercontent.com
+||ggpht.com
+||feedly.com
 @@||weibo.com
