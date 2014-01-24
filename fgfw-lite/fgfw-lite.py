@@ -239,7 +239,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.pptype = self.pptype or 'http'
             r = re.match(r'^(.*)\:(\d+)$', self.pphost)
             if r:
-                self.pphost, self.ppport = r.group(1), int(r.group(2))
+                self.pphost, self.ppport = r.groups()
         self.ppport = self.ppport or default_port.get(self.pptype)
         if self.pptype == 'socks5':
             self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
