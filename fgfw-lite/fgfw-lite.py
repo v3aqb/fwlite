@@ -960,6 +960,7 @@ class goagentHandler(FGFWProxyHandler):
         self.filelist = [('https://github.com/goagent/goagent/raw/3.0/local/proxy.py', './goagent/proxy.py'),
                          ('https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.ini'),
                          ('https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'),
+                         ('https://github.com/goagent/goagent/raw/3.0/local/dnslib-0.8.3.egg', './goagent/dnslib-0.8.3.egg'),
                          ]
         self.cwd = '%s/goagent' % WORKINGDIR
         self.cmd = '{} {}/goagent/proxy.py'.format(PYTHON2, WORKINGDIR)
