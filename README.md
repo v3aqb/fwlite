@@ -6,6 +6,7 @@ Starting from a Autoit script, FGFW-Lite is now a cross-platform, highly configu
 requirements under openSUSE:
 
     zypper install python-tornado python-repoze.lru
+    pip install dnslib
 
 to work with shadowsocks, require either of the following:
 
