@@ -1102,15 +1102,7 @@ class snovaHandler(FGFWProxyHandler):
         proxy.optionxform = str
         proxy.read('./snova/conf/snova.conf')
 
-        worknodes = conf.userconf.get('snova', 'GAEworknodes')
-        if worknodes:
-            worknodes = worknodes.split('|')
-            for i in range(len(worknodes)):
-                proxy.set('GAE', 'WorkerNode[%s]' % i, worknodes[i])
-            proxy.set('GAE', 'Enable', '1')
-            conf.userconf.addparentproxy('snova-gae', 'http://127.0.0.1:48101')
-        else:
-            proxy.set('GAE', 'Enable', '0')
+        proxy.set('GAE', 'Enable', '0')
 
         worknodes = conf.userconf.get('snova', 'C4worknodes')
         if worknodes:
