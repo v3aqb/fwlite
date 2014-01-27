@@ -712,6 +712,7 @@ class parent_proxy(object):
         self.gfwlist = []
         self.override = []
         self.gfwlist_force = []
+        self.chinanet = []
         REDIRECTOR.lst = []
 
         def add_rule(line, force=False):
@@ -751,7 +752,6 @@ class parent_proxy(object):
             except TypeError:
                 logging.warning('./fgfw-lite/gfwlist.txt is corrupted!')
 
-        self.chinanet = []
         self.chinanet.append((ip_from_string('192.168.0.0'), 2 ** (32 - 16)))
         self.chinanet.append((ip_from_string('172.16.0.0'), 2 ** (32 - 12)))
         self.chinanet.append((ip_from_string('10.0.0.0'), 2 ** (32 - 8)))
@@ -814,6 +814,16 @@ class parent_proxy(object):
 
         return None
 
+    @lru_cache(256)
+    def no_goagent(self, uri):
+        if re.match(r'^[^/]+:\d+$', uri):
+            s = set(conf.parentlist)
+            s.discard('GoAgent')
+            s.discard('GoAgent-PAAS')
+            s.discard('direct')
+            if s:
+                return True
+
     def parentproxy(self, uri, host, level=1):
         '''
             decide which parentproxy to use.
@@ -827,6 +837,11 @@ class parent_proxy(object):
 
         f = self.ifgfwed(uri, host, level)
         parentlist = conf.parentlist[:]
+        if self.no_goagent(uri):
+            if 'GoAgent' in parentlist:
+                parentlist.remove('GoAgent')
+            if 'GoAgent-PAAS' in parentlist:
+                parentlist.remove('GoAgent-PAAS')
 
         if f is False:
             return ['direct']
@@ -843,7 +858,6 @@ class parent_proxy(object):
         return parentlist
 
 PARENT_PROXY = parent_proxy()
-PARENT_PROXY.config()
 
 
 def updater():
@@ -1388,6 +1402,7 @@ def main():
     for k, v in conf.userconf.items('parents'):
         conf.addparentproxy(k, v)
     cowHandler()
+    PARENT_PROXY.config()
     updatedaemon = Thread(target=updater)
     updatedaemon.daemon = True
     updatedaemon.start()
