@@ -1,7 +1,7 @@
 FGFW-Lite
 ============
 
-Starting from a Autoit script, FGFW-Lite is now a cross-platform, highly configureable HTTP proxy server help to get around the Great Firewall. It dectets websites blocked by GFW automatically, and forward the request to a uncensored proxy server.
+The toolkit I am using to get around the Great Firewall. FGFW-Lite dectets websites blocked by GFW automatically, and forward the request to a uncensored proxy server.
 
 requirements under openSUSE:
 
