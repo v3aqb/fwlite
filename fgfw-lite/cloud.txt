@@ -19,4 +19,5 @@
 ||googleusercontent.com
 ||ggpht.com
 ||feedly.com
+|https://bits.wikimedia.org
 @@||weibo.com
