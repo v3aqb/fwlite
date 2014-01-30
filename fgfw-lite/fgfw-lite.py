@@ -34,6 +34,7 @@ import atexit
 import platform
 import base64
 import bisect
+import ssl
 import socket
 import struct
 import urllib2
@@ -225,6 +226,23 @@ class HTTPProxyServer(HTTPServer):
                             self.no_keep_alive, self.xheaders, self.protocol)
 
 
+@lru_cache(128, timeout=20)
+def ssl_handshake_ok(uri):
+    host, port = uri.rsplit(':', 1)
+    try:
+        s = socket.create_connection((host, int(port)), 1)
+        s = ssl.wrap_socket(s)
+        s.do_handshake()
+        s.close()
+    except Exception as e:
+        logging.warning(e)
+        logging.info('add autoproxy rule: |https://%s' % host)
+        o = autoproxy_rule('|https://%s' % host)
+        o.expire = time.time() + 60 * 10
+        return False
+    return True
+
+
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ('GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT', 'OPTIONS')
 
@@ -258,6 +276,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         self._timeout = None
         self._success = False
         self._proxylist = []
+        self._crbuffer = ''
         # transparent proxy
         if self.request.method != 'CONNECT' and self.request.uri.startswith('/') and self.request.host != "127.0.0.1":
             self.request.uri = 'http://%s%s' % (self.request.host, self.request.uri)
@@ -292,6 +311,8 @@ class ProxyHandler(tornado.web.RequestHandler):
         else:
             self.requestport = int(self.request.host.rsplit(':', 1)[1]) if ':' in self.request.host else 80
 
+        if self.request.method == 'CONNECT':
+            self.request.connection.stream.write(b'HTTP/1.1 200 Connection established\r\n\r\n')
         self.getparent()
         yield self.get_remote_conn()
 
@@ -365,6 +386,13 @@ class ProxyHandler(tornado.web.RequestHandler):
                     break
         if self.upstream is None:
             yield self.connect_remote_with_proxy()
+        if all((self.request.method == 'CONNECT', self.requestport == 443, self.ppname == 'direct', self._proxylist)):
+            self._crbuffer = yield gen.Task(self.request.connection.stream.read_bytes, 3)
+            if self._crbuffer in (b'\x16\x03\x00', b'\x16\x03\x01', b'\x16\x03\x02', ):
+                logging.debug('looks like a ssl request, see if handshake ok')
+                if not ssl_handshake_ok(self.request.uri):
+                    self.getparent()
+                    yield self.connect_remote_with_proxy()
 
     @tornado.web.asynchronous
     def get(self):
@@ -592,6 +620,9 @@ class ProxyHandler(tornado.web.RequestHandler):
     def connect(self):
         def upstream_write(data):
             if not upstream.closed():
+                if self._crbuffer:
+                    data = self._crbuffer + data
+                    self._crbuffer = ''
                 upstream.write(data)
 
         def client_write(data):
@@ -601,6 +632,11 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.remove_timeout()
             if not client.closed():
                 client.write(data)
+
+        def forward(data=None):
+            assert b' 200 ' in data
+            client.read_until_close(upstream.close, upstream_write)
+            upstream.read_until_close(client.close, client_write)
 
         logging.debug('CONNECT')
 
@@ -616,11 +652,9 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             s.append(b'\r\n'.join(['%s: %s' % (key, value) for key, value in self.request.headers.items()]).encode('utf8'))
             s.append(b'\r\n\r\n')
-            upstream_write(b''.join(s).encode())
-            client.read_until_close(upstream.close, upstream_write)
-            upstream.read_until_close(client.close, client_write)
+            upstream.write(b''.join(s).encode())
+            upstream.read_until_regex(r"\r?\n\r?\n", forward)
         else:
-            client_write(b'HTTP/1.1 200 Connection established\r\n\r\n')
             client.read_until_close(upstream.close, upstream_write)
             upstream.read_until_close(client.close, client_write)
 
