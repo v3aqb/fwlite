@@ -1198,7 +1198,7 @@ class shadowsocksHandler(FGFWProxyHandler):
             else:
                 lst = ['./shadowsocks/ss-local.exe',
                        './shadowsocks/shadowsocks-local.exe',
-                       './shadowsocks/shadowsocks.exe']
+                       ]
         elif sys.platform.startswith('linux'):
             for cmd in ('ss-local', 'sslocal'):
                 if subprocess.call(shlex.split('which %s' % cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE) == 0:
@@ -1212,38 +1212,37 @@ class shadowsocksHandler(FGFWProxyHandler):
                 self.cmd = ''.join([WORKINGDIR, f[1:]])
                 break
 
-        if not self.cmd.endswith('shadowsocks.exe'):
-            import json
-            config = {}
-            config['server'] = conf.userconf.dget('shadowsocks', 'server', '127.0.0.1').strip('"')
-            config['server_port'] = conf.userconf.dget('shadowsocks', 'server_port', '8388')
-            config['password'] = conf.userconf.dget('shadowsocks', 'password', 'barfoo!').strip('"')
-            config['method'] = conf.userconf.dget('shadowsocks', 'method', 'aes-256-cfb').strip('"')
-            listen = conf.userconf.dget('shadowsocks', 'listen', '1080')
-            if listen.isdigit():
-                config['local_port'] = int(listen)
-                config['local'] = '127.0.0.1'
-            else:
-                config['local'] = listen.rsplit(':', 1)[0]
-                config['local_port'] = int(listen.rsplit(':', 1)[1])
+        import json
+        config = {}
+        config['server'] = conf.userconf.dget('shadowsocks', 'server', '127.0.0.1').strip('"')
+        config['server_port'] = conf.userconf.dget('shadowsocks', 'server_port', '8388')
+        config['password'] = conf.userconf.dget('shadowsocks', 'password', 'barfoo!').strip('"')
+        config['method'] = conf.userconf.dget('shadowsocks', 'method', 'aes-256-cfb').strip('"')
+        listen = conf.userconf.dget('shadowsocks', 'listen', '1080')
+        if listen.isdigit():
+            config['local_port'] = int(listen)
+            config['local'] = '127.0.0.1'
+        else:
+            config['local'] = listen.rsplit(':', 1)[0]
+            config['local_port'] = int(listen.rsplit(':', 1)[1])
 
-            portlst = []
-            if not config['server_port'].isdigit():
-                for item in config['server_port'].split(','):
-                    if item.strip().isdigit():
-                        portlst.append(int(item.strip()))
-                    else:
-                        a, b = item.strip().split('-')
-                        for i in range(int(a), int(b) + 1):
-                            portlst.append(i)
-                config['server_port'] = portlst
-            else:
-                config['server_port'] = int(config['server_port'])
-            if config['server'].startswith('['):
-                config['server'] = json.loads(config['server'])
-            with open('./shadowsocks/config.json', 'wb') as f:
-                f.write(json.dumps(config, indent=4, separators=(',', ': ')))
-            self.cmd = '{} -c {}'.format(self.cmd, '%s/shadowsocks/config.json' % WORKINGDIR)
+        portlst = []
+        if not config['server_port'].isdigit():
+            for item in config['server_port'].split(','):
+                if item.strip().isdigit():
+                    portlst.append(int(item.strip()))
+                else:
+                    a, b = item.strip().split('-')
+                    for i in range(int(a), int(b) + 1):
+                        portlst.append(i)
+            config['server_port'] = portlst
+        else:
+            config['server_port'] = int(config['server_port'])
+        if config['server'].startswith('['):
+            config['server'] = json.loads(config['server'])
+        with open('./shadowsocks/config.json', 'wb') as f:
+            f.write(json.dumps(config, indent=4, separators=(',', ': ')))
+        self.cmd = '{} -c {}'.format(self.cmd, '%s/shadowsocks/config.json' % WORKINGDIR)
         conf.addparentproxy('shadowsocks', 'socks5://127.0.0.1:1080')
 
 
