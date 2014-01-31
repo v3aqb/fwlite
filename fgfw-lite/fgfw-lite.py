@@ -1155,8 +1155,8 @@ class snovaHandler(FGFWProxyHandler):
         worknodes = conf.userconf.get('snova', 'C4worknodes')
         if worknodes:
             worknodes = worknodes.split('|')
-            for i in range(len(worknodes)):
-                proxy.set('C4', 'WorkerNode[%s]' % i, worknodes[i])
+            for i, v in enumerate(worknodes):
+                proxy.set('C4', 'WorkerNode[%s]' % i, v)
             proxy.set('C4', 'Enable', '1')
             fgfwproxy.addparentproxy('snova-c4', 'http://127.0.0.1:48102')
         else:
