@@ -24,6 +24,7 @@ __version__ = '0.3.5.4'
 
 import sys
 import os
+from collections import defaultdict
 import subprocess
 import shlex
 import time
@@ -71,7 +72,7 @@ else:
             PYTHON2 = cmd
             break
 
-UPSTREAM_POOL = {}
+UPSTREAM_POOL = defaultdict(list)
 ctimer = []
 rtimer = []
 CTIMEOUT = 5
@@ -523,17 +524,19 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         def _finish(data=None):
             if self._client_write_buffer:
-                while self._client_write_buffer:
-                    _do_client_write(self._client_write_buffer.pop(0))
+                _do_client_write(b''.join(self._client_write_buffer))
             self._success = True
-            conn_header = self._headers.get("Connection")
-            if conn_header:
-                conn_header = conn_header.lower()
+            conn_header = self._headers.get("Connection", '').lower()
             if self.request.supports_http_1_1():
                 self._close_flag = conn_header == 'close'
             else:
                 self._close_flag = conn_header != 'keep_alive'
             self.upstream.set_close_callback(None)
+            if self._close_flag:
+                self.upstream.close()
+            elif not self.upstream.closed():
+                UPSTREAM_POOL[self.upstream_name].append(self.upstream)
+                logging.debug('pooling remote connection')
             self.finish()
 
         _sent_request()
@@ -549,19 +552,6 @@ class ProxyHandler(tornado.web.RequestHandler):
         logging.debug('self._success? %s' % self._success)
         logging.debug('retry? %s' % self._proxy_retry)
         self.remove_timeout()
-        if hasattr(self, 'upstream'):
-            if self.upstream.closed() or self._close_flag:
-                logging.debug('close remote connection, closed: %s flag: %s' % (self.upstream.closed(), self._close_flag))
-                self.upstream.set_close_callback(None)
-                self.upstream.close()
-                self.request.connection.stream.close()
-            elif self._success:
-                if self.upstream_name not in UPSTREAM_POOL:
-                    UPSTREAM_POOL[self.upstream_name] = []
-                self.upstream._last_active = time.time()
-                self.upstream.set_close_callback(None)
-                UPSTREAM_POOL.get(self.upstream_name).append(self.upstream)
-                logging.debug('pooling remote connection')
         if all((self._success, self.get_status() < 400, self._proxy_retry)) or\
                 all((self.request.method == 'CONNECT', not self._success, self.ppname == 'direct', self._proxylist)):
             logging.info('add autoproxy rule: ||%s' % self.request.host.split(':')[0])
@@ -595,8 +585,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             global CTIMEOUT, RTIMEOUT
             CTIMEOUT = min(CTIMEOUT + 1, 15)
             RTIMEOUT = min(RTIMEOUT + 2, 15)
-        logging.debug('request finished? %s' % self._finished)
-        logging.debug('headers_written? %s' % self._headers_written)
+        logging.debug('request finished? %s headers_written? %s' % (self._finished, self._headers_written))
         if not self._finished:
             if not self._headers_written:
                 if self._proxylist:
