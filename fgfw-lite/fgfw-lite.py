@@ -1016,17 +1016,15 @@ class goagentHandler(FGFWProxyHandler):
         goagent = SConfigParser()
         goagent.read('./goagent/proxy.ini')
 
-        if conf.userconf.dget('goagent', 'GAEAppid', ''):
+        if conf.userconf.dget('goagent', 'GAEAppid', 'goagent') != 'goagent':
+            goagent.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'ipv4'))
+            goagent.set('gae', 'mode', conf.userconf.dget('goagent', 'mode', 'https'))
+            goagent.set('gae', 'appid', conf.userconf.dget('goagent', 'GAEAppid', 'goagent'))
+            goagent.set("gae", "password", conf.userconf.dget('goagent', 'GAEpassword', ''))
+            goagent.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
+            goagent.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
+            goagent.set('gae', 'options', conf.userconf.dget('goagent', 'options', ''))
             conf.addparentproxy('GoAgent', 'http://127.0.0.1:8087')
-
-        goagent.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'ipv4'))
-        goagent.set('gae', 'mode', conf.userconf.dget('goagent', 'mode', 'https'))
-        goagent.set('gae', 'appid', conf.userconf.dget('goagent', 'GAEAppid', 'goagent'))
-        goagent.set("gae", "password", conf.userconf.dget('goagent', 'GAEpassword', ''))
-        goagent.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
-        goagent.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
-        goagent.set('gae', 'options', conf.userconf.dget('goagent', 'options', ''))
-        goagent.set('pac', 'enable', '0')
 
         if conf.userconf.dget('goagent', 'paasfetchserver'):
             goagent.set('php', 'enable', '1')
@@ -1035,6 +1033,9 @@ class goagentHandler(FGFWProxyHandler):
             conf.addparentproxy('GoAgent-PAAS', 'http://127.0.0.1:8088')
         else:
             goagent.set('php', 'enable', '0')
+
+        goagent.set('pac', 'enable', '0')
+
         if conf.userconf.dget('goagent', 'proxy'):
             goagent.set('proxy', 'enable', '1')
             host, port = conf.userconf.dget('goagent', 'proxy').rsplit(':')
