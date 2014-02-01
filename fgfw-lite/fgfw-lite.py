@@ -20,7 +20,7 @@
 
 from __future__ import print_function, unicode_literals, division
 
-__version__ = '0.3.5.4'
+__version__ = '0.3.6.0'
 
 import sys
 import os
