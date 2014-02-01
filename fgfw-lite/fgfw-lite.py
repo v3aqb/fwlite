@@ -274,6 +274,7 @@ class ProxyHandler(tornado.web.RequestHandler):
     def prepare(self):
         self._close_flag = True
         self._proxy_retry = 0
+        self._no_retry = False
         self._timeout = None
         self._success = False
         self._proxylist = []
@@ -314,6 +315,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         if self.request.method == 'CONNECT':
             self.request.connection.stream.write(b'HTTP/1.1 200 Connection established\r\n\r\n')
+            self._headers_written = True
         self.getparent()
         yield self.get_remote_conn()
 
@@ -406,6 +408,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             if not client.closed():
                 client.write(data)
                 self._headers_written = True
+                self._no_retry = True
 
         def _client_write(data):
             if self._headers_written:
@@ -587,7 +590,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             RTIMEOUT = min(RTIMEOUT + 2, 15)
         logging.debug('request finished? %s headers_written? %s' % (self._finished, self._headers_written))
         if not self._finished:
-            if not self._headers_written:
+            if not self._no_retry:
                 if self._proxylist:
                     logging.warning('%s %s Failed, retry...' % (self.request.method, self.uris))
                     self.clear()
@@ -615,7 +618,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 upstream.write(data)
 
         def client_write(data):
-            self._headers_written = True
+            self._no_retry = True
             if len(data) > 128:
                 self._success = True
                 self.remove_timeout()
