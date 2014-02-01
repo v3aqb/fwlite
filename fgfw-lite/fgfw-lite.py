@@ -77,7 +77,6 @@ ctimer = []
 rtimer = []
 CTIMEOUT = 5
 RTIMEOUT = 5
-BLOCKEDSITES = set()
 
 
 def prestart():
@@ -272,7 +271,6 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @gen.coroutine
     def prepare(self):
-        self._close_flag = True
         self._proxy_retry = 0
         self._no_retry = False
         self._timeout = None
@@ -403,7 +401,6 @@ class ProxyHandler(tornado.web.RequestHandler):
         logging.debug('GET')
         client = self.request.connection.stream
         self._client_write_buffer = []
-        self._close_flag = True
 
         def _do_client_write(data):
             if not client.closed():
@@ -532,11 +529,11 @@ class ProxyHandler(tornado.web.RequestHandler):
             self._success = True
             conn_header = self._headers.get("Connection", '').lower()
             if self.request.supports_http_1_1():
-                self._close_flag = conn_header == 'close'
+                _close_flag = conn_header == 'close'
             else:
-                self._close_flag = conn_header != 'keep_alive'
+                _close_flag = conn_header != 'keep_alive'
             self.upstream.set_close_callback(None)
-            if self._close_flag:
+            if _close_flag:
                 self.upstream.close()
             elif not self.upstream.closed():
                 UPSTREAM_POOL[self.upstream_name].append(self.upstream)
@@ -560,18 +557,11 @@ class ProxyHandler(tornado.web.RequestHandler):
                 all((self.request.method == 'CONNECT', not self._success, self.ppname == 'direct', self._proxylist)):
             logging.info('add autoproxy rule: ||%s' % self.request.host.split(':')[0])
             o = autoproxy_rule('||%s' % self.request.host.split(':')[0])
-            o.expire = time.time() + 60 * 2 if self.request.method != 'CONNECT' else time.time() + 60 * 15
-            if self.request.host in BLOCKEDSITES:
-                o.expire = time.time() + 60 * 60
-            else:
-                BLOCKEDSITES.add(self.request.host)
+            o.expire = time.time() + 60 * 10
             PARENT_PROXY.gfwlist_force.append(o)
-        if self._success and self.ppname == 'direct':
-            BLOCKEDSITES.discard(self.request.host)
 
     def on_connection_close(self):
         logging.debug('client connection closed')
-        self._close_flag = True
         if hasattr(self, 'upstream'):
             self.upstream.set_close_callback(None)
             self.upstream.close()
@@ -799,7 +789,6 @@ class parent_proxy(object):
         self.chinanet.sort(key=lambda r: r[0])
         self.iplist = [r[0] for r in self.chinanet]
 
-    @lru_cache(128)
     def ifhost_in_china(self, host):
         try:
             i = ip_from_string(socket.gethostbyname(host))
@@ -811,19 +800,19 @@ class parent_proxy(object):
         except Exception:
             return None
 
-    @lru_cache(256)
-    def ifgfwed(self, uri, host, level=1):
-
-        def if_gfwlist_force():
-            if level == 3:
+    def if_gfwlist_force(self, uri, level):
+        if level == 3:
+            return True
+        for rule in self.gfwlist_force:
+            if hasattr(rule, 'expire') and time.time() > rule.expire:
+                self.gfwlist_force.remove(rule)
+                logging.debug('%s expired' % rule.rule)
+            elif rule.match(uri):
                 return True
-            for rule in self.gfwlist_force:
-                if hasattr(rule, 'expire') and time.time() > rule.expire:
-                    self.gfwlist_force.remove(rule)
-                    logging.debug('%s expired' % rule.rule)
-                elif rule.match(uri):
-                    return True
-            return False
+        return False
+
+    @lru_cache(128, timeout=120)
+    def ifgfwed(self, uri, host, level=1):
 
         if level == 0:
             return False
@@ -832,7 +821,7 @@ class parent_proxy(object):
         else:
             forceproxy = False
 
-        a = if_gfwlist_force()
+        a = self.if_gfwlist_force(uri, level)
 
         if any(rule.match(uri) for rule in self.override):
             return False
@@ -843,9 +832,7 @@ class parent_proxy(object):
         if a or forceproxy or any(rule.match(uri) for rule in self.gfwlist):
             return True
 
-        return None
-
-    @lru_cache(256)
+    @lru_cache(256, timeout=120)
     def no_goagent(self, uri):
         if re.match(r'^[^/]+:\d+$', uri):
             s = set(conf.parentlist)
@@ -885,6 +872,7 @@ class parent_proxy(object):
         return parentlist
 
 PARENT_PROXY = parent_proxy()
+PARENT_PROXY.config()
 
 
 def updater():
@@ -1380,7 +1368,6 @@ def main():
     shadowsocksHandler()
     for k, v in conf.userconf.items('parents'):
         conf.addparentproxy(k, v)
-    PARENT_PROXY.config()
     updatedaemon = Thread(target=updater)
     updatedaemon.daemon = True
     updatedaemon.start()
