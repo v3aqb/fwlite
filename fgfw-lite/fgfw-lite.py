@@ -874,15 +874,11 @@ class parent_proxy(object):
         if f is False:
             return ['direct']
         if f is True:
-            if 'cow' in parentlist:
-                parentlist.remove('cow')
             parentlist.remove('direct')
             if parentlist:
                 return parentlist
             else:
                 logging.warning('No parent proxy available, direct connection is used')
-        if 'cow' in conf.parentdict.keys() and not uri.startswith('ftp://'):
-            return ['cow']
         return parentlist
 
 PARENT_PROXY = parent_proxy()
@@ -1240,42 +1236,6 @@ class shadowsocksHandler(FGFWProxyHandler):
         conf.addparentproxy('shadowsocks', 'socks5://127.0.0.1:1080')
 
 
-class cowHandler(FGFWProxyHandler):
-    """docstring for cow_abs"""
-    def __init__(self):
-        FGFWProxyHandler.__init__(self)
-
-    def config(self):
-        self.filelist = []
-        self.cwd = '%s/cow' % WORKINGDIR
-
-        self.enable = conf.userconf.dgetbool('cow', 'enable', True)
-        self.enableupdate = False
-        if self.enable:
-            self._config()
-
-    def _config(self):
-        self.cmd = '%s/cow/cow%s' % (WORKINGDIR, '.exe' if sys.platform.startswith('win') else '')
-        self.enableupdate = conf.userconf.dgetbool('cow', 'update', False)
-        if not os.path.isfile(self.cmd):
-            self.enable = False
-            return
-        configfile = ['listen = %s' % conf.userconf.dget('cow', 'listen', '127.0.0.1:8117'), ]
-        for key, item in conf.parentdict.items():
-            if not item or key == 'cow':
-                continue
-            configfile.append('proxy = %s' % item)
-
-        if sys.platform.startswith('win'):
-            filepath = '%s/cow/rc.txt' % WORKINGDIR
-        else:
-            filepath = ''.join([os.path.expanduser('~'), '/.cow/rc'])
-        with open(filepath, 'w') as f:
-            f.write('\n'.join(configfile))
-        if self.enable:
-            conf.addparentproxy('cow', 'http://127.0.0.1:8117')
-
-
 class fgfwproxy(FGFWProxyHandler):
     """docstring for ClassName"""
     def __init__(self, arg=''):
@@ -1428,7 +1388,6 @@ def main():
     shadowsocksHandler()
     for k, v in conf.userconf.items('parents'):
         conf.addparentproxy(k, v)
-    cowHandler()
     PARENT_PROXY.config()
     updatedaemon = Thread(target=updater)
     updatedaemon.daemon = True
