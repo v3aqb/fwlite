@@ -120,7 +120,7 @@ class MainWindow(QtGui.QMainWindow):
     def closeEvent(self, event):
         if self.trayIcon.isVisible():
             self.hide()
-            event.ignore()
+        event.ignore()
 
     def on_trayActive(self, reason):
         if reason is self.trayIcon.Trigger:
