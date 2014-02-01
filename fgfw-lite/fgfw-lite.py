@@ -278,7 +278,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         self._timeout = None
         self._success = False
         self._proxylist = []
-        self._crbuffer = ''
+        self._crbuffer = []
         # transparent proxy
         if self.request.method != 'CONNECT' and self.request.uri.startswith('/') and self.request.host != "127.0.0.1":
             self.request.uri = 'http://%s%s' % (self.request.host, self.request.uri)
@@ -390,8 +390,9 @@ class ProxyHandler(tornado.web.RequestHandler):
         if self.upstream is None:
             yield self.connect_remote_with_proxy()
         if all((self.request.method == 'CONNECT', self.requestport == 443, self.ppname == 'direct', self._proxylist)):
-            self._crbuffer = yield gen.Task(self.request.connection.stream.read_bytes, 3)
-            if self._crbuffer in (b'\x16\x03\x00', b'\x16\x03\x01', b'\x16\x03\x02', ):
+            data = yield gen.Task(self.request.connection.stream.read_bytes, 3)
+            self._crbuffer.append(data)
+            if data in (b'\x16\x03\x00', b'\x16\x03\x01', b'\x16\x03\x02', ):
                 logging.debug('looks like a ssl request, see if handshake ok')
                 if not ssl_handshake_ok(self.request.uri):
                     self.getparent()
@@ -612,11 +613,12 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def connect(self):
-        def upstream_write(data):
-            if not upstream.closed():
-                if self._crbuffer:
-                    data = self._crbuffer + data
-                    self._crbuffer = ''
+        def upstream_write(data=None):
+            if data is None:
+                data = b''.join(self._crbuffer)
+            elif data and self._no_retry is False:
+                self._crbuffer.append(data)
+            if data and not upstream.closed():
                 upstream.write(data)
 
         def client_write(data):
@@ -628,7 +630,9 @@ class ProxyHandler(tornado.web.RequestHandler):
                 client.write(data)
 
         def forward(data=None):
-            assert b' 200 ' in data
+            if data:
+                assert b' 200 ' in data
+            upstream_write()
             client.read_until_close(upstream.close, upstream_write)
             upstream.read_until_close(client.close, client_write)
 
@@ -649,8 +653,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             upstream.write(b''.join(s).encode())
             upstream.read_until_regex(r"\r?\n\r?\n", forward)
         else:
-            client.read_until_close(upstream.close, upstream_write)
-            upstream.read_until_close(client.close, client_write)
+            forward()
 
     def _request_summary(self):
         return '%s %s (%s)' % (self.request.method, self.uris, self.request.remote_ip)
