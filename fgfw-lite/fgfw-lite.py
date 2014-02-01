@@ -607,6 +607,8 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 if self.request.method != 'CONNECT':
                     logging.warning('%s %s FAILED!' % (self.request.method, self.uris))
+                if not self.request.connection.stream.closed():
+                    self.request.connection.stream.close()
 
     @tornado.web.asynchronous
     def connect(self):
