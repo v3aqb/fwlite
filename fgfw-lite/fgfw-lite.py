@@ -723,8 +723,8 @@ REDIRECTOR = redirector()
 
 
 def ip_from_string(ip):
-    # https://gist.github.com/cslarsen/1595135
-    return reduce(lambda a, b: a << 8 | b, map(int, ip.split(".")))
+    # https://github.com/fqrouter/fqsocks/blob/master/fqsocks/china_ip.py#L35
+    return struct.unpack(b'!i', socket.inet_aton(ip))[0]
 
 
 class parent_proxy(object):
