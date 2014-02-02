@@ -784,6 +784,8 @@ class parent_proxy(object):
             unit_items = item.split('|')
             starting_ip = ip_from_string(unit_items[3])
             num_ip = int(unit_items[4])
+            if starting_ip == 3419414528L:  # guxiang
+                continue
             self.chinanet.append((starting_ip, num_ip))
 
         self.chinanet.sort(key=lambda r: r[0])
