@@ -555,8 +555,9 @@ class ProxyHandler(tornado.web.RequestHandler):
         self.remove_timeout()
         if all((self._success, self.get_status() < 400, self._proxy_retry)) or\
                 all((self.request.method == 'CONNECT', not self._success, self.ppname == 'direct', self._proxylist)):
-            logging.info('add autoproxy rule: ||%s' % self.request.host.split(':')[0])
-            o = autoproxy_rule('||%s' % self.request.host.split(':')[0])
+            rule = '%s%s' % ('|https://' if self.request.method == 'CONNECT' else '|http://', self.request.host.split(':')[0])
+            logging.info('add autoproxy rule: %s' % rule)
+            o = autoproxy_rule(rule)
             o.expire = time.time() + 60 * 10
             PARENT_PROXY.gfwlist_force.append(o)
 
@@ -674,7 +675,7 @@ class autoproxy_rule(object):
             elif rule.startswith('|https://'):
                 i = rule.find('/', 9)
                 regex = rule[9:] if i == -1 else rule[9:i]
-                regex = r'^(?:https://)?%s(?:[:/]|$)' % regex.replace('.', r'\.').replace('*', '[^/]*')
+                regex = r'^(?:https://)?%s(?:[:/])' % regex.replace('.', r'\.').replace('*', '[^/]*')
                 return re.compile(regex)
             else:
                 regex = rule.replace('.', r'\.').replace('?', r'\?').replace('*', '.*').replace('^', r'[^\w%._-]')
@@ -692,7 +693,7 @@ class autoproxy_rule(object):
             return parse(rule)
 
     def match(self, uri):
-        return bool(self._ptrn.search(uri))
+        return self._ptrn.search(uri)
 
 
 class redirector(object):
