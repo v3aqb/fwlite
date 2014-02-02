@@ -1171,24 +1171,6 @@ class shadowsocksHandler(FGFWProxyHandler):
             self._config()
 
     def _config(self):
-        if sys.platform.startswith('win'):
-            self.cmd = 'c:/python27/python.exe -B %s/shadowsocks/local.py' % WORKINGDIR
-            which = 'where'
-        else:
-            which = 'which'
-
-        for cmd in ('ss-local', 'sslocal'):
-            if 'XP' in platform.platform():
-                continue
-            if subprocess.call(shlex.split('%s %s' % (which, cmd)), stdout=subprocess.PIPE, stderr=subprocess.PIPE) == 0:
-                self.cmd = cmd
-                break
-        else:
-            for f in ['./shadowsocks/ss-local', './shadowsocks/shadowsocks-local']:
-                if os.path.isfile('%s%s' % (f, '.exe' if sys.platform.startswith('win') else '')):
-                    self.cmd = ''.join([WORKINGDIR, f[1:]])
-                    break
-
         import json
         config = {}
         config['server'] = conf.userconf.dget('shadowsocks', 'server', '127.0.0.1').strip('"')
