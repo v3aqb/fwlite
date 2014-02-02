@@ -5,14 +5,8 @@ The toolkit I am using to get around the Great Firewall. FGFW-Lite dectets websi
 
 requirements under openSUSE:
 
-    zypper install python-tornado python-repoze.lru
+    zypper install python-tornado python-repoze.lru python-gevent python-M2Crypto
     pip install dnslib
-
-to work with shadowsocks, require either of the following:
-
-1. [python2.7](http://www.python.org/getit/) and [M2Crypto](http://chandlerproject.org/Projects/MeTooCrypto#Downloads) is installed.
-2. [shadowsocks-nodejs](https://github.com/clowwindy/shadowsocks-nodejs) or [shadowsocks-libev](https://github.com/madeye/shadowsocks-libev) is installed.(Windows Vista+ or Linux)
-3. compiled shadowsocks client binary in ./shadowsocks folder.
 
 goagent https://code.google.com/p/goagent/
 

@@ -22,10 +22,12 @@
 
 from __future__ import with_statement
 import sys
+import os
 if sys.version_info < (2, 6):
     import simplejson as json
 else:
     import json
+sys.path.append(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')))
 
 try:
     import gevent
