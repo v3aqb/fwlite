@@ -9,5 +9,4 @@
 |http://*.googlecode.com forcehttps
 |http://www.blogger.com forcehttps
 |http://*.wikipedia.org forcehttps
-|http://www.youtube.com/watch? forcehttps
 @@||weibo.com
