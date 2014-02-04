@@ -30,14 +30,15 @@ import shlex
 import time
 import re
 import errno
-from threading import Thread
 import atexit
 import platform
 import base64
 import bisect
+import encrypt
 import ssl
 import socket
 import struct
+from threading import Thread
 import urllib2
 import urlparse
 from repoze.lru import lru_cache
@@ -224,6 +225,37 @@ class HTTPProxyServer(HTTPServer):
     def handle_stream(self, stream, address):
         HTTPProxyConnection(stream, address, self.request_callback,
                             self.no_keep_alive, self.xheaders, self.protocol)
+
+
+class ssClientStream(tornado.iostream.IOStream):
+
+    def connect(self, address, ssServer, callback=None, server_hostname=None):
+        '''
+        connect address via ssServer
+        ssServer: {"server": "localhost",
+                   "server_port": 8388,
+                   "password": "barfoo!",
+                   "method": "table"
+                   }
+        '''
+        self.crypto = encrypt.Encryptor(ssServer['password'], ssServer['method'])
+        super(ssClientStream, self).connect((ssServer['server'], ssServer['server_port']))
+        host, port = address
+        data = b''.join([b'\x03',
+                        chr(len(host)).encode(),
+                        host.encode(),
+                        struct.pack(b">H", port)])
+        self.write(data, callback=callback)
+
+    def read_from_fd(self):
+        chunk = super(ssClientStream, self).read_from_fd()
+        if chunk:
+            return self.crypto.decrypt(chunk)
+        return chunk
+
+    def write_to_fd(self, data):
+        data = self.crypto.encrypt(data)
+        return super(ssClientStream, self).write_to_fd(data)
 
 
 @lru_cache(128, timeout=20)
