@@ -289,7 +289,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             if r:
                 self.pphost, self.ppport = r.groups()
         self.ppport = self.ppport or default_port.get(self.pptype)
-        if self.pptype == 'socks5':
+        if self.pptype in ('socks5', 'ss'):
             self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
         else:
             self.upstream_name = self.ppname if self.pphost else '{}-{}'.format(self.request.host, str(self.requestport))
@@ -365,12 +365,16 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.upstream = tornado.iostream.SSLIOStream(s)
             self.upstream.set_close_callback(self.on_upstream_close)
             yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
+        elif self.pptype == 'ss':
+            self.upstream = ssClientStream(s)
+            self.upstream.set_close_callback(self.on_upstream_close)
+            self.upstream.connect((self.request.host.rsplit(':', 1)[0], self.requestport), ssServer=conf.parentdict.get(self.ppname))
         elif self.pptype == 'socks5':
             logging.debug('connecting to socks5 server')
             yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
             try:
                 self.upstream.set_nodelay(True)
-                self.upstream.write(b"\x05\x02\x00\x02" if self.ppusername else b"\x05\x01\x00")
+                yield gen.Task(self.upstream.write, b"\x05\x02\x00\x02" if self.ppusername else b"\x05\x01\x00")
                 data = yield gen.Task(self.upstream.read_bytes, 2)
                 if data == b'\x05\x02':  # basic auth
                     self.upstream.write(b''.join([b"\x01",
@@ -473,7 +477,9 @@ class ProxyHandler(tornado.web.RequestHandler):
             s = [s, ]
             s.append(u'\r\n'.join([u'%s: %s' % (key, value) for key, value in self.request.headers.items()]))
             s.append(u'\r\n\r\n')
-            self.upstream.write(u''.join(s).encode('latin1'))
+            self.upstream.write(u''.join(s).encode('latin1'), _sent_body)
+
+        def _sent_body():
             content_length = self.request.headers.get("Content-Length")
             if content_length:
                 logging.debug('sending request body')
@@ -671,8 +677,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             s.append(b'\r\n'.join(['%s: %s' % (key, value) for key, value in self.request.headers.items()]).encode('utf8'))
             s.append(b'\r\n\r\n')
-            upstream.write(b''.join(s).encode())
-            upstream.read_until_regex(r"\r?\n\r?\n", forward)
+            upstream.write(b''.join(s).encode(), upstream.read_until_regex(r"\r?\n\r?\n", forward))
         else:
             forward()
 
