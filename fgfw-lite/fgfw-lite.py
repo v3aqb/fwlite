@@ -1188,54 +1188,6 @@ class snovaHandler(FGFWProxyHandler):
             proxy.write(configfile)
 
 
-class shadowsocksHandler(FGFWProxyHandler):
-    """docstring for ClassName"""
-    def __init__(self):
-        FGFWProxyHandler.__init__(self)
-
-    def config(self):
-        self.filelist = [('https://github.com/v3aqb/fgfw-lite/raw/master/shadowsocks/local.py', './shadowsocks/local.py'),
-                         ('https://github.com/v3aqb/fgfw-lite/raw/master/shadowsocks/encrypt.py', './shadowsocks/encrypt.py'),
-                         ('https://github.com/v3aqb/fgfw-lite/raw/master/shadowsocks/utils.py', './shadowsocks/utils.py'),
-                         ]
-        self.cmd = '{} -B {}/shadowsocks/local.py'.format(PYTHON2, WORKINGDIR)
-        self.cwd = '%s/shadowsocks' % WORKINGDIR
-        self.enable = conf.userconf.dgetbool('shadowsocks', 'enable', False)
-        self.enableupdate = conf.userconf.dgetbool('shadowsocks', 'update', True)
-        if self.enable:
-            self._config()
-
-    def _config(self):
-        import json
-        config = {}
-        config['server'] = conf.userconf.dget('shadowsocks', 'server', '127.0.0.1').strip('"')
-        config['server_port'] = conf.userconf.dget('shadowsocks', 'server_port', '8388')
-        config['password'] = conf.userconf.dget('shadowsocks', 'password', 'barfoo!').strip('"')
-        config['method'] = conf.userconf.dget('shadowsocks', 'method', 'aes-256-cfb').strip('"')
-        listen = conf.userconf.dget('shadowsocks', 'listen', '1080')
-        if listen.isdigit():
-            config['local_port'] = int(listen)
-            config['local'] = '127.0.0.1'
-        else:
-            config['local'] = listen.rsplit(':', 1)[0]
-            config['local_port'] = int(listen.rsplit(':', 1)[1])
-
-        portlst = []
-        for item in config['server_port'].split(','):
-            if item.strip().isdigit():
-                portlst.append(int(item.strip()))
-            else:
-                a, b = item.strip().split('-')
-                portlst.extend(range(int(a), int(b) + 1))
-        config['server_port'] = portlst
-        if config['server'].startswith('['):
-            config['server'] = json.loads(config['server'])
-        with open('./shadowsocks/config.json', 'wb') as f:
-            f.write(json.dumps(config, indent=4, separators=(',', ': ')))
-        self.cmd = '{} -c {}'.format(self.cmd, '%s/shadowsocks/config.json' % WORKINGDIR)
-        conf.addparentproxy('shadowsocks', 'socks5://127.0.0.1:1080')
-
-
 class fgfwproxy(FGFWProxyHandler):
     """docstring for ClassName"""
     def __init__(self, arg=''):
@@ -1385,7 +1337,6 @@ def main():
     fgfwproxy()
     goagentHandler()
     snovaHandler()
-    shadowsocksHandler()
     for k, v in conf.userconf.items('parents'):
         conf.addparentproxy(k, v)
     updatedaemon = Thread(target=updater)
