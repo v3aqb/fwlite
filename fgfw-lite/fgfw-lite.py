@@ -232,14 +232,12 @@ class ssClientStream(tornado.iostream.IOStream):
     def connect(self, address, ssServer, callback=None, server_hostname=None):
         '''
         connect address via ssServer
-        ssServer: {"server": "localhost",
-                   "server_port": 8388,
-                   "password": "barfoo!",
-                   "method": "table"
-                   }
+        ssServer: 'ss://method:password@hostname:port'
         '''
-        self.crypto = encrypt.Encryptor(ssServer['password'], ssServer['method'])
-        super(ssClientStream, self).connect((ssServer['server'], ssServer['server_port']))
+        p = urlparse.urlparse(ssServer)
+        _, sshost, ssport, ssmethod, sspassword = (p.scheme, p.hostname, p.port, p.username, p.password)
+        self.crypto = encrypt.Encryptor(sspassword, ssmethod)
+        super(ssClientStream, self).connect((sshost, ssport))
         host, port = address
         data = b''.join([b'\x03',
                         chr(len(host)).encode(),
