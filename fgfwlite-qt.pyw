@@ -8,7 +8,7 @@ import shlex
 from PySide import QtCore, QtGui
 
 
-WORKINGDIR = '/'.join(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')).split('/'))
+WORKINGDIR = os.path.dirname(os.path.abspath(__file__).replace('\\', '/'))
 os.chdir(WORKINGDIR)
 TRAY_ICON = '%s/fgfw-lite/taskbar.ico' % WORKINGDIR
 PYTHON = '%s/Python27/python27.exe' % WORKINGDIR if sys.platform.startswith('win') else '/usr/bin/env python2.7'
