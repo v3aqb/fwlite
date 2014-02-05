@@ -1056,6 +1056,8 @@ class goagentHandler(FGFWProxyHandler):
             goagent.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
             goagent.set('gae', 'options', conf.userconf.dget('goagent', 'options', ''))
             conf.addparentproxy('GoAgent', 'http://127.0.0.1:8087')
+        else:
+            goagent.set('gae', 'appid', 'dummy')
 
         if conf.userconf.dget('goagent', 'paasfetchserver'):
             goagent.set('php', 'enable', '1')
