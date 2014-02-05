@@ -1017,6 +1017,7 @@ class FGFWProxyHandler(object):
                 with open(path, 'wb') as localfile:
                     localfile.write(r.read())
                 conf.version.set('Update', path.replace('./', '').replace('/', '-'), r.info().getheader('ETag'))
+                conf.confsave()
                 logging.info('%s Updated.' % path)
             else:
                 logging.info('{} NOT updated. Reason: {}'.format(path, str(r.getcode())))
@@ -1333,7 +1334,6 @@ conf.addparentproxy('direct', '')
 def atexit_do():
     for item in FGFWProxyHandler.ITEMS:
         item.stop()
-    conf.confsave()
 
 
 def main():
