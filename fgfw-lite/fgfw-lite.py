@@ -879,8 +879,8 @@ class parent_proxy(object):
     def no_goagent(self, uri):
         if re.match(r'^[^/]+:\d+$', uri):
             s = set(conf.parentlist)
-            s.discard('GoAgent')
-            s.discard('GoAgent-PAAS')
+            s.discard('goagent')
+            s.discard('goagent-php')
             s.discard('direct')
             if s:
                 return True
