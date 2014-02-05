@@ -1029,7 +1029,7 @@ class goagentHandler(FGFWProxyHandler):
 
     def config(self):
         self.filelist = [('https://github.com/goagent/goagent/raw/3.0/local/proxy.py', './goagent/proxy.py'),
-                         ('https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.ini'),
+                         ('https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.sample.ini'),
                          ('https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'),
                          ]
         self.cwd = '%s/goagent' % WORKINGDIR
@@ -1044,7 +1044,7 @@ class goagentHandler(FGFWProxyHandler):
 
     def _config(self):
         goagent = SConfigParser()
-        goagent.read('./goagent/proxy.ini')
+        goagent.read('./goagent/proxy.sample.ini')
 
         if conf.userconf.dget('goagent', 'GAEAppid', 'goagent') != 'goagent':
             goagent.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'ipv4'))
