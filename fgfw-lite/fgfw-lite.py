@@ -229,21 +229,26 @@ class HTTPProxyServer(HTTPServer):
 
 class ssClientStream(tornado.iostream.IOStream):
 
-    def connect(self, address, ssServer, callback=None, server_hostname=None):
+    def connect(self, address, callback=None, server_hostname=None):
         '''
         connect address via ssServer
         ssServer: 'ss://method:password@hostname:port'
         '''
+        host, port, ssServer = address
         p = urlparse.urlparse(ssServer)
+        self._ssr = host, port
+        self._sscb = callback
         _, sshost, ssport, ssmethod, sspassword = (p.scheme, p.hostname, p.port, p.username, p.password)
         self.crypto = encrypt.Encryptor(sspassword, ssmethod)
-        super(ssClientStream, self).connect((sshost, ssport))
-        host, port = address
+        super(ssClientStream, self).connect((sshost, ssport), self.ss_conn)
+
+    def ss_conn(self):
+        host, port = self._ssr
         data = b''.join([b'\x03',
                         chr(len(host)).encode(),
                         host.encode(),
                         struct.pack(b">H", port)])
-        self.write(data, callback=callback)
+        self.write(data, self._sscb)
 
     def read_from_fd(self):
         chunk = super(ssClientStream, self).read_from_fd()
@@ -251,9 +256,8 @@ class ssClientStream(tornado.iostream.IOStream):
             return self.crypto.decrypt(chunk)
         return chunk
 
-    def write_to_fd(self, data):
-        data = self.crypto.encrypt(data)
-        return super(ssClientStream, self).write_to_fd(data)
+    def write(self, data, callback=None):
+        super(ssClientStream, self).write(self.crypto.encrypt(data), callback)
 
 
 @lru_cache(128, timeout=20)
@@ -368,7 +372,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         elif self.pptype == 'ss':
             self.upstream = ssClientStream(s)
             self.upstream.set_close_callback(self.on_upstream_close)
-            self.upstream.connect((self.request.host.rsplit(':', 1)[0], self.requestport), ssServer=conf.parentdict.get(self.ppname))
+            yield gen.Task(self.upstream.connect, (self.request.host.rsplit(':', 1)[0], self.requestport, conf.parentdict.get(self.ppname)))
         elif self.pptype == 'socks5':
             logging.debug('connecting to socks5 server')
             yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
