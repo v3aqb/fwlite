@@ -899,10 +899,10 @@ class parent_proxy(object):
         f = self.ifgfwed(uri, host, level)
         parentlist = conf.parentlist[:]
         if self.no_goagent(uri):
-            if 'GoAgent' in parentlist:
-                parentlist.remove('GoAgent')
-            if 'GoAgent-PAAS' in parentlist:
-                parentlist.remove('GoAgent-PAAS')
+            if 'goagent' in parentlist:
+                parentlist.remove('goagent')
+            if 'goagent-php' in parentlist:
+                parentlist.remove('goagent-php')
 
         if f is False:
             return ['direct']
