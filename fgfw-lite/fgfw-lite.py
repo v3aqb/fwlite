@@ -1210,6 +1210,7 @@ class fgfwproxy(FGFWProxyHandler):
                          ('https://github.com/v3aqb/fgfw-lite/raw/master/userconf.sample.ini', './userconf.sample.ini'),
                          ('https://github.com/v3aqb/fgfw-lite/raw/master/README.md', './README.md'),
                          ('https://github.com/v3aqb/fgfw-lite/raw/master/Python27/python27.zip', './Python27/python27.zip'),
+                         ('https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/encrypt.py', './fgfw-lite/encrypt.py')
                          ]
         self.enable = conf.userconf.dgetbool('fgfwproxy', 'enable', True)
         self.enableupdate = conf.userconf.dgetbool('fgfwproxy', 'update', True)
