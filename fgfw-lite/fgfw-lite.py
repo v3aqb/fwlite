@@ -425,7 +425,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                     break
         if self.upstream is None:
             yield self.connect_remote_with_proxy()
-        if all((self.request.method == 'CONNECT', self.requestport == 443, self.ppname == 'direct', self._proxylist)):
+        if all((self.request.method == 'CONNECT', self.requestport == 443, self.pphost is None, self._proxylist)):
             data = yield gen.Task(self.request.connection.stream.read_bytes, 3)
             self._crbuffer.append(data)
             if data in (b'\x16\x03\x00', b'\x16\x03\x01', b'\x16\x03\x02', ):
@@ -495,7 +495,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         def read_headers(data=None):
             logging.debug('reading response header')
             self.__t = time.time()
-            if self.ppname not in ('direct', 'GoAgent'):
+            if self.ppname not in ('direct', 'goagent'):
                 self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + RTIMEOUT, stack_context.wrap(self.on_upstream_close))
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
@@ -672,7 +672,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         client = self.request.connection.stream
         upstream = self.upstream
 
-        if self.ppname != 'direct':  # detect bad shadowsocks server
+        if self.ppname not in ('direct', 'goagent'):  # detect bad shadowsocks server
             self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + RTIMEOUT, stack_context.wrap(self.on_upstream_close))
         if self.pptype and 'http' in self.pptype:
             s = [b'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version), ]
@@ -1055,7 +1055,7 @@ class goagentHandler(FGFWProxyHandler):
             goagent.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
             goagent.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
             goagent.set('gae', 'options', conf.userconf.dget('goagent', 'options', ''))
-            conf.addparentproxy('GoAgent', 'http://127.0.0.1:8087')
+            conf.addparentproxy('goagent', 'http://127.0.0.1:8087')
         else:
             goagent.set('gae', 'appid', 'dummy')
 
@@ -1063,7 +1063,7 @@ class goagentHandler(FGFWProxyHandler):
             goagent.set('php', 'enable', '1')
             goagent.set('php', 'password', conf.userconf.dget('goagent', 'phppassword', '123456'))
             goagent.set('php', 'fetchserver', conf.userconf.dget('goagent', 'phpfetchserver', 'http://.com/'))
-            conf.addparentproxy('GoAgent-PAAS', 'http://127.0.0.1:8088')
+            conf.addparentproxy('goagent-php', 'http://127.0.0.1:8088')
         else:
             goagent.set('php', 'enable', '0')
 
