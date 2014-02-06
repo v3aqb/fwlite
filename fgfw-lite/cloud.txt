@@ -10,3 +10,4 @@
 |http://www.blogger.com forcehttps
 |http://*.wikipedia.org forcehttps
 @@||twimg.com
+||feedly.com
