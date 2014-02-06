@@ -278,10 +278,10 @@ def ssl_handshake_ok(uri):
 
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ('GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT', 'OPTIONS')
-    LOCALHOST = ('127.0.0.1', 'localhost')
+    LOCALHOST = ('127.0.0.1', '::1', 'localhost')
+    DEFAULT_PORT = {'http': 80, 'https': 443, 'socks5': 1080, }
 
     def _getparent(self, level=1):
-        default_port = {'http': 80, 'https': 443, 'socks5': 1080, }
         if not self._proxylist:
             self._proxylist = PARENT_PROXY.parentproxy(self.request.uri, self.request.host.rsplit(':', 1)[0], level)
         self.ppname = self._proxylist.pop(0)
@@ -292,7 +292,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             r = re.match(r'^(.*)\:(\d+)$', self.pphost)
             if r:
                 self.pphost, self.ppport = r.groups()
-        self.ppport = self.ppport or default_port.get(self.pptype)
+        self.ppport = self.ppport or self.DEFAULT_PORT.get(self.pptype)
         if self.pptype in ('socks5', 'ss'):
             self.upstream_name = '{}-{}-{}'.format(self.ppname, self.request.host, str(self.requestport))
         else:
@@ -332,11 +332,11 @@ class ProxyHandler(tornado.web.RequestHandler):
             return
 
         # try to get host from uri
-        if self.request.host == "127.0.0.1":
+        if self.request.host == "127.0.0.1":  # no host section in headers
             if not self.request.uri.startswith('/'):
                 self.request.headers['Host'] = self.request.host = self.request.uri.split('/')[2] if '//' in self.request.uri else self.request.uri
             else:
-                self.send_error(status_code=403)
+                self.send_error(status_code=501)
                 return
 
         if any(host == self.request.host.rsplit(':', 1)[0] for host in self.LOCALHOST):
