@@ -271,9 +271,7 @@ def ssl_handshake_ok(uri):
         s.close()
     except Exception as e:
         logging.warning(e)
-        logging.info('add autoproxy rule: |https://%s' % host)
-        o = autoproxy_rule('|https://%s' % host)
-        o.expire = time.time() + 60 * 10
+        PARENT_PROXY.add_temp_rule('|https://%s' % host)
         return False
     return True
 
@@ -597,10 +595,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         if all((self._success, self.get_status() < 400, self._proxy_retry)) or\
                 all((self.request.method == 'CONNECT', not self._success, self.ppname == 'direct', self._proxylist)):
             rule = '%s%s' % ('|https://' if self.request.method == 'CONNECT' else '|http://', self.request.host.split(':')[0])
-            logging.info('add autoproxy rule: %s' % rule)
-            o = autoproxy_rule(rule)
-            o.expire = time.time() + 60 * 10
-            PARENT_PROXY.gfwlist_force.append(o)
+            PARENT_PROXY.add_temp_rule(rule)
 
     def on_connection_close(self):
         logging.debug('client connection closed')
@@ -695,14 +690,19 @@ class ForceProxyHandler(ProxyHandler):
         self._getparent(level)
 
 
+class ExpiredError(Exception):
+    pass
+
+
 class autoproxy_rule(object):
-    def __init__(self, arg):
+    def __init__(self, arg, expire=None):
         super(autoproxy_rule, self).__init__()
         if not isinstance(arg, str):
             arg = str(arg)
         self.rule = arg.strip()
         if len(self.rule) < 3 or self.rule.startswith('!') or self.rule.startswith('[') or '#' in self.rule:
             raise TypeError("invalid autoproxy_rule: %s" % self.rule)
+        self.expire = expire
         self._ptrn = self._autopxy_rule_parse(self.rule)
 
     def _autopxy_rule_parse(self, rule):
@@ -733,6 +733,8 @@ class autoproxy_rule(object):
             return parse(rule)
 
     def match(self, uri):
+        if self.expire and self.expire < time.time():
+            raise ExpiredError
         return self._ptrn.search(uri)
 
 
@@ -775,6 +777,7 @@ class parent_proxy(object):
         self.override = []
         self.gfwlist_force = []
         self.chinanet = []
+        self.temp_rules = set()
         REDIRECTOR.lst = []
 
         def add_rule(line, force=False):
@@ -847,14 +850,15 @@ class parent_proxy(object):
         if level == 3:
             return True
         for rule in self.gfwlist_force:
-            if hasattr(rule, 'expire') and time.time() > rule.expire:
+            try:
+                if rule.match(uri):
+                    return True
+            except ExpiredError:
+                logging.info('%s expired' % rule.rule)
                 self.gfwlist_force.remove(rule)
-                logging.debug('%s expired' % rule.rule)
-            elif rule.match(uri):
-                return True
+                self.temp_rules.discard(rule.rule)
         return False
 
-    @lru_cache(128, timeout=120)
     def ifgfwed(self, uri, host, level=1):
 
         if level == 0:
@@ -913,6 +917,12 @@ class parent_proxy(object):
             else:
                 logging.warning('No parent proxy available, direct connection is used')
         return parentlist
+
+    def add_temp_rule(self, rule):
+        if rule not in self.temp_rules:
+            logging.info('add autoproxy rule: %s' % rule)
+            self.gfwlist_force.append(autoproxy_rule(rule, expire=time.time() + 60 * 10))
+            self.temp_rules.add(rule)
 
 PARENT_PROXY = parent_proxy()
 PARENT_PROXY.config()
