@@ -891,13 +891,17 @@ class parent_proxy(object):
 
     @lru_cache(256, timeout=120)
     def no_goagent(self, uri):
-        if re.match(r'^[^/]+:\d+$', uri):
+        r = re.match(r'^([^/]+):\d+$', uri)
+        if r:
             s = set(conf.parentlist)
             s.discard('goagent')
             s.discard('goagent-php')
             s.discard('direct')
-            if s:
-                return True
+            if r.groups()[0] in ['play.google.com', 'ssl.gstatic.com', 'mail-attachment.googleusercontent.com', 'webcache.googleusercontent.com', 's1.googleusercontent.com', 's2.googleusercontent.com', 'images1-focus-opensocial.googleusercontent.com', 'images2-focus-opensocial.googleusercontent.com', 'images3-focus-opensocial.googleusercontent.com', 'lh0.googleusercontent.com', 'lh1.googleusercontent.com', 'lh2.googleusercontent.com', 'lh3.googleusercontent.com', 'lh4.googleusercontent.com', 'lh5.googleusercontent.com', 'lh6.googleusercontent.com', 'lh7.googleusercontent.com', 'lh8.googleusercontent.com', 'lh9.googleusercontent.com', 'lh10.googleusercontent.com', 'lh11.googleusercontent.com', 'lh12.googleusercontent.com']:
+                return bool(s)
+            if any(r.groups()[0].endswith(path) for path in ['.google.com', '.google.com.hk', '.googleapis.com', '.android.com', '.appspot.com', '.googlegroups.com', '.googlesource.com', '.googleusercontent.com', '.google-analytics.com', '.googlecode.com', '.gstatic.com']):
+                return False
+            return bool(s)
 
     def parentproxy(self, uri, host, level=1):
         '''
