@@ -5,6 +5,7 @@ import os
 import sys
 import subprocess
 import shlex
+import threading
 from PySide import QtCore, QtGui
 
 
@@ -82,6 +83,7 @@ class MainWindow(QtGui.QMainWindow):
             self.ui.textEdit.setStyleSheet("font: 9pt \"Consolas\";")
         else:
             self.ui.textEdit.setStyleSheet("font: 9pt \"Droid Sans Mono\";")
+        self._lock = threading.Lock()
         self.setWindowIcon(QtGui.QIcon(TRAY_ICON))
         self.center()
         self.createActions()
@@ -127,22 +129,25 @@ class MainWindow(QtGui.QMainWindow):
             self.showToggle()
 
     def on_Quit(self):
-        self.thread.wtrigger.emit('sys.exit()\n')
-        self.thread.wait()
-        QtGui.qApp.quit()
+        with self._lock:
+            self.thread.wtrigger.emit('sys.exit()\n')
+            self.thread.wait()
+            QtGui.qApp.quit()
 
     def send(self):
-        te = self.ui.lineEdit.text()
-        self.ui.lineEdit.clear()
-        self.thread.wtrigger.emit(te + '\n')
-        self.update_text(te)
+        with self._lock:
+            te = self.ui.lineEdit.text()
+            self.ui.lineEdit.clear()
+            self.thread.wtrigger.emit(te + '\n')
+            self.update_text(te)
 
     def update_text(self, text):
-        if text:
-            if len(self.ui.textEdit.toPlainText().splitlines()) > 300:
-                self.ui.textEdit.setPlainText(u'\n'.join(self.ui.textEdit.toPlainText().splitlines()[-100:]))
-            self.ui.textEdit.moveCursor(QtGui.QTextCursor.End)
-            self.ui.textEdit.append(text)
+        with self._lock:
+            if text:
+                if len(self.ui.textEdit.toPlainText().splitlines()) > 300:
+                    self.ui.textEdit.setPlainText(u'\n'.join(self.ui.textEdit.toPlainText().splitlines()[-100:]))
+                self.ui.textEdit.moveCursor(QtGui.QTextCursor.End)
+                self.ui.textEdit.append(text)
 
     def showToggle(self):
         if self.isVisible():
@@ -152,10 +157,11 @@ class MainWindow(QtGui.QMainWindow):
             self.activateWindow()
 
     def reload(self):
-        self.thread.wtrigger.emit('sys.exit()\n')
-        self.thread.wait()
-        self.ui.textEdit.clear()
-        self.createProcess()
+        with self._lock:
+            self.thread.wtrigger.emit('sys.exit()\n')
+            self.thread.wait()
+            self.ui.textEdit.clear()
+            self.createProcess()
 
 if __name__ == "__main__":
     app = QtGui.QApplication('')
