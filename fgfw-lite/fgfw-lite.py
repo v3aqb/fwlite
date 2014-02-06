@@ -278,6 +278,7 @@ def ssl_handshake_ok(uri):
 
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ('GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT', 'OPTIONS')
+    LOCALHOST = ('127.0.0.1', 'localhost')
 
     def _getparent(self, level=1):
         default_port = {'http': 80, 'https': 443, 'socks5': 1080, }
@@ -337,6 +338,10 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 self.send_error(status_code=403)
                 return
+
+        if any(host == self.request.host.rsplit(':', 1)[0] for host in self.LOCALHOST):
+            self.send_error(status_code=403)
+            return
 
         self.requestpath = '/'.join(self.request.uri.split('/')[3:]) if '//' in self.request.uri else ''
         if self.request.method == 'CONNECT':
