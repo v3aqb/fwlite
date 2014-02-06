@@ -313,7 +313,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         self._proxylist = []
         self._crbuffer = []
         # transparent proxy
-        if self.request.method != 'CONNECT' and self.request.uri.startswith('/') and self.request.host != "127.0.0.1":
+        if self.request.uri.startswith('/') and self.request.host != "127.0.0.1":
             self.request.uri = 'http://%s%s' % (self.request.host, self.request.uri)
 
         self.uris = '%s%s' % (self.request.uri.split('?')[0], '?' if len(self.request.uri.split('?')) > 1 else '')
@@ -344,7 +344,6 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.send_error(status_code=403)
             return
 
-        self.requestpath = '/'.join(self.request.uri.split('/')[3:]) if '//' in self.request.uri else ''
         if self.request.method == 'CONNECT':
             self.requestport = int(self.request.uri.rsplit(':', 1)[1])
         else:
@@ -482,7 +481,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                     a = '%s:%s' % (self.ppusername, self.pppassword)
                     self.request.headers['Proxy-Authorization'] = 'Basic %s\r\n' % base64.b64encode(a.encode())
             else:
-                s = u'%s /%s %s\r\n' % (self.request.method, self.requestpath, self.request.version)
+                s = u'%s /%s %s\r\n' % (self.request.method, '/'.join(self.request.uri.split('/')[3:]), self.request.version)
             s = [s, ]
             s.append(u'\r\n'.join([u'%s: %s' % (key, value) for key, value in self.request.headers.items()]))
             s.append(u'\r\n\r\n')
