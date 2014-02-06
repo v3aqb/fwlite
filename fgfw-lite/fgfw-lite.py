@@ -309,6 +309,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         self._no_retry = False
         self._timeout = None
         self._success = False
+        self.ppname, self.pptype, self.pphost, self.ppport, self.ppusername, self.pppassword = 'direct', None, None, None, None, None
         self._proxylist = []
         self._crbuffer = []
         # transparent proxy
