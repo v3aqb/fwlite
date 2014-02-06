@@ -840,6 +840,7 @@ class parent_proxy(object):
         self.chinanet.sort(key=lambda r: r[0])
         self.iplist = [r[0] for r in self.chinanet]
 
+    @lru_cache(256, timeout=120)
     def ifhost_in_china(self, host):
         try:
             i = ip_from_string(socket.gethostbyname(host))
@@ -864,6 +865,10 @@ class parent_proxy(object):
                 self.temp_rules.discard(rule.rule)
         return False
 
+    @lru_cache(256, timeout=120)
+    def gfwlist_match(self, uri):
+        return any(rule.match(uri) for rule in self.gfwlist)
+
     def ifgfwed(self, uri, host, level=1):
 
         if level == 0:
@@ -881,7 +886,7 @@ class parent_proxy(object):
         if not a and self.ifhost_in_china(host):
             return None
 
-        if a or forceproxy or any(rule.match(uri) for rule in self.gfwlist):
+        if a or forceproxy or self.gfwlist_match(uri):
             return True
 
     @lru_cache(256, timeout=120)
