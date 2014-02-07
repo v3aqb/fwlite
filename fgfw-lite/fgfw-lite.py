@@ -879,15 +879,15 @@ class parent_proxy(object):
         else:
             forceproxy = False
 
-        a = self.if_gfwlist_force(uri, level)
+        gfwlist_force = self.if_gfwlist_force(uri, level)
 
         if any(rule.match(uri) for rule in self.override):
             return None
 
-        if not a and (HOSTS.get(host) or self.ifhost_in_china(host)):
+        if not gfwlist_force and (HOSTS.get(host) or self.ifhost_in_china(host)):
             return None
 
-        if a or forceproxy or self.gfwlist_match(uri):
+        if gfwlist_force or forceproxy or self.gfwlist_match(uri):
             return True
 
     @lru_cache(256, timeout=120)
