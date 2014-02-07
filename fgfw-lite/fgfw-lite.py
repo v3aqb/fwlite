@@ -97,6 +97,7 @@ def prestart():
             data = open(item).read()
         with open(item, 'w') as f:
             f.write(data)
+prestart()
 
 
 class Application(tornado.web.Application):
@@ -1365,7 +1366,6 @@ def atexit_do():
 
 
 def main():
-    prestart()
     fgfwproxy()
     goagentHandler()
     snovaHandler()
