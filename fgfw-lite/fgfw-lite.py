@@ -927,6 +927,7 @@ class parent_proxy(object):
                 return parentlist
             else:
                 logging.warning('No parent proxy available, direct connection is used')
+                return ['direct']
         return parentlist
 
     def add_temp_rule(self, rule):
