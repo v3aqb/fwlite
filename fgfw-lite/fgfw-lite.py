@@ -90,7 +90,7 @@ def prestart():
 
     if not os.path.isfile('./fgfw-lite/local.txt'):
         with open('./fgfw-lite/local.txt', 'w') as f:
-            f.write('! local gfwlist config\n! rules: https://adblockplus.org/zh_CN/filters\n')
+            f.write('! local gfwlist config\n! rules: https://autoproxy.org/zh-CN/Rules\n')
 
     for item in ['./userconf.ini', './fgfw-lite/local.txt']:
         with open(item) as f:
@@ -263,7 +263,7 @@ class ssClientStream(tornado.iostream.IOStream):
 
 
 @lru_cache(128, timeout=20)
-def ssl_handshake_ok(uri):
+def ssl_handshake_failed(uri):
     host, port = uri.rsplit(':', 1)
     try:
         s = socket.create_connection((host, int(port)), 1)
@@ -273,8 +273,7 @@ def ssl_handshake_ok(uri):
     except Exception as e:
         logging.warning(e)
         PARENT_PROXY.add_temp_rule('|https://%s' % host)
-        return False
-    return True
+        return True
 
 
 class ProxyHandler(tornado.web.RequestHandler):
@@ -435,7 +434,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             self._crbuffer.append(data)
             if data in (b'\x16\x03\x00', b'\x16\x03\x01', b'\x16\x03\x02', ):
                 logging.debug('looks like a ssl request, see if handshake ok')
-                if not ssl_handshake_ok(self.request.uri):
+                if ssl_handshake_failed(self.request.uri):
                     self.getparent()
                     yield self.connect_remote_with_proxy()
 
