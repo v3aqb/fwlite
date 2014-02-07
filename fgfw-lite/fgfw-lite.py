@@ -884,7 +884,7 @@ class parent_proxy(object):
         if any(rule.match(uri) for rule in self.override):
             return None
 
-        if not a and self.ifhost_in_china(host):
+        if not a and (HOSTS.get(host) or self.ifhost_in_china(host)):
             return None
 
         if a or forceproxy or self.gfwlist_match(uri):
