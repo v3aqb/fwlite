@@ -430,14 +430,14 @@ class ProxyHandler(tornado.web.RequestHandler):
                     break
         if self.upstream is None:
             yield self.connect_remote_with_proxy()
-        if all((self.request.method == 'CONNECT', self.requestport == 443, self.pphost is None, self._proxylist)):
-            data = yield gen.Task(self.request.connection.stream.read_bytes, 3)
-            self._crbuffer.append(data)
-            if data in (b'\x16\x03\x00', b'\x16\x03\x01', b'\x16\x03\x02', ):
-                logging.debug('looks like a ssl request, see if handshake ok')
-                if ssl_handshake_failed(self.request.uri):
-                    self.getparent()
-                    yield self.connect_remote_with_proxy()
+        # if all((self.request.method == 'CONNECT', self.requestport == 443, self.pphost is None, self._proxylist)):
+        #     data = yield gen.Task(self.request.connection.stream.read_bytes, 3)
+        #     self._crbuffer.append(data)
+        #     if data in (b'\x16\x03\x00', b'\x16\x03\x01', b'\x16\x03\x02', ):
+        #         logging.debug('looks like a ssl request, see if handshake ok')
+        #         if ssl_handshake_failed(self.request.uri):
+        #             self.getparent()
+        #             yield self.connect_remote_with_proxy()
 
     @tornado.web.asynchronous
     def get(self):
