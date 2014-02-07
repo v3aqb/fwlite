@@ -75,6 +75,7 @@ else:
             break
 
 UPSTREAM_POOL = defaultdict(list)
+HOSTS = {}
 ctimer = []
 rtimer = []
 CTIMEOUT = 5
@@ -1330,11 +1331,20 @@ class Config(object):
         self.BACKUP_INTV = 24
         self.parentdict = {}
         self.parentlist = []
-        self.hosts = {}
+        if os.path.isfile('./fgfw-lite/hosts'):
+            for line in reversed(open('./fgfw-lite/hosts').readlines()):
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    try:
+                        ip, host = line.split()
+                        HOSTS[host] = ip
+                    except Exception as e:
+                        logging.warning('%s %s' % (e, line))
         if 'hosts' not in self.userconf.sections():
             self.userconf.add_section('hosts')
+            self.userconf.write(open('userconf.ini', 'w'))
         for host, ip in self.userconf.items('hosts'):
-            self.hosts[host] = ip
+            HOSTS[host] = ip
 
     def reload(self):
         self.version.read('version.ini')
