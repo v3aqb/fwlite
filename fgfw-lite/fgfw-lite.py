@@ -823,10 +823,10 @@ class parent_proxy(object):
             except TypeError:
                 logging.warning('./fgfw-lite/gfwlist.txt is corrupted!')
 
-        self.chinanet.append((ip_from_string('192.168.0.0'), 2 ** (32 - 16)))
-        self.chinanet.append((ip_from_string('172.16.0.0'), 2 ** (32 - 12)))
-        self.chinanet.append((ip_from_string('10.0.0.0'), 2 ** (32 - 8)))
-        self.chinanet.append((ip_from_string('127.0.0.0'), 2 ** (32 - 8)))
+        self.chinanet.append((ip_from_string('192.168.0.0'), ip_from_string('192.168.0.0') + 2 ** (32 - 16)))
+        self.chinanet.append((ip_from_string('172.16.0.0'), ip_from_string('172.16.0.0') + 2 ** (32 - 12)))
+        self.chinanet.append((ip_from_string('10.0.0.0'), ip_from_string('10.0.0.0') + 2 ** (32 - 8)))
+        self.chinanet.append((ip_from_string('127.0.0.0'), ip_from_string('127.0.0.0') + 2 ** (32 - 8)))
 
         cnregex = re.compile(r'apnic\|cn\|ipv4\|[0-9\.]+\|[0-9]+\|[0-9]+\|a.*', re.IGNORECASE)
 
@@ -836,7 +836,7 @@ class parent_proxy(object):
             num_ip = int(unit_items[4])
             if starting_ip == 3419414528L:  # guxiang
                 continue
-            self.chinanet.append((starting_ip, num_ip))
+            self.chinanet.append((starting_ip, starting_ip + num_ip))
 
         self.chinanet.sort(key=lambda r: r[0])
         self.iplist = [r[0] for r in self.chinanet]
@@ -846,7 +846,7 @@ class parent_proxy(object):
         try:
             i = ip_from_string(socket.gethostbyname(host))
             a = self.chinanet[bisect.bisect_right(self.iplist, i) - 1]
-            if a[0] <= i < a[0] + a[1]:
+            if a[0] <= i < a[1]:
                 logging.info('%s in china' % host)
                 return True
             return False
