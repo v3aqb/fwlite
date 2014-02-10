@@ -866,9 +866,12 @@ class parent_proxy(object):
                 self.temp_rules.discard(rule.rule)
         return False
 
-    @lru_cache(256, timeout=120)
     def gfwlist_match(self, uri):
-        return any(rule.match(uri) for rule in self.gfwlist)
+        for i, rule in enumerate(self.gfwlist):
+            if rule.match(uri):
+                if i > 300:
+                    self.gfwlist.insert(0, self.gfwlist.pop(i))
+                return True
 
     def ifgfwed(self, uri, host, level=1):
 
