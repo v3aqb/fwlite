@@ -313,6 +313,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         self.ppname, self.pptype, self.pphost, self.ppport, self.ppusername, self.pppassword = 'direct', None, None, None, None, None
         self._proxylist = []
         self._crbuffer = []
+        self._state = 'prepare'
         # transparent proxy
         if self.request.uri.startswith('/') and self.request.host != "127.0.0.1":
             self.request.uri = 'http://%s%s' % (self.request.host, self.request.uri)
@@ -361,6 +362,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         logging.debug('connecting to server')
         if self._proxylist:  # on connection timeout
             self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + CTIMEOUT, stack_context.wrap(self.on_upstream_close))
+        self._state = 'connecting'
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         self.upstream = tornado.iostream.IOStream(s)
         self.upstream.set_close_callback(self.on_upstream_close)
@@ -442,6 +444,7 @@ class ProxyHandler(tornado.web.RequestHandler):
     @tornado.web.asynchronous
     def get(self):
         logging.debug('GET')
+        self._state = 'get'
         client = self.request.connection.stream
         self._client_write_buffer = []
 
@@ -476,6 +479,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         def _sent_request():
             logging.debug('remote server connected, sending http request')
+            self._state = 'sent Request'
             if self.pptype in ('http', 'https'):
                 s = u'%s %s %s\r\n' % (self.request.method, self.request.uri, self.request.version)
                 if self.ppusername and 'Proxy-Authorization' not in self.request.headers:
@@ -489,6 +493,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.upstream.write(u''.join(s).encode('latin1'), _sent_body)
 
         def _sent_body():
+            self._state = 'sent request body'
             content_length = self.request.headers.get("Content-Length")
             if content_length:
                 logging.debug('sending request body')
@@ -498,6 +503,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 read_headers()
 
         def read_headers(data=None):
+            self._state = 'read headers'
             logging.debug('reading response header')
             self.__t = time.time()
             if self.ppname not in ('direct', 'goagent'):
@@ -505,6 +511,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def _on_headers(data=None):
+            self._state = 'resolve headers'
             self.remove_timeout()
             rtimer.append(time.time() - self.__t)
             _data = unicode(data, 'latin1')
@@ -539,7 +546,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 content_length = int(self._headers["Content-Length"])
             else:
                 content_length = None
-
+            self._state = '_on_body'
             if self.request.method == "HEAD" or 100 <= self.get_status() < 200 or\
                     self.get_status() in (204, 304):
                 _finish()
@@ -556,11 +563,13 @@ class ProxyHandler(tornado.web.RequestHandler):
         def _on_chunk_lenth(data):
             _client_write(data)
             logging.debug('reading chunk data')
+            self._state = '_on_chunk_lenth'
             length = int(data.strip(), 16)
             self.upstream.read_bytes(length + 2,  # chunk ends with \r\n
                                      _on_chunk_data)
 
         def _on_chunk_data(data):
+            self._state = '_on_chunk_data'
             _client_write(data)
             if len(data) != 2:
                 logging.debug('reading chunk lenth')
@@ -626,7 +635,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         if not self._finished:
             if not self._no_retry:
                 if self._proxylist:
-                    logging.warning('%s %s Failed, retry...' % (self.request.method, self.uris))
+                    logging.warning('%s %s Failed, info: %s, retry...' % (self.request.method, self.uris, self._state))
                     self.clear()
                     self._proxy_retry += 1
                     self.getparent()
@@ -636,11 +645,11 @@ class ProxyHandler(tornado.web.RequestHandler):
                     else:
                         self.get()
                 else:
-                    logging.warning('%s %s FAILED!' % (self.request.method, self.uris))
+                    logging.warning('%s %s FAILED! info: %s' % (self.request.method, self.uris, self._state))
                     self.send_error(504)
             else:
                 if self.request.method != 'CONNECT':
-                    logging.warning('%s %s FAILED!' % (self.request.method, self.uris))
+                    logging.warning('%s %s FAILED! info: %s' % (self.request.method, self.uris, self._state))
                 if not self.request.connection.stream.closed():
                     self.request.connection.stream.close()
 
@@ -670,7 +679,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             upstream.read_until_close(client.close, client_write)
 
         logging.debug('CONNECT')
-
+        self._state = 'connect method'
         client = self.request.connection.stream
         upstream = self.upstream
 
