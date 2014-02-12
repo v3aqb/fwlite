@@ -360,23 +360,40 @@ class ProxyHandler(tornado.web.RequestHandler):
     @gen.coroutine
     def connect_remote_with_proxy(self):
         logging.debug('connecting to server')
-        if self._proxylist:  # on connection timeout
-            self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + CTIMEOUT, stack_context.wrap(self.on_upstream_close))
         self._state = 'connecting'
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         self.upstream = tornado.iostream.IOStream(s)
         self.upstream.set_close_callback(self.on_upstream_close)
         if self.pptype is None:
-            t = time.time()
-            yield gen.Task(self.upstream.connect, (HOSTS.get(self.request.host.rsplit(':', 1)[0]) or self.request.host.rsplit(':', 1)[0], self.requestport))
-            ctimer.append(time.time() - t)
+            self.upstream = None
+            hosts = HOSTS.get(self.request.host.rsplit(':', 1)[0])
+            if hosts:
+                try:
+                    s = socket.create_connection((self.request.host.rsplit(':', 1)[0], self.requestport), timeout=5)
+                    self.upstream = tornado.iostream.IOStream(s)
+                    self.upstream.set_close_callback(self.on_upstream_close)
+                except socket.error:
+                    pass
+            if not self.upstream:
+                try:
+                    s = socket.create_connection((self.request.host.rsplit(':', 1)[0], self.requestport), timeout=5)
+                    self.upstream = tornado.iostream.IOStream(s)
+                    self.upstream.set_close_callback(self.on_upstream_close)
+                except socket.error:
+                    self.getparent()
+                    yield self.get_remote_conn()
+            self.upstream.set_close_callback(self.on_upstream_close)
         elif self.pptype == 'http':
             yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
         elif self.pptype == 'https':
+            if self._proxylist:  # on connection timeout
+                self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + CTIMEOUT, stack_context.wrap(self.on_upstream_close))
             self.upstream = tornado.iostream.SSLIOStream(s)
             self.upstream.set_close_callback(self.on_upstream_close)
             yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
         elif self.pptype == 'ss':
+            if self._proxylist:  # on connection timeout
+                self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + CTIMEOUT, stack_context.wrap(self.on_upstream_close))
             self.upstream = ssClientStream(s)
             self.upstream.set_close_callback(self.on_upstream_close)
             yield gen.Task(self.upstream.connect, (self.request.host.rsplit(':', 1)[0], self.requestport, conf.parentdict.get(self.ppname)))
