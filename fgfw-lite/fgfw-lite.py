@@ -433,7 +433,10 @@ class ProxyHandler(tornado.web.RequestHandler):
             lst = UPSTREAM_POOL.get(self.upstream_name, [])
             for item in lst:
                 lst.remove(item)
-                if not item.closed():
+                if item.last_active < time.time() - 5:  # keep-alive for 5s
+                    if not item.closed():
+                        item.close()
+                elif not item.closed():
                     logging.debug('reuse connection')
                     self.upstream = item
                     self.upstream.set_close_callback(self.on_upstream_close)
@@ -590,6 +593,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             if _close_flag:
                 self.upstream.close()
             elif not self.upstream.closed():
+                self.upstream.last_active = time.time()
                 UPSTREAM_POOL[self.upstream_name].append(self.upstream)
                 logging.debug('pooling remote connection')
             self.finish()
