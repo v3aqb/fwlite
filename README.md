@@ -7,11 +7,10 @@ For windows users, [download](https://github.com/v3aqb/fgfw-lite/archive/master.
 
 requirements under openSUSE:
 
-    zypper install python-tornado python-repoze.lru
+    zypper install python-tornado python-repoze.lru python-futures
     zypper install python-gtk python-vte python-notify  # for gui
-    zypper install python-gevent  # for better performance
     zypper install python-M2Crypto  # shadowsocks
-    zypper install python-pip python-pyOpenSSL  # goagent
+    zypper install python-pip python-pyOpenSSL python-gevent  # goagent
     pip install dnslib  # goagent
 
 goagent https://code.google.com/p/goagent/

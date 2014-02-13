@@ -43,10 +43,12 @@ from threading import Thread
 import urllib2
 import urlparse
 from repoze.lru import lru_cache
+from concurrent.futures import ThreadPoolExecutor
 import tornado.ioloop
 import tornado.iostream
 import tornado.web
 from tornado import gen, stack_context
+from tornado.concurrent import run_on_executor
 from tornado.httputil import HTTPHeaders
 from tornado.httpserver import HTTPConnection, HTTPServer, _BadRequestException, HTTPRequest
 try:
@@ -277,10 +279,61 @@ def ssl_handshake_failed(uri):
         return True
 
 
+class ThreadedConnect(object):
+    """MOdified from `ThreadedResolver` from tornado 3.1.
+
+    Requires the `concurrent.futures` package to be installed
+    (available in the standard library since Python 3.2,
+    installable with ``pip install futures`` in older versions).
+
+    """
+    _threadpool = None
+    _threadpool_pid = None
+
+    def __init__(self, io_loop=None, num_threads=10):
+        self.io_loop = io_loop or tornado.ioloop.IOLoop.current()
+        self.executor = ThreadedConnect._create_threadpool(num_threads)
+        self.close_executor = False
+
+    @classmethod
+    def _create_threadpool(cls, num_threads):
+        pid = os.getpid()
+        if cls._threadpool_pid != pid:
+            # Threads cannot survive after a fork, so if our pid isn't what it
+            # was when we created the pool then delete it.
+            cls._threadpool = None
+        if cls._threadpool is None:
+            cls._threadpool = ThreadPoolExecutor(num_threads)
+            cls._threadpool_pid = pid
+        return cls._threadpool
+
+    @run_on_executor
+    def connect(self, host, port, family=socket.AF_UNSPEC):
+        hosts = HOSTS.get(host)
+        s = None
+        if hosts:
+            try:
+                s = socket.create_connection((hosts, port), timeout=5)
+            except socket.error:
+                pass
+        if not s:
+            try:
+                s = socket.create_connection((host, port), timeout=5)
+            except socket.error:
+                pass
+        return s
+
+    def close(self):
+        if self.close_executor:
+            self.executor.shutdown()
+        self.executor = None
+
+
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ('GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT', 'OPTIONS')
     LOCALHOST = ('127.0.0.1', '::1', 'localhost')
     DEFAULT_PORT = {'http': 80, 'https': 443, 'socks5': 1080, }
+    ThreadedConnect = ThreadedConnect(num_threads=50)
 
     def _getparent(self, level=1):
         if not self._proxylist:
@@ -365,24 +418,13 @@ class ProxyHandler(tornado.web.RequestHandler):
         self.upstream = tornado.iostream.IOStream(s)
         self.upstream.set_close_callback(self.on_upstream_close)
         if self.pptype is None:
-            self.upstream = None
-            hosts = HOSTS.get(self.request.host.rsplit(':', 1)[0])
-            if hosts:
-                try:
-                    s = socket.create_connection((self.request.host.rsplit(':', 1)[0], self.requestport), timeout=5)
-                    self.upstream = tornado.iostream.IOStream(s)
-                    self.upstream.set_close_callback(self.on_upstream_close)
-                except socket.error:
-                    pass
-            if not self.upstream:
-                try:
-                    s = socket.create_connection((self.request.host.rsplit(':', 1)[0], self.requestport), timeout=5)
-                    self.upstream = tornado.iostream.IOStream(s)
-                    self.upstream.set_close_callback(self.on_upstream_close)
-                except socket.error:
-                    self.getparent()
-                    yield self.get_remote_conn()
-            self.upstream.set_close_callback(self.on_upstream_close)
+            s = yield self.ThreadedConnect.connect(self.request.host.rsplit(':', 1)[0], self.requestport)
+            if s:
+                self.upstream = tornado.iostream.IOStream(s)
+                self.upstream.set_close_callback(self.on_upstream_close)
+            else:
+                self.getparent()
+                yield self.get_remote_conn()
         elif self.pptype == 'http':
             yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
         elif self.pptype == 'https':
