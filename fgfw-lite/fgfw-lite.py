@@ -449,6 +449,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         self._client_write_buffer = []
 
         def _do_client_write(data):
+            self.remove_timeout()
             if not client.closed():
                 client.write(data)
                 self._headers_written = True
@@ -459,7 +460,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 _do_client_write(data)
             else:
                 self._client_write_buffer.append(data)
-                if len(b''.join(self._client_write_buffer)) > 512000:
+                if len(b''.join(self._client_write_buffer)) > 65536:
                     while self._client_write_buffer:
                         _do_client_write(self._client_write_buffer.pop(0))
 
@@ -506,13 +507,12 @@ class ProxyHandler(tornado.web.RequestHandler):
             self._state = 'read headers'
             logging.debug('reading response header')
             self.__t = time.time()
-            if self.ppname not in ('direct', 'goagent'):
+            if self._proxylist:
                 self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + RTIMEOUT, stack_context.wrap(self.on_upstream_close))
             self.upstream.read_until_regex(r"\r?\n\r?\n", _on_headers)
 
         def _on_headers(data=None):
             self._state = 'resolve headers'
-            self.remove_timeout()
             rtimer.append(time.time() - self.__t)
             _data = unicode(data, 'latin1')
             first_line, _, header_data = _data.partition("\n")
