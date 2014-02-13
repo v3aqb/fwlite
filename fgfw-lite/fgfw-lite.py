@@ -36,7 +36,6 @@ import platform
 import base64
 import bisect
 import encrypt
-import ssl
 import socket
 import struct
 from threading import Thread
@@ -265,20 +264,6 @@ class ssClientStream(tornado.iostream.IOStream):
         super(ssClientStream, self).write(self.crypto.encrypt(data), callback)
 
 
-@lru_cache(128, timeout=20)
-def ssl_handshake_failed(uri):
-    host, port = uri.rsplit(':', 1)
-    try:
-        s = socket.create_connection((host, int(port)), 1)
-        s = ssl.wrap_socket(s)
-        s.do_handshake()
-        s.close()
-    except Exception as e:
-        logging.warning(e)
-        PARENT_PROXY.add_temp_rule('|https://%s' % host)
-        return True
-
-
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ('GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT', 'OPTIONS')
     LOCALHOST = ('127.0.0.1', '::1', 'localhost')
@@ -438,8 +423,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.upstream.set_nodelay(False)
             except Exception:
                 self.send_error(504, 'connect to socks5 proxy server failed')
-        else:
-            self.send_error(501)
         logging.debug('remote server connected')
         self.remove_timeout()
 
@@ -457,14 +440,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                     break
         if self.upstream is None:
             yield self.connect_remote_with_proxy()
-        # if all((self.request.method == 'CONNECT', self.requestport == 443, self.pphost is None, self._proxylist)):
-        #     data = yield gen.Task(self.request.connection.stream.read_bytes, 3)
-        #     self._crbuffer.append(data)
-        #     if data in (b'\x16\x03\x00', b'\x16\x03\x01', b'\x16\x03\x02', ):
-        #         logging.debug('looks like a ssl request, see if handshake ok')
-        #         if ssl_handshake_failed(self.request.uri):
-        #             self.getparent()
-        #             yield self.connect_remote_with_proxy()
 
     @tornado.web.asynchronous
     def get(self):
