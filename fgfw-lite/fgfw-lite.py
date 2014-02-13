@@ -76,7 +76,7 @@ else:
             break
 
 UPSTREAM_POOL = defaultdict(list)
-HOSTS = {}
+HOSTS = defaultdict(list)
 ctimer = []
 rtimer = []
 CTIMEOUT = 5
@@ -347,10 +347,10 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @run_on_executor
     def create_connection(self, host, port, family=socket.AF_UNSPEC):
-        hosts = HOSTS.get(host)
-        if hosts:
+        hosts = HOSTS.get(host, [])
+        for ipaddr in hosts:
             try:
-                s = socket.create_connection((hosts, port), timeout=5)
+                s = socket.create_connection((ipaddr, port), timeout=2)
                 return s
             except socket.error:
                 pass
@@ -1340,20 +1340,24 @@ class Config(object):
         self.BACKUP_INTV = 24
         self.parentdict = {}
         self.parentlist = []
-        if os.path.isfile('./fgfw-lite/hosts'):
-            for line in reversed(open('./fgfw-lite/hosts').readlines()):
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    try:
-                        ip, host = line.split()
-                        HOSTS[host] = ip
-                    except Exception as e:
-                        logging.warning('%s %s' % (e, line))
+
         if 'hosts' not in self.userconf.sections():
             self.userconf.add_section('hosts')
             self.userconf.write(open('userconf.ini', 'w'))
         for host, ip in self.userconf.items('hosts'):
-            HOSTS[host] = ip
+            if ip not in HOSTS.get(host, []):
+                HOSTS[host].append(ip)
+
+        if os.path.isfile('./fgfw-lite/hosts'):
+            for line in open('./fgfw-lite/hosts'):
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    try:
+                        ip, host = line.split()
+                        if ip not in HOSTS.get(host, []):
+                            HOSTS[host].append(ip)
+                    except Exception as e:
+                        logging.warning('%s %s' % (e, line))
 
     def reload(self):
         self.version.read('version.ini')
