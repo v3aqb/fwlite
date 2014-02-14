@@ -123,6 +123,12 @@ class Application(tornado.web.Application):
 
 
 class HTTPProxyConnection(HTTPConnection):
+    def __init__(self, stream, address, request_callback, no_keep_alive=False,
+                 xheaders=False, protocol=None):
+        super(HTTPProxyConnection, self).__init__(stream, address, request_callback, no_keep_alive=False,
+                                                  xheaders=False, protocol=None)
+        self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + 10, stack_context.wrap(self.close))
+
     def _handle_events(self, fd, events):
         if self.stream.closed():
             logging.warning("Got events for closed stream %d", fd)
@@ -181,6 +187,7 @@ class HTTPProxyConnection(HTTPConnection):
         return chunk
 
     def _on_headers(self, data):
+        self._timeout.callback = None
         try:
             data = unicode(data.decode('latin1'))
             eol = data.find("\r\n")
