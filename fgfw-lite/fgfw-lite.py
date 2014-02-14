@@ -199,18 +199,18 @@ class HTTPProxyConnection(HTTPConnection):
             if not version.startswith("HTTP/"):
                 raise _BadRequestException("Malformed HTTP version in HTTP Request-Line")
 
-            if method == 'POST':
-                # overwrite self.stream.read_from_fd, force a block
-                setattr(self.stream, 'read_from_fd', self.read_from_fd)
-                setattr(self.stream, '_handle_events', self._handle_events)
-                self.stream.io_loop.remove_handler(self.stream.fileno())
-                self.stream._state = None
             try:
                 headers = HTTPHeaders.parse(data[eol:])
             except ValueError:
                 # Probably from split() if there was no ':' in the line
                 raise _BadRequestException("Malformed HTTP headers")
-            if method == 'POST':
+
+            if method == 'POST' and int(headers.get("Content-Length", 0)) > 65535:
+                # overwrite self.stream.read_from_fd, force a block
+                setattr(self.stream, 'read_from_fd', self.read_from_fd)
+                setattr(self.stream, '_handle_events', self._handle_events)
+                self.stream.io_loop.remove_handler(self.stream.fileno())
+                self.stream._state = None
                 headers["Connection"] = "close"
 
             # HTTPRequest wants an IP, not a full socket address
