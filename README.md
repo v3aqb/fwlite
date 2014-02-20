@@ -10,8 +10,7 @@ requirements under openSUSE:
     zypper install python-tornado python-repoze.lru python-futures
     zypper install python-gtk python-vte python-notify  # for gui
     zypper install python-M2Crypto  # shadowsocks
-    zypper install python-pip python-pyOpenSSL python-gevent  # goagent
-    pip install dnslib  # goagent
+    zypper install python-pyOpenSSL python-gevent  # goagent
 
 goagent https://code.google.com/p/goagent/
 
