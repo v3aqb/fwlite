@@ -24,7 +24,9 @@ __version__ = '0.3.6.1'
 
 import sys
 import os
+import glob
 sys.path.append(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')))
+sys.path += glob.glob('%s/*.egg' % os.path.dirname(os.path.abspath(__file__)))
 from collections import defaultdict
 import subprocess
 import shlex
@@ -34,13 +36,13 @@ import errno
 import atexit
 import platform
 import base64
-import bisect
 import encrypt
 import socket
 import struct
 from threading import Thread
 import urllib2
 import urlparse
+import pygeoip
 from repoze.lru import lru_cache
 from concurrent.futures import ThreadPoolExecutor
 import tornado.ioloop
@@ -802,7 +804,7 @@ class parent_proxy(object):
         self.gfwlist = []
         self.override = []
         self.gfwlist_force = []
-        self.chinanet = []
+        self.localnet = []
         self.temp_rules = set()
         REDIRECTOR.lst = []
 
@@ -843,35 +845,26 @@ class parent_proxy(object):
             except TypeError:
                 logging.warning('./fgfw-lite/gfwlist.txt is corrupted!')
 
-        self.chinanet.append((ip_from_string('192.168.0.0'), ip_from_string('192.168.0.0') + 2 ** (32 - 16)))
-        self.chinanet.append((ip_from_string('172.16.0.0'), ip_from_string('172.16.0.0') + 2 ** (32 - 12)))
-        self.chinanet.append((ip_from_string('10.0.0.0'), ip_from_string('10.0.0.0') + 2 ** (32 - 8)))
-        self.chinanet.append((ip_from_string('127.0.0.0'), ip_from_string('127.0.0.0') + 2 ** (32 - 8)))
+        self.localnet.append((ip_from_string('192.168.0.0'), ip_from_string('192.168.0.0') + 2 ** (32 - 16)))
+        self.localnet.append((ip_from_string('172.16.0.0'), ip_from_string('172.16.0.0') + 2 ** (32 - 12)))
+        self.localnet.append((ip_from_string('10.0.0.0'), ip_from_string('10.0.0.0') + 2 ** (32 - 8)))
+        self.localnet.append((ip_from_string('127.0.0.0'), ip_from_string('127.0.0.0') + 2 ** (32 - 8)))
 
-        cnregex = re.compile(r'apnic\|cn\|ipv4\|[0-9\.]+\|[0-9]+\|[0-9]+\|a.*', re.IGNORECASE)
+        self.geoip = pygeoip.GeoIP('./fgfw-lite/GeoIP.dat')
 
-        for item in cnregex.findall(open('./fgfw-lite/delegated-apnic-latest').read()):
-            unit_items = item.split('|')
-            starting_ip = ip_from_string(unit_items[3])
-            num_ip = int(unit_items[4])
-            if starting_ip == 3419414528L:  # guxiang
-                continue
-            self.chinanet.append((starting_ip, starting_ip + num_ip))
-
-        self.chinanet.sort(key=lambda r: r[0])
-        self.iplist = [r[0] for r in self.chinanet]
+    @lru_cache(256, timeout=120)
+    def ifhost_in_local(self, host):
+        i = ip_from_string(socket.gethostbyname(host))
+        if any(a[0] <= i < a[1] for a in self.localnet):
+            return True
+        return False
 
     @lru_cache(256, timeout=120)
     def ifhost_in_china(self, host):
-        try:
-            i = ip_from_string(socket.gethostbyname(host))
-            a = self.chinanet[bisect.bisect_right(self.iplist, i) - 1]
-            if a[0] <= i < a[1]:
-                logging.info('%s in china' % host)
-                return True
-            return False
-        except Exception:
-            return None
+        if self.geoip.country_name_by_name(host) in ('China', ):
+            logging.info('%s in china' % host)
+            return True
+        return False
 
     def if_gfwlist_force(self, uri, level):
         if level == 3:
@@ -903,6 +896,9 @@ class parent_proxy(object):
             forceproxy = False
 
         gfwlist_force = self.if_gfwlist_force(uri, level)
+
+        if self.ifhost_in_local(host):
+            return False
 
         if any(rule.match(uri) for rule in self.override):
             return None
@@ -1249,7 +1245,6 @@ class fgfwproxy(FGFWProxyHandler):
 
     def config(self):
         self.filelist = [('https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './fgfw-lite/gfwlist.txt'),
-                         ('http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest', './fgfw-lite/delegated-apnic-latest'),
                          ('https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/fgfw-lite.py', './fgfw-lite/fgfw-lite.py'),
                          ('https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/cloud.txt', './fgfw-lite/cloud.txt'),
                          ('https://github.com/v3aqb/fgfw-lite/raw/master/userconf.sample.ini', './userconf.sample.ini'),
