@@ -856,17 +856,23 @@ class parent_proxy(object):
 
     @lru_cache(256, timeout=120)
     def ifhost_in_local(self, host):
-        i = ip_from_string(socket.gethostbyname(host))
-        if any(a[0] <= i < a[1] for a in self.localnet):
-            return True
-        return False
+        try:
+            i = ip_from_string(socket.gethostbyname(host))
+            if any(a[0] <= i < a[1] for a in self.localnet):
+                return True
+            return False
+        except socket.error:
+            return None
 
     @lru_cache(256, timeout=120)
     def ifhost_in_china(self, host):
-        if self.geoip.country_name_by_name(host) in ('China', ):
-            logging.info('%s in china' % host)
-            return True
-        return False
+        try:
+            if self.geoip.country_name_by_name(host) in ('China', ):
+                logging.info('%s in china' % host)
+                return True
+            return False
+        except socket.error:
+            return None
 
     def if_gfwlist_force(self, uri, level):
         if level == 3:
