@@ -1288,8 +1288,19 @@ class fgfwproxy(FGFWProxyHandler):
         http_server2 = HTTPProxyServer(app2)
         http_server2.listen(port + 1, address=address)
         ioloop = tornado.ioloop.IOLoop.instance()
+        pcallback = tornado.ioloop.PeriodicCallback(self.purge, 90000, io_loop=ioloop)
+        pcallback.start()
         if start_ioloop:
             ioloop.start()
+
+    def purge(self):
+        for k, v in UPSTREAM_POOL.items():
+            vcopy = v[:]
+            for item in vcopy:
+                if item.last_active < time.time() - 15:
+                    if not item.closed():
+                        item.close()
+                    v.remove(item)
 
 
 class SConfigParser(configparser.ConfigParser):
