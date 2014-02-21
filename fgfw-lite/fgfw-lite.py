@@ -455,6 +455,8 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
+        if self._finished:
+            return
         logging.debug('GET')
         self._state = 'get'
         client = self.request.connection.stream
