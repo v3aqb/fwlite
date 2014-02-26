@@ -382,9 +382,11 @@ class ProxyHandler(tornado.web.RequestHandler):
             if s:
                 self.upstream = tornado.iostream.IOStream(s)
                 self.upstream.set_close_callback(self.on_upstream_close)
-            else:
+            elif self._proxylist:
                 self.getparent()
                 yield self.get_remote_conn()
+            else:
+                self.send_error(status_code=504)
         elif self.pptype == 'http':
             yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
         elif self.pptype == 'https':
