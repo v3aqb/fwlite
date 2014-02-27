@@ -500,9 +500,12 @@ class ProxyHandler(tornado.web.RequestHandler):
                     callback()
 
             def write_to(data=None):
+                self._crbuffer.append(data)
                 if not d.closed():
                     d.write(data, read_from)
 
+            if self._crbuffer:
+                d.write(b''.join(self._crbuffer))
             read_from()
 
         def _sent_request():
@@ -525,7 +528,8 @@ class ProxyHandler(tornado.web.RequestHandler):
             content_length = self.request.headers.get("Content-Length")
             if content_length:
                 logging.debug('sending request body')
-                self.__content_length = int(content_length)
+                if not hasattr(self, '__content_length'):
+                    self.__content_length = int(content_length)
                 body_transfer(client, self.upstream, read_headers)
             else:
                 read_headers()
