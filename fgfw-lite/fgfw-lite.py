@@ -301,7 +301,6 @@ class ProxyHandler(tornado.web.RequestHandler):
     def getparent(self, level=1):
         self._getparent(level)
 
-    @gen.coroutine
     def prepare(self):
         self._proxy_retry = 0
         self._no_retry = False
@@ -351,8 +350,6 @@ class ProxyHandler(tornado.web.RequestHandler):
         if self.request.method == 'CONNECT':
             self.request.connection.stream.write(b'HTTP/1.1 200 Connection established\r\n\r\n')
             self._headers_written = True
-        self.getparent()
-        yield self.get_remote_conn()
 
     @run_on_executor
     def create_connection(self, host, port, family=socket.AF_UNSPEC):
@@ -374,9 +371,7 @@ class ProxyHandler(tornado.web.RequestHandler):
     def connect_remote_with_proxy(self):
         logging.debug('connecting to server')
         self._state = 'connecting'
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-        self.upstream = tornado.iostream.IOStream(s)
-        self.upstream.set_close_callback(self.on_upstream_close)
+
         if self.pptype is None:
             s = yield self.create_connection(self.request.host.rsplit(':', 1)[0], self.requestport)
             if s:
@@ -388,21 +383,29 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 self.send_error(status_code=504)
         elif self.pptype == 'http':
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+            self.upstream = tornado.iostream.IOStream(s)
+            self.upstream.set_close_callback(self.on_upstream_close)
             yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
         elif self.pptype == 'https':
             if self._proxylist:  # on connection timeout
                 self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + CTIMEOUT, stack_context.wrap(self.on_upstream_close))
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             self.upstream = tornado.iostream.SSLIOStream(s)
             self.upstream.set_close_callback(self.on_upstream_close)
             yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
         elif self.pptype == 'ss':
             if self._proxylist:  # on connection timeout
                 self._timeout = tornado.ioloop.IOLoop.current().add_timeout(time.time() + CTIMEOUT, stack_context.wrap(self.on_upstream_close))
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             self.upstream = ssClientStream(s)
             self.upstream.set_close_callback(self.on_upstream_close)
             yield gen.Task(self.upstream.connect, (self.request.host.rsplit(':', 1)[0], self.requestport, conf.parentdict.get(self.ppname)))
         elif self.pptype == 'socks5':
             logging.debug('connecting to socks5 server')
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+            self.upstream = tornado.iostream.IOStream(s)
+            self.upstream.set_close_callback(self.on_upstream_close)
             yield gen.Task(self.upstream.connect, (self.pphost, int(self.ppport)))
             try:
                 self.upstream.set_nodelay(True)
@@ -433,7 +436,11 @@ class ProxyHandler(tornado.web.RequestHandler):
                 yield gen.Task(self.upstream.read_bytes, 2)  # read port
                 self.upstream.set_nodelay(False)
             except Exception:
-                self.send_error(504, 'connect to socks5 proxy server failed')
+                if self._proxylist:
+                    self.getparent()
+                    yield self.get_remote_conn()
+                else:
+                    self.send_error(status_code=504)
         logging.debug('remote server connected')
         self.remove_timeout()
 
@@ -455,8 +462,12 @@ class ProxyHandler(tornado.web.RequestHandler):
         if self.upstream is None:
             yield self.connect_remote_with_proxy()
 
+    @gen.coroutine
     @tornado.web.asynchronous
     def get(self):
+        self.getparent()
+        yield self.get_remote_conn()
+
         if self._finished:
             return
         logging.debug('GET')
@@ -645,9 +656,6 @@ class ProxyHandler(tornado.web.RequestHandler):
         if not self.upstream.closed():
             self.upstream.set_close_callback(None)
             self.upstream.close()
-            global CTIMEOUT, RTIMEOUT
-            CTIMEOUT = min(CTIMEOUT + 1, 15)
-            RTIMEOUT = min(RTIMEOUT + 2, 15)
         logging.debug('request finished? %s headers_written? %s' % (self._finished, self._headers_written))
         if not self._finished:
             if not self._no_retry:
@@ -670,8 +678,12 @@ class ProxyHandler(tornado.web.RequestHandler):
                 if not self.request.connection.stream.closed():
                     self.request.connection.stream.close()
 
+    @gen.coroutine
     @tornado.web.asynchronous
     def connect(self):
+        self.getparent()
+        yield self.get_remote_conn()
+
         def upstream_write(data=None):
             if data is None:
                 data = b''.join(self._crbuffer)
