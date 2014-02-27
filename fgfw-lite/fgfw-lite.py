@@ -367,6 +367,14 @@ class ProxyHandler(tornado.web.RequestHandler):
             pass
         return None
 
+    @run_on_executor
+    def resolve(self, host, port, family=socket.AF_UNSPEC):
+        addrinfo = socket.getaddrinfo(host, port, family, socket.SOCK_STREAM)
+        results = []
+        for family, socktype, proto, canonname, address in addrinfo:
+            results.append((family, address))
+        return results
+
     @gen.coroutine
     def connect_remote_with_proxy(self):
         logging.debug('connecting to server')
@@ -378,7 +386,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.upstream = tornado.iostream.IOStream(s)
                 self.upstream.set_close_callback(self.on_upstream_close)
             elif self._proxylist:
-                self.getparent()
                 yield self.get_remote_conn()
             else:
                 self.send_error(status_code=504)
@@ -437,7 +444,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.upstream.set_nodelay(False)
             except Exception:
                 if self._proxylist:
-                    self.getparent()
                     yield self.get_remote_conn()
                 else:
                     self.send_error(status_code=504)
@@ -446,8 +452,9 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @gen.coroutine
     def get_remote_conn(self):
+        self.getparent()
         self.upstream = None
-        if self.request.method != 'CONNECT':
+        if self.request.method != 'CONNECT' and self._proxy_retry == 0:
             lst = UPSTREAM_POOL.get(self.upstream_name, [])
             for item in lst:
                 lst.remove(item)
@@ -465,7 +472,6 @@ class ProxyHandler(tornado.web.RequestHandler):
     @gen.coroutine
     @tornado.web.asynchronous
     def get(self):
-        self.getparent()
         yield self.get_remote_conn()
 
         if self._finished:
@@ -667,7 +673,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                     logging.warning('%s %s Failed, info: %s, retry...' % (self.request.method, self.uris, self._state))
                     self.clear()
                     self._proxy_retry += 1
-                    self.getparent()
                     yield self.get_remote_conn()
                     if self.request.method == 'CONNECT':
                         self.connect()
@@ -685,7 +690,6 @@ class ProxyHandler(tornado.web.RequestHandler):
     @gen.coroutine
     @tornado.web.asynchronous
     def connect(self):
-        self.getparent()
         yield self.get_remote_conn()
 
         def upstream_write(data=None):
