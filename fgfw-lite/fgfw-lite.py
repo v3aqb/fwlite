@@ -596,6 +596,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 logging.debug('reading response body')
                 self._headers["Connection"] = "close"
+                self.upstream.set_close_callback(None)
                 self.upstream.read_until_close(_finish, _client_write)
 
         def _on_chunk_lenth(data):
@@ -627,6 +628,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.upstream.set_close_callback(None)
             if _close_flag:
                 self.upstream.close()
+                client.close()
             elif not self.upstream.closed():
                 self.upstream.last_active = time.time()
                 UPSTREAM_POOL[self.upstream_name].append(self.upstream)
