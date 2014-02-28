@@ -191,6 +191,7 @@ class HTTPProxyConnection(HTTPConnection):
     def _on_headers(self, data):
         self._timeout.callback = None
         try:
+            raw_data = data
             data = unicode(data.decode('latin1'))
             eol = data.find("\r\n")
             start_line = data[:eol]
@@ -225,7 +226,7 @@ class HTTPProxyConnection(HTTPConnection):
             self._request = HTTPRequest(
                 connection=self, method=method, uri=uri, version=version,
                 headers=headers, remote_ip=remote_ip, protocol=self.protocol)
-
+            self._request.raw_data = raw_data
             self.request_callback(self._request)
         except _BadRequestException as e:
             logging.info("Malformed HTTP request from %s: %s",
@@ -587,7 +588,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             if self.request.method == "HEAD" or 100 <= self.get_status() < 200 or\
                     self.get_status() in (204, 304):
                 _finish()
-            elif self._headers.get("Transfer-Encoding") == "chunked":
+            elif self._headers.get("Transfer-Encoding") and self._headers.get("Transfer-Encoding") != "identity":
                 self.upstream.read_until(b"\r\n", _on_chunk_lenth)
             elif content_length is not None:
                 logging.debug('reading response body')
