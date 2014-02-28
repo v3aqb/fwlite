@@ -1088,9 +1088,10 @@ class FGFWProxyHandler(object):
         except Exception as e:
             logging.info('{} NOT updated. Reason: {}'.format(path, e))
         else:
-            if r.getcode() == 200:
+            data = r.read()
+            if r.getcode() == 200 and data:
                 with open(path, 'wb') as localfile:
-                    localfile.write(r.read())
+                    localfile.write(data)
                 conf.version.set('Update', path.replace('./', '').replace('/', '-'), r.info().getheader('ETag'))
                 conf.confsave()
                 logging.info('%s Updated.' % path)
