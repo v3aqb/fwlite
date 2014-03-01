@@ -960,6 +960,7 @@ class parent_proxy(object):
                 return True
             if any(r.groups()[0].endswith(path) for path in ['.google.com', '.google.com.hk', '.googleapis.com', '.android.com', '.appspot.com', '.googlegroups.com', '.googlesource.com', '.googleusercontent.com', '.google-analytics.com', '.googlecode.com', '.gstatic.com']):
                 return False
+            return True
 
     def parentproxy(self, uri, host, level=1):
         '''
