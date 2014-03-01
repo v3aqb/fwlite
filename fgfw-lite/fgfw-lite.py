@@ -511,8 +511,6 @@ class ProxyHandler(tornado.web.RequestHandler):
                 if not d.closed():
                     d.write(data, read_from)
 
-            if self._crbuffer:
-                d.write(b''.join(self._crbuffer))
             read_from()
 
         def _sent_request():
@@ -537,6 +535,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                 logging.debug('sending request body')
                 if not hasattr(self, '__content_length'):
                     self.__content_length = int(content_length)
+                if self._crbuffer:
+                    self.upstream.write(b''.join(self._crbuffer))
                 body_transfer(client, self.upstream, read_headers)
             else:
                 read_headers()
