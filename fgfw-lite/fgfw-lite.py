@@ -636,7 +636,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.upstream.last_active = time.time()
                 UPSTREAM_POOL[self.upstream_name].append(self.upstream)
                 logging.debug('pooling remote connection')
-            self.finish()
+            if not self._finished:
+                self.finish()
 
         _sent_request()
 
@@ -658,9 +659,11 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     def on_connection_close(self):
         logging.debug('client connection closed')
-        if hasattr(self, 'upstream'):
+        try:
             self.upstream.set_close_callback(None)
             self.upstream.close()
+        except Exception:
+            pass
         if not self._finished:
             self.finish()
 
@@ -686,7 +689,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                         self.get()
                 else:
                     logging.warning('%s %s FAILED! info: %s' % (self.request.method, self.uris, self._state))
-                    self.send_error(504)
+                    if not self._headers_written:
+                        self.send_error(504)
             else:
                 if self.request.method != 'CONNECT':
                     logging.warning('%s %s FAILED! info: %s' % (self.request.method, self.uris, self._state))
