@@ -246,14 +246,13 @@ class HTTPProxyServer(HTTPServer):
 
 class ssClientStream(tornado.iostream.IOStream):
 
-    def connect(self, address, callback=None, server_hostname=None):
+    def connect(self, address, ssServer, callback=None, server_hostname=None):
         '''
         connect address via ssServer
         ssServer: 'ss://method:password@hostname:port'
         '''
-        host, port, ssServer = address
         p = urlparse.urlparse(ssServer)
-        self._ssr = host, port
+        self._ssr = address
         self._sscb = callback
         _, sshost, ssport, ssmethod, sspassword = (p.scheme, p.hostname, p.port, p.username, p.password)
         self.crypto = encrypt.Encryptor(sspassword, ssmethod)
@@ -411,7 +410,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             self.upstream = ssClientStream(s)
             self.upstream.set_close_callback(self.on_upstream_close)
-            yield gen.Task(self.upstream.connect, (self.request.host.rsplit(':', 1)[0], self.requestport, conf.parentdict.get(self.ppname)))
+            yield gen.Task(self.upstream.connect, (self.request.host.rsplit(':', 1)[0], self.requestport), conf.parentdict.get(self.ppname))
         elif self.pptype == 'socks5':
             logging.debug('connecting to socks5 server')
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
