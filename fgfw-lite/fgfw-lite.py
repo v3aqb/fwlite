@@ -507,7 +507,10 @@ class ProxyHandler(tornado.web.RequestHandler):
                     callback()
 
             def write_to(data=None):
-                self._crbuffer.append(data)
+                if int(self.request.headers.get("Content-Length")) < 65536:
+                    self._crbuffer.append(data)
+                else:
+                    self._no_retry = True
                 if not d.closed():
                     d.write(data, read_from)
 
