@@ -44,7 +44,10 @@ import urllib2
 import urlparse
 import pygeoip
 from repoze.lru import lru_cache
-from concurrent.futures import ThreadPoolExecutor
+try:
+    from concurrent.futures import ThreadPoolExecutor
+except ImportError:
+    ThreadPoolExecutor = None
 import tornado.ioloop
 import tornado.iostream
 import tornado.web
@@ -278,7 +281,7 @@ class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ('GET', 'POST', 'HEAD', 'PUT', 'DELETE', 'TRACE', 'CONNECT', 'OPTIONS')
     LOCALHOST = ('127.0.0.1', '::1', 'localhost')
     DEFAULT_PORT = {'http': 80, 'https': 443, 'socks5': 1080, }
-    executor = ThreadPoolExecutor(50)
+    executor = ThreadPoolExecutor(10)
 
     def _getparent(self, level=1):
         if not self._proxylist:
