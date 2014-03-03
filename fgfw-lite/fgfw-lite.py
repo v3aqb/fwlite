@@ -111,7 +111,7 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
 
     def redirect(self, url):
         self.send_response(302)
-        self.send_header("Location", urlparse.urljoin(self.request.uri, url))
+        self.send_header("Location", url)
         self.end_headers()
 
     def handle_expect_100(self):
@@ -165,7 +165,7 @@ class ProxyHandler(HTTPRequestHandler):
         scm, netloc, path, params, query, fragment = urlparse.urlparse(
             self.path, 'http')
         try:
-            soc = self._connect_to(netloc)
+            soc = self._connect_via_proxy(netloc)
         except Exception:
             return
         try:
@@ -187,30 +187,9 @@ class ProxyHandler(HTTPRequestHandler):
 
     do_OPTIONS = do_POST = do_DELETE = do_TRACE = do_HEAD = do_PUT = do_GET
 
-    def do_FTP(self):
-        # fish out user and password information
-        scm, netloc, path, params, query, fragment = urlparse.urlparse(
-            self.path, 'http')
-        if '@' in netloc:
-            login_info, netloc = netloc.split('@', 1)
-            try:
-                user, passwd = login_info.split(':', 1)
-            except ValueError:
-                user, passwd = "anonymous", None
-        else:
-            user, passwd = "anonymous", None
-        try:
-            ftp = ftplib.FTP(netloc)
-            ftp.login(user, passwd)
-            if self.command == "GET":
-                ftp.retrbinary("RETR %s" % path, self.connection.send)
-            ftp.quit()
-        except Exception as e:
-            logging.warning("FTP Exception: %s" % e)
-
     def do_CONNECT(self):
         try:
-            soc = self._connect_to(self.path)
+            soc = self._connect_via_proxy(self.path)
         except Exception:
             return
         try:
@@ -224,13 +203,7 @@ class ProxyHandler(HTTPRequestHandler):
             soc.close()
             self.connection.close()
 
-    def _connect_to(self, netloc):
-        i = netloc.find(':')
-        if i >= 0:
-            host_port = netloc[:i], int(netloc[i + 1:])
-        else:
-            host_port = netloc, 80
-        logging.debug("Connect to %s:%d" % host_port)
+    def _connect_to(self, host_port):
         try:
             soc = socket.create_connection(host_port)
         except socket.error, arg:
@@ -241,6 +214,16 @@ class ProxyHandler(HTTPRequestHandler):
             self.send_error(504, msg)
             raise
         return soc
+
+    def _connect_via_proxy(self, netloc, proxy=''):
+        i = netloc.find(':')
+        if i >= 0:
+            host_port = netloc[:i], int(netloc[i + 1:])
+        else:
+            host_port = netloc, 80
+        logging.debug("Connect to %s:%d" % host_port)
+        if not proxy:
+            return self._connect_to(host_port)
 
     def _read_write(self, soc, max_idling=20):
         iw = [self.connection, soc]
@@ -272,6 +255,27 @@ class ProxyHandler(HTTPRequestHandler):
                 pass  # ignore the error
             else:
                 raise
+
+    def do_FTP(self):
+        # fish out user and password information
+        scm, netloc, path, params, query, fragment = urlparse.urlparse(
+            self.path, 'http')
+        if '@' in netloc:
+            login_info, netloc = netloc.split('@', 1)
+            try:
+                user, passwd = login_info.split(':', 1)
+            except ValueError:
+                user, passwd = "anonymous", None
+        else:
+            user, passwd = "anonymous", None
+        try:
+            ftp = ftplib.FTP(netloc)
+            ftp.login(user, passwd)
+            if self.command == "GET":
+                ftp.retrbinary("RETR %s" % path, self.connection.send)
+            ftp.quit()
+        except Exception as e:
+            logging.warning("FTP Exception: %s" % e)
 
 
 class ExpiredError(Exception):
