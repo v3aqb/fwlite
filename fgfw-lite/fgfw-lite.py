@@ -823,22 +823,23 @@ class fgfwproxy(FGFWProxyHandler):
             logging.basicConfig(level=logging.DEBUG)
 
     def start(self):
-        if self.enable:
-            if self.listen.isdigit():
-                port = self.listen
-                addr = '127.0.0.1'
-            else:
-                addr, port = self.listen.rsplit(':', 1)
-            self.run_proxy(int(port), address=addr)
+        while True:
+            if self.enable:
+                if self.listen.isdigit():
+                    port = self.listen
+                    addr = '127.0.0.1'
+                else:
+                    addr, port = self.listen.rsplit(':', 1)
+                logging.info("Starting HTTP proxy on port {}".format(port))
+                self.server = ThreadingHTTPServer((addr, int(port)), ProxyHandler)
+                self.server.serve_forever()
+            time.sleep(3)
 
-    def run_proxy(self, port=8118, address='127.0.0.1', start_ioloop=True):
-        """
-        Run proxy on the specified port. If start_ioloop is True (default),
-        the tornado IOLoop will be started immediately.
-        """
-        logging.info("Starting HTTP proxy on port {} and {}".format(port, str(int(port) + 1)))
-        server = ThreadingHTTPServer((address, port), ProxyHandler)
-        server.serve_forever()
+    def restart(self):
+        try:
+            self.server.shutdown()
+        except Exception:
+            pass
 
     def purge(self):
         for k, v in UPSTREAM_POOL.items():
