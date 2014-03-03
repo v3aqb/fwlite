@@ -162,6 +162,15 @@ class ProxyHandler(HTTPRequestHandler):
     def do_GET(self):
         if self.path.lower().startswith('ftp://'):
             return self.do_FTP()
+        # redirector
+        new_url = REDIRECTOR.get(self.path)
+        if new_url:
+            logging.info('redirecting to %s' % new_url)
+            if new_url.startswith('403'):
+                self.send_error(403)
+            else:
+                self.redirect(new_url)
+            return
         scm, netloc, path, params, query, fragment = urlparse.urlparse(
             self.path, 'http')
         try:
