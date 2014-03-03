@@ -9,3 +9,4 @@
 /.directory
 /userconf.ini
 *.py[cod]
+/goagent/proxy.ini
