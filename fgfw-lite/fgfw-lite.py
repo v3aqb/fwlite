@@ -20,7 +20,7 @@
 
 from __future__ import print_function, unicode_literals, division
 
-__version__ = '0.3.6.2'
+__version__ = '0.4.0.0'
 
 import sys
 import os
@@ -148,6 +148,7 @@ class ProxyHandler(HTTPRequestHandler):
     rbufsize = 0  # self.rfile Be unbuffered
     timeout = 10
     allowed_clients = ()
+    LOCALHOST = ('127.0.0.1', '::1', 'localhost')
 
     def handle(self):
         ip, port = self.client_address
@@ -159,9 +160,26 @@ class ProxyHandler(HTTPRequestHandler):
         else:
             BaseHTTPRequestHandler.handle(self)
 
+    def _getparent(self, level=1):
+        if not self._proxylist:
+            self._proxylist = PARENT_PROXY.parentproxy(self.path, self.headers['Host'].rsplit(':', 1)[0], level)
+        self.ppname = self._proxylist.pop(0)
+        self.pproxy = conf.parentdict.get(self.ppname)
+        self.pproxyparse = urlparse.urlparse(self.pproxy)
+        logging.info('{} {} via {}'.format(self.command, self.path, self.ppname))
+
+    def getparent(self, level=1):
+        self._getparent(level)
+
     def do_GET(self):
         if self.path.lower().startswith('ftp://'):
             return self.do_FTP()
+        # transparent proxy
+        if self.path.startswith('/') and 'Host' in self.headers:
+            self.request.uri = 'http://%s%s' % (self.headers['Host'], self.path)
+        if self.path.startswith('/'):
+            self.send_error(403)
+            return
         # redirector
         new_url = REDIRECTOR.get(self.path)
         if new_url:
@@ -171,17 +189,24 @@ class ProxyHandler(HTTPRequestHandler):
             else:
                 self.redirect(new_url)
             return
-        scm, netloc, path, params, query, fragment = urlparse.urlparse(
-            self.path, 'http')
+
+        # try to get host from uri
+        if 'Host' not in self.headers:
+            self.headers['Host'] = self.path.split('/')[2] if '//' in self.path else self.path
+
+        if any(host == self.headers['Host'].rsplit(':', 1)[0] for host in self.LOCALHOST):
+            self.send_error(403)
+            return
+        self._proxylist = []
+        self.getparent()
         try:
-            soc = self._connect_via_proxy(netloc)
+            soc = self._connect_via_proxy(self.headers['Host'])
         except Exception:
             return
         try:
-            self.log_request()
             send_all(soc, "%s %s %s\r\n" % (
-                self.command, urlparse.urlunparse(
-                    ('', '', path, params, query, '')),
+                self.command,
+                self.path if self.pproxy.startswith('http') else '/' + '/'.join(self.path.split('/')[3:]),
                 self.request_version,
             ))
             self.headers['Connection'] = 'close'
@@ -212,27 +237,16 @@ class ProxyHandler(HTTPRequestHandler):
             soc.close()
             self.connection.close()
 
-    def _connect_to(self, host_port):
-        try:
-            soc = socket.create_connection(host_port)
-        except socket.error, arg:
-            try:
-                msg = arg[1]
-            except Exception:
-                msg = arg
-            self.send_error(504, msg)
-            raise
-        return soc
-
-    def _connect_via_proxy(self, netloc, proxy=''):
-        i = netloc.find(':')
-        if i >= 0:
-            host_port = netloc[:i], int(netloc[i + 1:])
+    def _connect_via_proxy(self, netloc):
+        if ':' in netloc:
+            host_port = netloc.rsplit(':', 1)
         else:
             host_port = netloc, 80
         logging.debug("Connect to %s:%d" % host_port)
-        if not proxy:
-            return self._connect_to(host_port)
+        if not self.pproxy:
+            return socket.create_connection(host_port)
+        elif self.pproxy.startswith('http://'):
+            return socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port))
 
     def _read_write(self, soc, max_idling=20):
         iw = [self.connection, soc]
