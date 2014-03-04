@@ -131,17 +131,6 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
         return True
 
 
-def send_all(sock, data):
-    bytes_sent = 0
-    while True:
-        r = sock.send(data[bytes_sent:])
-        if r < 0:
-            return r
-        bytes_sent += r
-        if bytes_sent == len(data):
-            return bytes_sent
-
-
 class ProxyHandler(HTTPRequestHandler):
     server_version = "HTTPProxy/" + __version__
     protocol = "HTTP/1.1"
@@ -214,7 +203,7 @@ class ProxyHandler(HTTPRequestHandler):
             for key_val in self.headers.items():
                 s += "%s: %s\r\n" % key_val
             s += "\r\n"
-            send_all(soc, s)
+            soc.sendall(s)
             self._read_write(soc)
         finally:
             soc.close()
@@ -240,7 +229,7 @@ class ProxyHandler(HTTPRequestHandler):
                 s = [b'%s %s %s\r\n' % (self.command, self.path, self.request_version), ]
                 s.append(b'\r\n'.join(['%s: %s' % (key, value) for key, value in self.headers.items()]))
                 s.append(b'\r\n\r\n')
-                send_all(soc, b''.join(s))
+                soc.sendall(b''.join(s))
             self._read_write(soc, 300)
         finally:
             soc.close()
@@ -272,8 +261,10 @@ class ProxyHandler(HTTPRequestHandler):
                         out = self.connection if i is soc else soc
                         data = i.recv(4096)
                         if data:
-                            send_all(out, data)
+                            out.sendall(data)
                             count = 0
+                        else:
+                            break
                 if count > max_idling:
                     break
             except socket.error as e:
