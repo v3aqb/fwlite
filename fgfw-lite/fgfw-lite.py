@@ -201,7 +201,8 @@ class ProxyHandler(HTTPRequestHandler):
         self.getparent()
         try:
             soc = self._connect_via_proxy(self.headers['Host'])
-        except Exception:
+        except Exception as e:
+            logging.warning(e)
             return
         try:
             if self.pproxy.startswith('http'):
@@ -222,16 +223,24 @@ class ProxyHandler(HTTPRequestHandler):
     do_OPTIONS = do_POST = do_DELETE = do_TRACE = do_HEAD = do_PUT = do_GET
 
     def do_CONNECT(self):
+        self._proxylist = []
+        self.getparent()
         try:
             soc = self._connect_via_proxy(self.path)
-        except Exception:
+        except Exception as e:
+            logging.warning(e)
             return
         try:
-            self.log_request(200)
-            self.wfile.write(self.protocol_version +
-                             " 200 Connection established\r\n")
-            self.wfile.write("Proxy-agent: %s\r\n" % self.version_string())
-            self.wfile.write("\r\n")
+            if not self.pproxy.startswith('http'):
+                self.wfile.write(self.protocol_version +
+                                 " 200 Connection established\r\n")
+                self.wfile.write("Proxy-agent: %s\r\n" % self.version_string())
+                self.wfile.write("\r\n")
+            else:
+                s = [b'%s %s %s\r\n' % (self.command, self.path, self.request_version), ]
+                s.append(b'\r\n'.join(['%s: %s' % (key, value) for key, value in self.headers.items()]))
+                s.append(b'\r\n\r\n')
+                send_all(soc, b''.join(s))
             self._read_write(soc, 300)
         finally:
             soc.close()
@@ -239,12 +248,12 @@ class ProxyHandler(HTTPRequestHandler):
 
     def _connect_via_proxy(self, netloc):
         if ':' in netloc:
-            host_port = netloc.rsplit(':', 1)
+            host, port = netloc.rsplit(':', 1)
         else:
-            host_port = netloc, 80
-        logging.debug("Connect to %s:%d" % host_port)
+            host, port = netloc, 80
+        logging.debug("Connect to %s:%s" % (host, port))
         if not self.pproxy:
-            return socket.create_connection(host_port)
+            return socket.create_connection((host, int(port)))
         elif self.pproxy.startswith('http://'):
             return socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port))
 
