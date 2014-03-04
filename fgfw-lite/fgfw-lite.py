@@ -204,16 +204,16 @@ class ProxyHandler(HTTPRequestHandler):
         except Exception:
             return
         try:
-            send_all(soc, "%s %s %s\r\n" % (
-                self.command,
-                self.path if self.pproxy.startswith('http') else '/' + '/'.join(self.path.split('/')[3:]),
-                self.request_version,
-            ))
+            if self.pproxy.startswith('http'):
+                s = '%s %s %s\r\n' % (self.command, self.path, self.request_version)
+            else:
+                s = '%s /%s %s\r\n' % (self.command, '/'.join(self.path.split('/')[3:]), self.request_version)
             self.headers['Connection'] = 'close'
             del self.headers['Proxy-Connection']
             for key_val in self.headers.items():
-                send_all(soc, "%s: %s\r\n" % key_val)
-            send_all(soc, "\r\n")
+                s += "%s: %s\r\n" % key_val
+            s += "\r\n"
+            send_all(soc, s)
             self._read_write(soc)
         finally:
             soc.close()
