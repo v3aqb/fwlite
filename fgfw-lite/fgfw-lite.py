@@ -38,6 +38,7 @@ import platform
 import base64
 import ftplib
 import select
+import shutil
 import socket
 import struct
 from threading import Thread
@@ -203,6 +204,27 @@ class ProxyHandler(HTTPRequestHandler):
                 s += "%s: %s\r\n" % key_val
             s += "\r\n"
             soc.sendall(s)
+
+            remotefile = soc.makefile('rb', 0)
+            response_line = remotefile.readline(65537)
+            if len(response_line) > 65536:
+                return
+            if not response_line:
+                self.close_connection = 1
+                return
+            response_line = response_line.rstrip('\r\n')
+            response_header = self.MessageClass(remotefile, 0)
+            conntype = response_header.get('Connection', "")
+            if conntype.lower() == 'close':
+                self.close_connection = 1
+            elif (conntype.lower() == 'keep-alive' and
+                  self.protocol_version >= "HTTP/1.1"):
+                self.close_connection = 0
+            s = '%s\r\n' % response_line
+            for key_val in response_header.items():
+                s += "%s: %s\r\n" % key_val
+            s += "\r\n"
+            self.connection.sendall(s)
             self._read_write(soc)
         finally:
             soc.close()
