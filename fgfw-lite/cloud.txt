@@ -11,3 +11,5 @@
 |http://*.wikipedia.org forcehttps
 ||feedly.com
 ||twitter.com
+||google.com
+||google.com.hk
