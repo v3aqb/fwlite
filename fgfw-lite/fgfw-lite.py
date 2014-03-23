@@ -222,11 +222,10 @@ class ProxyHandler(HTTPRequestHandler):
             self.protocol_version = response_line.split()[0]
             response_header = self.MessageClass(remotefile, 0)
             conntype = response_header.get('Connection', "")
-            if conntype.lower() == 'close':
-                self.close_connection = 1
-            elif (conntype.lower() == 'keep-alive' and
-                  self.protocol_version >= "HTTP/1.1"):
-                self.close_connection = 0
+            if self.protocol_version >= "HTTP/1.1":
+                self.close_connection = conntype.lower() == 'close'
+            else:
+                self.close_connection = conntype.lower() != 'keep_alive'
             s = '%s\r\n' % response_line
             for key_val in response_header.items():
                 s += "%s: %s\r\n" % key_val
