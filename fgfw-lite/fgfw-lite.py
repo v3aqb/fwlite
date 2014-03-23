@@ -198,7 +198,6 @@ class ProxyHandler(HTTPRequestHandler):
                 s = '%s %s %s\r\n' % (self.command, self.path, self.request_version)
             else:
                 s = '%s /%s %s\r\n' % (self.command, '/'.join(self.path.split('/')[3:]), self.request_version)
-            self.headers['Connection'] = 'close'
             del self.headers['Proxy-Connection']
             for key_val in self.headers.items():
                 s += "%s: %s\r\n" % key_val
@@ -226,14 +225,46 @@ class ProxyHandler(HTTPRequestHandler):
                 self.close_connection = conntype.lower() == 'close'
             else:
                 self.close_connection = conntype.lower() != 'keep_alive'
+            if "Content-Length" in response_header:
+                if "," in response_header["Content-Length"]:
+                    # Proxies sometimes cause Content-Length headers to get
+                    # duplicated.  If all the values are identical then we can
+                    # use them but if they differ it's an error.
+                    pieces = re.split(r',\s*', response_header["Content-Length"])
+                    if any(i != pieces[0] for i in pieces):
+                        raise ValueError("Multiple unequal Content-Lengths: %r" %
+                                         response_header["Content-Length"])
+                    response_header["Content-Length"] = pieces[0]
+                content_length = int(response_header["Content-Length"])
+            else:
+                content_length = None
             s = '%s\r\n' % response_line
             for key_val in response_header.items():
                 s += "%s: %s\r\n" % key_val
             s += "\r\n"
             self.connection.sendall(s)
-            if 100 <= response_status < 200 or response_status in (204, 304):
+            if self.command == 'HEAD' or 100 <= response_status < 200 or response_status in (204, 304):
                 pass
-            self._read_write(soc)
+            elif response_header.get("Transfer-Encoding") and response_header.get("Transfer-Encoding") != "identity":
+                while 1:
+                    trunk_lenth = remotefile.readline(65537)
+                    self.connection.sendall(trunk_lenth)
+                    trunk_lenth = int(trunk_lenth.strip(), 16) + 2
+                    flag = True if trunk_lenth == 2 else False
+                    while trunk_lenth:
+                        data = soc.recv(min(8096, trunk_lenth))
+                        trunk_lenth -= len(data)
+                        self.connection.sendall(data)
+                    if flag:
+                        break
+            elif content_length is not None:
+                while content_length:
+                    data = soc.recv(min(8096, content_length))
+                    content_length -= len(data)
+                    self.connection.sendall(data)
+            else:
+                self.close_connection = 1
+                self._read_write(soc)
         finally:
             soc.close()
             self.connection.close()
