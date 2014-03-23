@@ -243,14 +243,14 @@ class ProxyHandler(HTTPRequestHandler):
                     trunk_lenth = int(trunk_lenth.strip(), 16) + 2
                     flag = True if trunk_lenth == 2 else False
                     while trunk_lenth:
-                        data = soc.recv(min(8096, trunk_lenth))
+                        data = soc.recv(min(4096, trunk_lenth))
                         trunk_lenth -= len(data)
                         self.wfile.write(data)
                     if flag:
                         break
             elif content_length is not None:
                 while content_length:
-                    data = soc.recv(min(8096, content_length))
+                    data = soc.recv(min(4096, content_length))
                     content_length -= len(data)
                     self.wfile.write(data)
             else:
