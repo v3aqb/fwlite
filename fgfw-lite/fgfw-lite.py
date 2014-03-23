@@ -204,15 +204,22 @@ class ProxyHandler(HTTPRequestHandler):
                 s += "%s: %s\r\n" % key_val
             s += "\r\n"
             soc.sendall(s)
-
+            # send request body
+            content_length = self.headers.get('Content-Length')
+            if content_length:
+                content_length = int(content_length)
+                while content_length:
+                    data = self.connection.recv(min(8096, content_length))
+                    content_length -= len(data)
+                    soc.sendall(data)
             remotefile = soc.makefile('rb', 0)
             response_line = remotefile.readline(65537)
-            if len(response_line) > 65536:
-                return
-            if not response_line:
+            if not response_line or len(response_line) > 65536:
                 self.close_connection = 1
                 return
             response_line = response_line.rstrip('\r\n')
+            response_status = int(response_line.split()[1])
+            self.protocol_version = response_line.split()[0]
             response_header = self.MessageClass(remotefile, 0)
             conntype = response_header.get('Connection', "")
             if conntype.lower() == 'close':
@@ -225,6 +232,8 @@ class ProxyHandler(HTTPRequestHandler):
                 s += "%s: %s\r\n" % key_val
             s += "\r\n"
             self.connection.sendall(s)
+            if 100 <= response_status < 200 or response_status in (204, 304):
+                pass
             self._read_write(soc)
         finally:
             soc.close()
