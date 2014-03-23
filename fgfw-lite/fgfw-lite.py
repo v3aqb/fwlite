@@ -33,6 +33,7 @@ import shlex
 import time
 import re
 import errno
+import email
 import atexit
 import platform
 import base64
@@ -108,27 +109,10 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 class HTTPRequestHandler(BaseHTTPRequestHandler):
-
     def redirect(self, url):
         self.send_response(302)
         self.send_header("Location", url)
         self.end_headers()
-
-    def handle_expect_100(self):
-        """Decide what to do with an "Expect: 100-continue" header.
-
-        If the client is expecting a 100 Continue response, we must
-        respond with either a 100 Continue or a final response before
-        waiting for the request body. The default is to always respond
-        with a 100 Continue. You can behave differently (for example,
-        reject unauthorized requests) by overriding this method.
-
-        This method should either return True (possibly after sending
-        a 100 Continue response) or send an error response and return
-        False.
-
-        """
-        return True
 
 
 class ProxyHandler(HTTPRequestHandler):
@@ -208,23 +192,33 @@ class ProxyHandler(HTTPRequestHandler):
             if content_length:
                 content_length = int(content_length)
                 while content_length:
-                    data = self.connection.recv(min(8096, content_length))
+                    data = self.rfile.read(min(8096, content_length))
                     content_length -= len(data)
                     soc.sendall(data)
+
             remotefile = soc.makefile('rb', 0)
             response_line = remotefile.readline(65537)
             if not response_line or len(response_line) > 65536:
                 self.close_connection = 1
                 return
-            response_line = response_line.rstrip('\r\n')
-            response_status = int(response_line.split()[1])
-            self.protocol_version = response_line.split()[0]
-            response_header = self.MessageClass(remotefile, 0)
+            s = response_line
+            response_line = response_line.rstrip('\r\n').split()
+            response_status = int(response_line[1])
+            self.protocol_version = response_line[0]
+            header_data = b''
+            while True:
+                line = remotefile.readline()
+                header_data += line
+                if not line.strip():
+                    break
+
+            response_header = email.message_from_string(header_data)
             conntype = response_header.get('Connection', "")
             if self.protocol_version >= "HTTP/1.1":
                 self.close_connection = conntype.lower() == 'close'
             else:
                 self.close_connection = conntype.lower() != 'keep_alive'
+
             if "Content-Length" in response_header:
                 if "," in response_header["Content-Length"]:
                     # Proxies sometimes cause Content-Length headers to get
@@ -238,30 +232,27 @@ class ProxyHandler(HTTPRequestHandler):
                 content_length = int(response_header["Content-Length"])
             else:
                 content_length = None
-            s = '%s\r\n' % response_line
-            for key_val in response_header.items():
-                s += "%s: %s\r\n" % key_val
-            s += "\r\n"
-            self.connection.sendall(s)
+            s += header_data
+            self.wfile.write(s)
             if self.command == 'HEAD' or 100 <= response_status < 200 or response_status in (204, 304):
                 pass
             elif response_header.get("Transfer-Encoding") and response_header.get("Transfer-Encoding") != "identity":
                 while 1:
                     trunk_lenth = remotefile.readline(65537)
-                    self.connection.sendall(trunk_lenth)
+                    self.wfile.write(trunk_lenth)
                     trunk_lenth = int(trunk_lenth.strip(), 16) + 2
                     flag = True if trunk_lenth == 2 else False
                     while trunk_lenth:
                         data = soc.recv(min(8096, trunk_lenth))
                         trunk_lenth -= len(data)
-                        self.connection.sendall(data)
+                        self.wfile.write(data)
                     if flag:
                         break
             elif content_length is not None:
                 while content_length:
                     data = soc.recv(min(8096, content_length))
                     content_length -= len(data)
-                    self.connection.sendall(data)
+                    self.wfile.write(data)
             else:
                 self.close_connection = 1
                 self._read_write(soc)
@@ -318,10 +309,12 @@ class ProxyHandler(HTTPRequestHandler):
                     break
                 if ins:
                     for i in ins:
-                        out = self.connection if i is soc else soc
                         data = i.recv(4096)
                         if data:
-                            out.sendall(data)
+                            if i is soc:
+                                self.wfile.write(data)
+                            else:
+                                soc.sendall(data)
                             count = 0
                         else:
                             break
@@ -355,7 +348,7 @@ class ProxyHandler(HTTPRequestHandler):
             ftp = ftplib.FTP(netloc)
             ftp.login(user, passwd)
             if self.command == "GET":
-                ftp.retrbinary("RETR %s" % path, self.connection.send)
+                ftp.retrbinary("RETR %s" % path, self.wfile.write)
             ftp.quit()
         except Exception as e:
             logging.warning("FTP Exception: %s" % e)
