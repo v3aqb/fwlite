@@ -123,6 +123,16 @@ class ProxyHandler(HTTPRequestHandler):
     allowed_clients = ()
     LOCALHOST = ('127.0.0.1', '::1', 'localhost')
 
+    def handle_one_request(self):
+        self._proxylist = None
+        try:
+            BaseHTTPRequestHandler.handle_one_request(self)
+        except socket.error, e:
+            if e.errno == errno.ECONNRESET:
+                pass  # ignore the error
+            else:
+                raise
+
     def handle(self):
         ip, port = self.client_address
         logging.debug("Request from %s" % ip)
@@ -134,8 +144,11 @@ class ProxyHandler(HTTPRequestHandler):
             BaseHTTPRequestHandler.handle(self)
 
     def _getparent(self, level=1):
-        if not self._proxylist:
+        if self._proxylist is None:
             self._proxylist = PARENT_PROXY.parentproxy(self.path, self.headers['Host'].rsplit(':', 1)[0], level)
+        if not self._proxylist:
+            self.send_error(504)
+            return 1
         self.ppname = self._proxylist.pop(0)
         self.pproxy = conf.parentdict.get(self.ppname)
         self.pproxyparse = urlparse.urlparse(self.pproxy)
@@ -170,13 +183,16 @@ class ProxyHandler(HTTPRequestHandler):
         if any(host == self.headers['Host'].rsplit(':', 1)[0] for host in self.LOCALHOST):
             self.send_error(403)
             return
-        self._proxylist = []
-        self.getparent()
+        self._do_GET()
+
+    def _do_GET(self):
+        if self.getparent():
+            return
         try:
             remotesoc = self._connect_via_proxy(self.headers['Host'])
         except Exception as e:
-            logging.warning(e)
-            return
+            logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
+            return self._do_GET()
         try:
             if self.pproxy.startswith('http'):
                 s = '%s %s %s\r\n' % (self.command, self.path, self.request_version)
@@ -259,13 +275,13 @@ class ProxyHandler(HTTPRequestHandler):
     do_OPTIONS = do_POST = do_DELETE = do_TRACE = do_HEAD = do_PUT = do_GET
 
     def do_CONNECT(self):
-        self._proxylist = []
-        self.getparent()
+        if self.getparent():
+            return
         try:
             remotesoc = self._connect_via_proxy(self.path)
         except Exception as e:
-            logging.warning(e)
-            return
+            logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
+            return self.do_CONNECT()
         try:
             if not self.pproxy.startswith('http'):
                 self.wfile.write(self.protocol_version +
@@ -289,9 +305,10 @@ class ProxyHandler(HTTPRequestHandler):
             host, port = netloc, 80
         logging.debug("Connect to %s:%s" % (host, port))
         if not self.pproxy:
-            return socket.create_connection((host, int(port)), 3)
+            s = socket.create_connection((host, int(port)), 3)
         elif self.pproxy.startswith('http://'):
-            return socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), 3)
+            s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), 3)
+        return s
 
     def _read_write(self, soc, max_idling=20):
         iw = [self.connection, soc]
@@ -318,15 +335,6 @@ class ProxyHandler(HTTPRequestHandler):
                     break
             except socket.error as e:
                 logging.debug('socket error: %s' % e)
-
-    def handle_one_request(self):
-        try:
-            BaseHTTPRequestHandler.handle_one_request(self)
-        except socket.error, e:
-            if e.errno == errno.ECONNRESET:
-                pass  # ignore the error
-            else:
-                raise
 
     def do_FTP(self):
         # fish out user and password information
