@@ -173,7 +173,7 @@ class ProxyHandler(HTTPRequestHandler):
         self._proxylist = []
         self.getparent()
         try:
-            soc = self._connect_via_proxy(self.headers['Host'])
+            remotesoc = self._connect_via_proxy(self.headers['Host'])
         except Exception as e:
             logging.warning(e)
             return
@@ -186,7 +186,7 @@ class ProxyHandler(HTTPRequestHandler):
             for key_val in self.headers.items():
                 s += "%s: %s\r\n" % key_val
             s += "\r\n"
-            soc.sendall(s)
+            remotesoc.sendall(s)
             # send request body
             content_length = self.headers.get('Content-Length')
             if content_length:
@@ -194,14 +194,10 @@ class ProxyHandler(HTTPRequestHandler):
                 while content_length:
                     data = self.rfile.read(min(8096, content_length))
                     content_length -= len(data)
-                    soc.sendall(data)
+                    remotesoc.sendall(data)
 
-            remotefile = soc.makefile('rb', 0)
-            response_line = remotefile.readline(65537)
-            if not response_line or len(response_line) > 65536:
-                self.close_connection = 1
-                return
-            s = response_line
+            remotefile = remotesoc.makefile('rb', 0)
+            s = response_line = remotefile.readline()
             response_line = response_line.rstrip('\r\n').split()
             response_status = int(response_line[1])
             self.protocol_version = response_line[0]
@@ -243,21 +239,21 @@ class ProxyHandler(HTTPRequestHandler):
                     trunk_lenth = int(trunk_lenth.strip(), 16) + 2
                     flag = True if trunk_lenth == 2 else False
                     while trunk_lenth:
-                        data = soc.recv(min(4096, trunk_lenth))
+                        data = remotesoc.recv(min(4096, trunk_lenth))
                         trunk_lenth -= len(data)
                         self.wfile.write(data)
                     if flag:
                         break
             elif content_length is not None:
                 while content_length:
-                    data = soc.recv(min(4096, content_length))
+                    data = remotesoc.recv(min(4096, content_length))
                     content_length -= len(data)
                     self.wfile.write(data)
             else:
                 self.close_connection = 1
-                self._read_write(soc)
+                self._read_write(remotesoc)
         finally:
-            soc.close()
+            remotesoc.close()
             self.connection.close()
 
     do_OPTIONS = do_POST = do_DELETE = do_TRACE = do_HEAD = do_PUT = do_GET
@@ -266,7 +262,7 @@ class ProxyHandler(HTTPRequestHandler):
         self._proxylist = []
         self.getparent()
         try:
-            soc = self._connect_via_proxy(self.path)
+            remotesoc = self._connect_via_proxy(self.path)
         except Exception as e:
             logging.warning(e)
             return
@@ -280,10 +276,10 @@ class ProxyHandler(HTTPRequestHandler):
                 s = [b'%s %s %s\r\n' % (self.command, self.path, self.request_version), ]
                 s.append(b'\r\n'.join(['%s: %s' % (key, value) for key, value in self.headers.items()]))
                 s.append(b'\r\n\r\n')
-                soc.sendall(b''.join(s))
-            self._read_write(soc, 300)
+                remotesoc.sendall(b''.join(s))
+            self._read_write(remotesoc, 300)
         finally:
-            soc.close()
+            remotesoc.close()
             self.connection.close()
 
     def _connect_via_proxy(self, netloc):
