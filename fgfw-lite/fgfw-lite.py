@@ -114,6 +114,9 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Location", url)
         self.end_headers()
 
+    def log_message(self, format, *args):
+        pass
+
 
 class ProxyHandler(HTTPRequestHandler):
     server_version = "HTTPProxy/" + __version__
