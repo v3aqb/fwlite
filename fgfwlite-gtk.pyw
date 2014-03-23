@@ -68,7 +68,7 @@ StartupNotify=true
 
 class GoAgentGTK:
 
-    command = ['/usr/bin/env', 'python2.7', './fgfw-lite/fgfw-lite.py']
+    command = ['/usr/bin/env', 'python2.7', '-B', './fgfw-lite/fgfw-lite.py']
     message = u'FGFW-Lite已经启动，单击托盘图标可以最小化'
     message = None
     fail_message = u'FGFW-Lite启动失败，请查看控制台窗口的错误信息。'

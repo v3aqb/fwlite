@@ -199,7 +199,7 @@ Func daemon()
 	$SILENT = 1
 	While True
 		Sleep(3000)
-		$SUB_PID = Run("./Python27/python27.exe ./fgfw-lite/fgfw-lite.py -hide", @ScriptDir, @SW_HIDE)
+		$SUB_PID = Run("./Python27/python27.exe -B ./fgfw-lite/fgfw-lite.py -hide", @ScriptDir, @SW_HIDE)
 		If Not $SILENT Then TrayTip("FGFW_Lite", 'FGFW_Lite Restarting...', 0)
 		While ProcessExists($SUB_PID)
 			Sleep(100)
