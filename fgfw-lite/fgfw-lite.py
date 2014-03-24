@@ -265,6 +265,8 @@ class ProxyHandler(HTTPRequestHandler):
             remoterfile = remotesoc.makefile('rb', 0)
             try:
                 s = response_line = remoterfile.readline()
+                if not s:
+                    raise ValueError
             except Exception as e:
                 return self.on_GET_Error(e)
             logging.debug('respinse line read')
