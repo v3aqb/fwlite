@@ -951,7 +951,7 @@ class snovaHandler(FGFWProxyHandler):
             for i, v in enumerate(worknodes):
                 proxy.set('C4', 'WorkerNode[%s]' % i, v)
             proxy.set('C4', 'Enable', '1')
-            fgfwproxy.addparentproxy('snova-c4', 'http://127.0.0.1:48102')
+            conf.addparentproxy('snova-c4', 'http://127.0.0.1:48102')
         else:
             proxy.set('C4', 'Enable', '0')
 
