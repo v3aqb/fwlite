@@ -27,6 +27,16 @@ import os
 import glob
 sys.path.append(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')))
 sys.path += glob.glob('%s/*.egg' % os.path.dirname(os.path.abspath(__file__)))
+try:
+    import gevent
+    import gevent.socket
+    import gevent.server
+    import gevent.queue
+    import gevent.monkey
+    gevent.monkey.patch_all(subprocess=True)
+except ImportError:
+    gevent = None
+
 from collections import defaultdict
 import subprocess
 import shlex
@@ -87,7 +97,10 @@ RTIMEOUT = 5
 
 
 def prestart():
-    logging.info('FGFW_Lite %s' % __version__)
+    s = 'FGFW_Lite %s' % __version__
+    if gevent:
+        s += ' with gevent'
+    logging.info(s)
 
     if not os.path.isfile('./userconf.ini'):
         shutil.copyfile('./userconf.sample.ini', './userconf.ini')
@@ -976,32 +989,10 @@ class fgfwproxy(FGFWProxyHandler):
             logging.basicConfig(level=logging.DEBUG)
 
     def start(self):
-        while True:
-            if self.enable:
-                if self.listen.isdigit():
-                    port = self.listen
-                    addr = '127.0.0.1'
-                else:
-                    addr, port = self.listen.rsplit(':', 1)
-                logging.info("Starting HTTP proxy on port {}".format(port))
-                self.server = ThreadingHTTPServer((addr, int(port)), ProxyHandler)
-                self.server.serve_forever()
-            time.sleep(3)
+        pass
 
     def restart(self):
-        try:
-            self.server.shutdown()
-        except Exception:
-            pass
-
-    def purge(self):
-        for k, v in UPSTREAM_POOL.items():
-            vcopy = v[:]
-            for item in vcopy:
-                if item.last_active < time.time() - 15:
-                    if not item.closed():
-                        item.close()
-                    v.remove(item)
+        pass
 
 
 class SConfigParser(configparser.ConfigParser):
@@ -1124,11 +1115,8 @@ def main():
     updatedaemon = Thread(target=updater)
     updatedaemon.daemon = True
     updatedaemon.start()
-    while 1:
-        try:
-            exec(raw_input().strip())
-        except Exception as e:
-            logging.info(repr(e))
+    server = ThreadingHTTPServer(('127.0.0.1', 8118), ProxyHandler)
+    server.serve_forever()
 
 if __name__ == "__main__":
     try:
