@@ -350,6 +350,7 @@ class ProxyHandler(HTTPRequestHandler):
     do_OPTIONS = do_POST = do_DELETE = do_TRACE = do_HEAD = do_PUT = do_GET
 
     def do_CONNECT(self):
+        self.close_connection = 1
         self.wfile.write(self.protocol_version + " 200 Connection established\r\n\r\n")
         self._do_CONNECT()
 
