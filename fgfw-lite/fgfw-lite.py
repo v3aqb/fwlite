@@ -217,8 +217,11 @@ class ProxyHandler(HTTPRequestHandler):
             self.wfile.write(data)
 
     def _do_GET(self, retry=False):
-        if not self.retryable or self.getparent():
+        if self.getparent():
             self.send_error(504)
+            return
+        if not self.retryable:
+            self.close_connection = 1
             return
         if retry:
             self.retrycount += 1
