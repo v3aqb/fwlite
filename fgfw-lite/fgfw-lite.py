@@ -375,6 +375,25 @@ class ProxyHandler(HTTPRequestHandler):
                 data = remoterfile.readline()
         if self.rbuffer:
             remotesoc.sendall(self.rbuffer)
+        for i in range(30):
+            try:
+                (ins, _, exs) = select.select([self.connection, remotesoc], [], [self.connection, remotesoc], 0.1)
+                if exs:
+                    break
+                for i in ins:
+                    data = i.recv(4096)
+                    if data:
+                        if i is remotesoc:
+                            self.retryable = False
+                            self.wfile.write(data)
+                        else:
+                            if self.retryable:
+                                self.rbuffer += data
+                            remotesoc.sendall(data)
+            except socket.error as e:
+                logging.warning('socket error: %s' % e)
+        if self.retryable:
+            return self._do_CONNECT(True)
         self._read_write(remotesoc, 300)
         remotesoc.close()
         self.connection.close()
