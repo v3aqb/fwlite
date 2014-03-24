@@ -350,29 +350,34 @@ class ProxyHandler(HTTPRequestHandler):
     do_OPTIONS = do_POST = do_DELETE = do_TRACE = do_HEAD = do_PUT = do_GET
 
     def do_CONNECT(self):
+        self.wfile.write(self.protocol_version + " 200 Connection established\r\n\r\n")
+        self._do_CONNECT()
+
+    def _do_CONNECT(self, retry=False):
         if not self.retryable or self.getparent():
-            self.send_error(504)
             return
         try:
             remotesoc = self._connect_via_proxy(self.path)
         except Exception as e:
             logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
             return self.do_CONNECT()
-        try:
-            if not self.pproxy.startswith('http'):
-                self.wfile.write(self.protocol_version +
-                                 " 200 Connection established\r\n")
-                self.wfile.write("Proxy-agent: %s\r\n" % self.version_string())
-                self.wfile.write("\r\n")
-            else:
-                s = [b'%s %s %s\r\n' % (self.command, self.path, self.request_version), ]
-                s.append(b'\r\n'.join(['%s: %s' % (key, value) for key, value in self.headers.items()]))
-                s.append(b'\r\n\r\n')
-                remotesoc.sendall(b''.join(s))
-            self._read_write(remotesoc, 300)
-        finally:
-            remotesoc.close()
-            self.connection.close()
+
+        if self.pproxy.startswith('http'):
+            s = [b'%s %s %s\r\n' % (self.command, self.path, self.request_version), ]
+            s.append(b'\r\n'.join(['%s: %s' % (key, value) for key, value in self.headers.items()]))
+            s.append(b'\r\n\r\n')
+            remotesoc.sendall(b''.join(s))
+            remoterfile = remotesoc.makefile('rb', 0)
+            data = remoterfile.readline()
+            if '200' not in data:
+                return self._do_CONNECT(True)
+            while data.strip():
+                data = remoterfile.readline()
+        if self.rbuffer:
+            remotesoc.sendall(self.rbuffer)
+        self._read_write(remotesoc, 300)
+        remotesoc.close()
+        self.connection.close()
 
     def _connect_via_proxy(self, netloc):
         if ':' in netloc:
@@ -388,12 +393,10 @@ class ProxyHandler(HTTPRequestHandler):
 
     def _read_write(self, soc, max_idling=20):
         iw = [self.connection, soc]
-        ow = []
         count = 0
         while True:
             try:
-                count += 1
-                (ins, _, exs) = select.select(iw, ow, iw, 1)
+                (ins, _, exs) = select.select(iw, [], iw, 1)
                 if exs:
                     break
                 for i in ins:
@@ -408,6 +411,7 @@ class ProxyHandler(HTTPRequestHandler):
                         break
                 if count > max_idling:
                     break
+                count += 1
             except socket.error as e:
                 logging.debug('socket error: %s' % e)
 
