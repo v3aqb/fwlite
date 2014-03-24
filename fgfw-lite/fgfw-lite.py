@@ -683,7 +683,8 @@ PARENT_PROXY.config()
 def updater():
     while 1:
         time.sleep(30)
-        if conf.userconf.dgetbool('FGFW_Lite', 'autoupdate'):
+        # if conf.userconf.dgetbool('FGFW_Lite', 'autoupdate'):
+        if False:
             lastupdate = conf.version.dgetfloat('Update', 'LastUpdate', 0)
             if time.time() - lastupdate > conf.UPDATE_INTV * 60 * 60:
                 update(auto=True)
@@ -960,34 +961,6 @@ class snovaHandler(FGFWProxyHandler):
             proxy.write(configfile)
 
 
-class fgfwproxy(FGFWProxyHandler):
-    """docstring for ClassName"""
-    def __init__(self, arg=''):
-        FGFWProxyHandler.__init__(self)
-        self.arg = arg
-
-    def config(self):
-        self.filelist = [('https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './fgfw-lite/gfwlist.txt'),
-                         # ('https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/fgfw-lite.py', './fgfw-lite/fgfw-lite.py'),
-                         ('https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/cloud.txt', './fgfw-lite/cloud.txt'),
-                         ('https://github.com/v3aqb/fgfw-lite/raw/master/userconf.sample.ini', './userconf.sample.ini'),
-                         ('https://github.com/v3aqb/fgfw-lite/raw/master/README.md', './README.md'),
-                         # ('https://github.com/v3aqb/fgfw-lite/raw/master/Python27/python27.zip', './Python27/python27.zip'),
-                         ('https://github.com/v3aqb/fgfw-lite/raw/master/fgfw-lite/encrypt.py', './fgfw-lite/encrypt.py')
-                         ]
-        self.enable = conf.userconf.dgetbool('fgfwproxy', 'enable', True)
-        self.enableupdate = conf.userconf.dgetbool('fgfwproxy', 'update', True)
-        self.listen = conf.userconf.dget('fgfwproxy', 'listen', '8118')
-        if conf.userconf.dgetbool('FGFW_Lite', 'debuginfo', False):
-            logging.basicConfig(level=logging.DEBUG)
-
-    def start(self):
-        pass
-
-    def restart(self):
-        pass
-
-
 class SConfigParser(configparser.ConfigParser):
     """docstring for SSafeConfigParser"""
     def dget(self, section, option, default=None):
@@ -1100,7 +1073,6 @@ def atexit_do():
 
 
 def main():
-    fgfwproxy()
     goagentHandler()
     snovaHandler()
     for k, v in conf.userconf.items('parents'):
