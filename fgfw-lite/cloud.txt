@@ -10,6 +10,5 @@
 |http://www.blogger.com forcehttps
 |http://*.wikipedia.org forcehttps
 ||feedly.com
-||twitter.com
 ||google.com
 ||google.com.hk
