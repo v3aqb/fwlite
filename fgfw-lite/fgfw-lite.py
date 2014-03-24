@@ -402,7 +402,6 @@ class ProxyHandler(HTTPRequestHandler):
             return self._do_CONNECT(True)
         self._read_write(remotesoc, 300)
         remotesoc.close()
-        self.connection.close()
         if self.retrycount:
             PARENT_PROXY.add_temp_rule('|https://%s' % self.path)
 
