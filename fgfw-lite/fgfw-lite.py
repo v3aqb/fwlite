@@ -1024,7 +1024,11 @@ class Config(object):
         self.BACKUP_INTV = 24
         self.parentdict = {}
         self.parentlist = []
-
+        listen = self.userconf.dget('fgfwproxy', 'listen', '8118')
+        if listen.isdigit():
+            self.listen = ('127.0.0.1', int(listen))
+        else:
+            self.listen = (listen.rsplit(':', 1)[0], int(listen.rsplit(':', 1)[1]))
         if 'hosts' not in self.userconf.sections():
             self.userconf.add_section('hosts')
             with open('userconf.ini', 'w') as f:
@@ -1081,7 +1085,7 @@ def main():
     updatedaemon = Thread(target=updater)
     updatedaemon.daemon = True
     updatedaemon.start()
-    server = ThreadingHTTPServer(('127.0.0.1', 8118), ProxyHandler)
+    server = ThreadingHTTPServer(conf.listen, ProxyHandler)
     server.serve_forever()
 
 if __name__ == "__main__":
