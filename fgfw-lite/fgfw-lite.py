@@ -131,6 +131,7 @@ class ProxyHandler(HTTPRequestHandler):
         self.retryable = True
         self.rbuffer = b''
         self.wbuffer = b''
+        self.retrycount = 0
         try:
             BaseHTTPRequestHandler.handle_one_request(self)
         except socket.error, e:
@@ -203,15 +204,17 @@ class ProxyHandler(HTTPRequestHandler):
                 self.wbuffer = b''
             self.wfile.write(data)
 
-    def _do_GET(self):
+    def _do_GET(self, retry=False):
         if not self.retryable or self.getparent():
             self.send_error(504)
             return
+        if retry:
+            self.retrycount += 1
         try:
             remotesoc = self._connect_via_proxy(self.headers['Host'])
         except Exception as e:
             logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
-            return self._do_GET()
+            return self._do_GET(True)
         self.wbuffer = b''
         try:
             if self.pproxy.startswith('http'):
@@ -226,7 +229,7 @@ class ProxyHandler(HTTPRequestHandler):
                 remotesoc.sendall(s)
             except Exception as e:
                 logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
-                return self._do_GET()
+                return self._do_GET(True)
             logging.debug('request header sent')
             # send request body
             content_length = int(self.headers.get('Content-Length', 0))
@@ -239,7 +242,7 @@ class ProxyHandler(HTTPRequestHandler):
                         remotesoc.sendall(self.rbuffer)
                     except Exception as e:
                         logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
-                        return self._do_GET()
+                        return self._do_GET(True)
                 while content_length:
                     data = self.rfile.read(min(8096, content_length))
                     content_length -= len(data)
@@ -249,14 +252,14 @@ class ProxyHandler(HTTPRequestHandler):
                         remotesoc.sendall(data)
                     except Exception as e:
                         logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
-                        return self._do_GET()
+                        return self._do_GET(True)
                 logging.debug('request body sent')
             remoterfile = remotesoc.makefile('rb', 0)
             try:
                 s = response_line = remoterfile.readline()
             except Exception as e:
                 logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
-                return self._do_GET()
+                return self._do_GET(True)
             logging.debug('respinse line read')
             response_line = response_line.rstrip('\r\n').split()
             response_status = int(response_line[1])
@@ -270,7 +273,7 @@ class ProxyHandler(HTTPRequestHandler):
                         break
             except Exception as e:
                 logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
-                return self._do_GET()
+                return self._do_GET(True)
             logging.debug('respinse header read')
             response_header = email.message_from_string(header_data)
             conntype = response_header.get('Connection', "")
@@ -301,7 +304,7 @@ class ProxyHandler(HTTPRequestHandler):
                         trunk_lenth = remoterfile.readline()
                     except Exception as e:
                         logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
-                        return self._do_GET()
+                        return self._do_GET(True)
                     self.wfile_write(trunk_lenth)
                     trunk_lenth = int(trunk_lenth.strip(), 16) + 2
                     flag = True if trunk_lenth == 2 else False
@@ -310,7 +313,7 @@ class ProxyHandler(HTTPRequestHandler):
                             data = remotesoc.recv(min(4096, trunk_lenth))
                         except Exception as e:
                             logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
-                            return self._do_GET()
+                            return self._do_GET(True)
                         trunk_lenth -= len(data)
                         self.wfile_write(data)
                     if flag:
@@ -321,7 +324,7 @@ class ProxyHandler(HTTPRequestHandler):
                         data = remotesoc.recv(min(4096, content_length))
                     except Exception as e:
                         logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
-                        return self._do_GET()
+                        return self._do_GET(True)
                     content_length -= len(data)
                     self.wfile_write(data)
             else:
@@ -331,6 +334,8 @@ class ProxyHandler(HTTPRequestHandler):
             if self.wbuffer:
                 self.wfile.write(self.wbuffer)
                 self.wbuffer = b''
+            if self.retrycount and response_status < 400:
+                PARENT_PROXY.add_temp_rule('|http://%s' % self.headers['Host'].split(':')[0])
         finally:
             remotesoc.close()
             self.connection.close()
