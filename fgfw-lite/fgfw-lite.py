@@ -397,6 +397,8 @@ class ProxyHandler(HTTPRequestHandler):
         self._read_write(remotesoc, 300)
         remotesoc.close()
         self.connection.close()
+        if self.retrycount:
+            PARENT_PROXY.add_temp_rule('|https://%s' % self.path)
 
     def _connect_via_proxy(self, netloc):
         if ':' in netloc:
