@@ -36,7 +36,8 @@ try:
     gevent.monkey.patch_all(subprocess=True)
 except ImportError:
     gevent = None
-
+except TypeError:
+    gevent.monkey.patch_all()
 from collections import defaultdict
 import subprocess
 import shlex
