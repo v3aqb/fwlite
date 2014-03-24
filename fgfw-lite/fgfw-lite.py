@@ -87,7 +87,7 @@ RTIMEOUT = 5
 
 
 def prestart():
-    print('FGFW_Lite %s' % __version__)
+    logging.info('FGFW_Lite %s' % __version__)
 
     if not os.path.isfile('./userconf.ini'):
         shutil.copyfile('./userconf.sample.ini', './userconf.ini')
@@ -128,6 +128,9 @@ class ProxyHandler(HTTPRequestHandler):
 
     def handle_one_request(self):
         self._proxylist = None
+        self.retryable = True
+        self.rbuffer = b''
+        self.wbuffer = b''
         try:
             BaseHTTPRequestHandler.handle_one_request(self)
         except socket.error, e:
@@ -150,7 +153,6 @@ class ProxyHandler(HTTPRequestHandler):
         if self._proxylist is None:
             self._proxylist = PARENT_PROXY.parentproxy(self.path, self.headers['Host'].rsplit(':', 1)[0], level)
         if not self._proxylist:
-            self.send_error(504)
             return 1
         self.ppname = self._proxylist.pop(0)
         self.pproxy = conf.parentdict.get(self.ppname)
@@ -188,14 +190,29 @@ class ProxyHandler(HTTPRequestHandler):
             return
         self._do_GET()
 
+    def wfile_write(self, data):
+        if self.retryable:
+            self.wbuffer += data
+            if len(self.wbuffer) > 102400:
+                self.retryable = False
+                self.wfile.write(self.wbuffer)
+                self.wbuffer = b''
+        else:
+            if self.wbuffer:
+                self.wfile.write(self.wbuffer)
+                self.wbuffer = b''
+            self.wfile.write(data)
+
     def _do_GET(self):
-        if self.getparent():
+        if not self.retryable or self.getparent():
+            self.send_error(504)
             return
         try:
             remotesoc = self._connect_via_proxy(self.headers['Host'])
         except Exception as e:
             logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
             return self._do_GET()
+        self.wbuffer = b''
         try:
             if self.pproxy.startswith('http'):
                 s = '%s %s %s\r\n' % (self.command, self.path, self.request_version)
@@ -205,28 +222,56 @@ class ProxyHandler(HTTPRequestHandler):
             for key_val in self.headers.items():
                 s += "%s: %s\r\n" % key_val
             s += "\r\n"
-            remotesoc.sendall(s)
+            try:
+                remotesoc.sendall(s)
+            except Exception as e:
+                logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
+                return self._do_GET()
+            logging.debug('request header sent')
             # send request body
-            content_length = self.headers.get('Content-Length')
+            content_length = int(self.headers.get('Content-Length', 0))
             if content_length:
-                content_length = int(content_length)
+                if content_length > 102400:
+                    self.retryable = False
+                if self.rbuffer:
+                    content_length -= len(self.rbuffer)
+                    try:
+                        remotesoc.sendall(self.rbuffer)
+                    except Exception as e:
+                        logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
+                        return self._do_GET()
                 while content_length:
                     data = self.rfile.read(min(8096, content_length))
                     content_length -= len(data)
-                    remotesoc.sendall(data)
-
-            remotefile = remotesoc.makefile('rb', 0)
-            s = response_line = remotefile.readline()
+                    if self.retryable:
+                        self.rbuffer += data
+                    try:
+                        remotesoc.sendall(data)
+                    except Exception as e:
+                        logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
+                        return self._do_GET()
+                logging.debug('request body sent')
+            remoterfile = remotesoc.makefile('rb', 0)
+            try:
+                s = response_line = remoterfile.readline()
+            except Exception as e:
+                logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
+                return self._do_GET()
+            logging.debug('respinse line read')
             response_line = response_line.rstrip('\r\n').split()
             response_status = int(response_line[1])
             self.protocol_version = response_line[0]
             header_data = b''
-            while True:
-                line = remotefile.readline()
-                header_data += line
-                if not line.strip():
-                    break
-
+            try:
+                while True:
+                    line = remoterfile.readline()
+                    header_data += line
+                    if not line.strip():
+                        break
+            except Exception as e:
+                logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
+                return self._do_GET()
+            logging.debug('respinse header read')
             response_header = email.message_from_string(header_data)
             conntype = response_header.get('Connection', "")
             if self.protocol_version >= "HTTP/1.1":
@@ -247,30 +292,45 @@ class ProxyHandler(HTTPRequestHandler):
                 content_length = int(response_header["Content-Length"])
             else:
                 content_length = None
-            s += header_data
-            self.wfile.write(s)
+            self.wfile_write(s + header_data)
             if self.command == 'HEAD' or 100 <= response_status < 200 or response_status in (204, 304):
                 pass
             elif response_header.get("Transfer-Encoding") and response_header.get("Transfer-Encoding") != "identity":
                 while 1:
-                    trunk_lenth = remotefile.readline(65537)
-                    self.wfile.write(trunk_lenth)
+                    try:
+                        trunk_lenth = remoterfile.readline()
+                    except Exception as e:
+                        logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
+                        return self._do_GET()
+                    self.wfile_write(trunk_lenth)
                     trunk_lenth = int(trunk_lenth.strip(), 16) + 2
                     flag = True if trunk_lenth == 2 else False
                     while trunk_lenth:
-                        data = remotesoc.recv(min(4096, trunk_lenth))
+                        try:
+                            data = remotesoc.recv(min(4096, trunk_lenth))
+                        except Exception as e:
+                            logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
+                            return self._do_GET()
                         trunk_lenth -= len(data)
-                        self.wfile.write(data)
+                        self.wfile_write(data)
                     if flag:
                         break
             elif content_length is not None:
                 while content_length:
-                    data = remotesoc.recv(min(4096, content_length))
+                    try:
+                        data = remotesoc.recv(min(4096, content_length))
+                    except Exception as e:
+                        logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
+                        return self._do_GET()
                     content_length -= len(data)
-                    self.wfile.write(data)
+                    self.wfile_write(data)
             else:
                 self.close_connection = 1
+                self.retryable = False
                 self._read_write(remotesoc)
+            if self.wbuffer:
+                self.wfile.write(self.wbuffer)
+                self.wbuffer = b''
         finally:
             remotesoc.close()
             self.connection.close()
@@ -278,7 +338,8 @@ class ProxyHandler(HTTPRequestHandler):
     do_OPTIONS = do_POST = do_DELETE = do_TRACE = do_HEAD = do_PUT = do_GET
 
     def do_CONNECT(self):
-        if self.getparent():
+        if not self.retryable or self.getparent():
+            self.send_error(504)
             return
         try:
             remotesoc = self._connect_via_proxy(self.path)
@@ -323,17 +384,16 @@ class ProxyHandler(HTTPRequestHandler):
                 (ins, _, exs) = select.select(iw, ow, iw, 1)
                 if exs:
                     break
-                if ins:
-                    for i in ins:
-                        data = i.recv(4096)
-                        if data:
-                            if i is soc:
-                                self.wfile.write(data)
-                            else:
-                                soc.sendall(data)
-                            count = 0
+                for i in ins:
+                    data = i.recv(4096)
+                    if data:
+                        if i is soc:
+                            self.wfile.write(data)
                         else:
-                            break
+                            soc.sendall(data)
+                        count = 0
+                    else:
+                        break
                 if count > max_idling:
                     break
             except socket.error as e:
