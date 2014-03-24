@@ -175,7 +175,7 @@ class ProxyHandler(HTTPRequestHandler):
         logging.info('{} {} via {}'.format(self.command, self.path, self.ppname))
 
     def getparent(self, level=1):
-        self._getparent(level)
+        return self._getparent(level)
 
     def do_GET(self):
         if self.path.lower().startswith('ftp://'):
@@ -269,7 +269,7 @@ class ProxyHandler(HTTPRequestHandler):
             try:
                 s = response_line = remoterfile.readline()
                 if not s:
-                    raise ValueError
+                    raise ValueError('empty response line')
             except Exception as e:
                 return self.on_GET_Error(e)
             logging.debug('respinse line read')
@@ -362,6 +362,8 @@ class ProxyHandler(HTTPRequestHandler):
     def _do_CONNECT(self, retry=False):
         if not self.retryable or self.getparent():
             return
+        if retry:
+            self.retrycount += 1
         try:
             remotesoc = self._connect_via_proxy(self.path)
         except Exception as e:
