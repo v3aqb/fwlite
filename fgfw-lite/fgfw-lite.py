@@ -340,7 +340,14 @@ class ProxyHandler(HTTPRequestHandler):
             else:
                 self.close_connection = 1
                 self.retryable = False
-                self._read_write(remotesoc)
+                while 1:
+                    try:
+                        data = remotesoc.recv(4096)
+                        if not data:
+                            raise
+                        self.wfile_write(data)
+                    except Exception:
+                        break
             if self.wbuffer:
                 self.retryable = False
                 self.wfile.write(self.wbuffer)
