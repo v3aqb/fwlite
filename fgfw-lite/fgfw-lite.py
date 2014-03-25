@@ -415,10 +415,9 @@ class ProxyHandler(HTTPRequestHandler):
             host, port = netloc, 80
         logging.debug("Connect to %s:%s" % (host, port))
         if not self.pproxy:
-            s = socket.create_connection((host, int(port)), 3)
+            return socket.create_connection((host, int(port)), 3)
         elif self.pproxy.startswith('http://'):
-            s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), 10)
-        return s
+            return socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), 10)
 
     def _read_write(self, soc, max_idling=20):
         iw = [self.connection, soc]
