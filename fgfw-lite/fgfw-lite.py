@@ -91,18 +91,13 @@ else:
             PYTHON2 = cmd
             break
 
-UPSTREAM_POOL = defaultdict(list)
 HOSTS = defaultdict(list)
 ctimer = []
-rtimer = []
 CTIMEOUT = 5
-RTIMEOUT = 5
 
 
 def prestart():
-    s = 'FGFW_Lite %s' % __version__
-    if gevent:
-        s += ' with gevent'
+    s = 'FGFW_Lite ' + __version__ + ' with gevent' if gevent else ''
     logging.info(s)
 
     if not os.path.isfile('./userconf.ini'):
@@ -387,6 +382,7 @@ class ProxyHandler(HTTPRequestHandler):
             remoterfile = remotesoc.makefile('rb', 0)
             data = remoterfile.readline()
             if '200' not in data:
+                logging.warning('{} {} failed! 200 not in response'.format(self.command, self.path))
                 return self._do_CONNECT(True)
             while data.strip():
                 data = remoterfile.readline()
@@ -478,10 +474,8 @@ class ProxyHandler(HTTPRequestHandler):
                 for i in ins:
                     data = i.recv(4096)
                     if data:
-                        if i is soc:
-                            self.wfile.write(data)
-                        else:
-                            soc.sendall(data)
+                        method = self.wfile.write if i is soc else soc.sendall
+                        method(data)
                         count = 0
                     else:
                         break
@@ -564,7 +558,7 @@ class autoproxy_rule(object):
         if not isinstance(arg, str):
             arg = str(arg)
         self.rule = arg.strip()
-        if len(self.rule) < 3 or self.rule.startswith('!') or self.rule.startswith('[') or '#' in self.rule:
+        if len(self.rule) < 3 or self.rule.startswith(('!', '[')) or '#' in self.rule:
             raise TypeError("invalid autoproxy_rule: %s" % self.rule)
         self.expire = expire
         self._ptrn = self._autopxy_rule_parse(self.rule)
@@ -719,7 +713,6 @@ class parent_proxy(object):
                 logging.info('%s expired' % rule.rule)
                 self.gfwlist_force.remove(rule)
                 self.temp_rules.discard(rule.rule)
-        return False
 
     def gfwlist_match(self, uri):
         for i, rule in enumerate(self.gfwlist):
@@ -729,7 +722,6 @@ class parent_proxy(object):
                 return True
 
     def ifgfwed(self, uri, host, level=1):
-
         if level == 0:
             return False
         elif level == 2:
@@ -758,7 +750,7 @@ class parent_proxy(object):
         if r and s:
             if r.groups()[0] in ['play.google.com', 'ssl.gstatic.com', 'mail-attachment.googleusercontent.com', 'webcache.googleusercontent.com', 's1.googleusercontent.com', 's2.googleusercontent.com', 'images1-focus-opensocial.googleusercontent.com', 'images2-focus-opensocial.googleusercontent.com', 'images3-focus-opensocial.googleusercontent.com', 'lh0.googleusercontent.com', 'lh1.googleusercontent.com', 'lh2.googleusercontent.com', 'lh3.googleusercontent.com', 'lh4.googleusercontent.com', 'lh5.googleusercontent.com', 'lh6.googleusercontent.com', 'lh7.googleusercontent.com', 'lh8.googleusercontent.com', 'lh9.googleusercontent.com', 'lh10.googleusercontent.com', 'lh11.googleusercontent.com', 'lh12.googleusercontent.com']:
                 return True
-            if any(r.groups()[0].endswith(path) for path in ['.google.com', '.google.com.hk', '.googleapis.com', '.android.com', '.appspot.com', '.googlegroups.com', '.googlesource.com', '.googleusercontent.com', '.google-analytics.com', '.googlecode.com', '.gstatic.com']):
+            if r.groups()[0].endswith(('.google.com', '.google.com.hk', '.googleapis.com', '.android.com', '.appspot.com', '.googlegroups.com', '.googlesource.com', '.googleusercontent.com', '.google-analytics.com', '.googlecode.com', '.gstatic.com')):
                 return False
             return True
 
@@ -776,10 +768,9 @@ class parent_proxy(object):
         f = self.ifgfwed(uri, host, level)
         parentlist = conf.parentlist[:]
         if self.no_goagent(uri):
-            if 'goagent' in parentlist:
-                parentlist.remove('goagent')
-            if 'goagent-php' in parentlist:
-                parentlist.remove('goagent-php')
+            for i in ['goagent', 'goagent-php']:
+                if i in parentlist:
+                    parentlist.remove(i)
 
         if f is False:
             return ['direct']
@@ -810,17 +801,12 @@ def updater():
             lastupdate = conf.version.dgetfloat('Update', 'LastUpdate', 0)
             if time.time() - lastupdate > conf.UPDATE_INTV * 60 * 60:
                 update(auto=True)
-        global CTIMEOUT, ctimer, RTIMEOUT, rtimer
+        global CTIMEOUT, ctimer
         if ctimer:
             logging.info('max connection time: %ss in %s' % (max(ctimer), len(ctimer)))
-            CTIMEOUT = (min(max(3, max(ctimer) * 5), 15) * 2 + RTIMEOUT) / 3
+            CTIMEOUT = min(max(3, max(ctimer) * 5), 15)
             logging.info('conn timeout set to: %s' % CTIMEOUT)
             ctimer = []
-        if rtimer:
-            logging.info('max read time: %ss in %s' % (max(rtimer), len(rtimer)))
-            RTIMEOUT = max((min(max(4, max(rtimer) * 10), 15) * 2 + RTIMEOUT) / 3, CTIMEOUT)
-            logging.info('read timeout set to: %s' % RTIMEOUT)
-            rtimer = []
 
 
 def update(auto=False):
@@ -1095,24 +1081,21 @@ class SConfigParser(configparser.ConfigParser):
 
     def dgetfloat(self, section, option, default=0):
         try:
-            value = self.getfloat(section, option)
+            return self.getfloat(section, option)
         except Exception:
-            value = float(default)
-        return value
+            return float(default)
 
     def dgetint(self, section, option, default=0):
         try:
-            value = self.getint(section, option)
+            return self.getint(section, option)
         except Exception:
-            value = int(default)
-        return value
+            return int(default)
 
     def dgetbool(self, section, option, default=False):
         try:
-            value = self.getboolean(section, option)
+            return self.getboolean(section, option)
         except Exception:
-            value = bool(default)
-        return value
+            return bool(default)
 
     def get(self, section, option, raw=False, vars=None):
         try:
@@ -1125,10 +1108,9 @@ class SConfigParser(configparser.ConfigParser):
 
     def items(self, section):
         try:
-            value = configparser.ConfigParser.items(self, section)
+            return configparser.ConfigParser.items(self, section)
         except Exception:
-            value = []
-        return value
+            return []
 
     def set(self, section, option, value):
         if not self.has_section(section):
@@ -1142,7 +1124,6 @@ class Config(object):
         self.userconf = SConfigParser()
         self.reload()
         self.UPDATE_INTV = 6
-        self.BACKUP_INTV = 24
         self.parentdict = {}
         self.parentlist = []
         listen = self.userconf.dget('fgfwproxy', 'listen', '8118')
@@ -1150,10 +1131,6 @@ class Config(object):
             self.listen = ('127.0.0.1', int(listen))
         else:
             self.listen = (listen.rsplit(':', 1)[0], int(listen.rsplit(':', 1)[1]))
-        if 'hosts' not in self.userconf.sections():
-            self.userconf.add_section('hosts')
-            with open('userconf.ini', 'w') as f:
-                self.userconf.write(f)
         for host, ip in self.userconf.items('hosts'):
             if ip not in HOSTS.get(host, []):
                 HOSTS[host].append(ip)
