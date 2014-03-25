@@ -377,7 +377,7 @@ class ProxyHandler(HTTPRequestHandler):
             remotesoc = self._connect_via_proxy(self.path)
         except Exception as e:
             logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
-            return self.do_CONNECT()
+            return self._do_CONNECT()
 
         if self.pproxy.startswith('http'):
             s = [b'%s %s %s\r\n' % (self.command, self.path, self.request_version), ]
