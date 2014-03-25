@@ -62,10 +62,6 @@ StartupNotify=true
             os.chmod(filename, 0755)
 
 
-#gtk.main_quit = lambda: None
-#appindicator = None
-
-
 class GoAgentGTK:
 
     command = ['/usr/bin/env', 'python2.7', '-B', './fgfw-lite/fgfw-lite.py']
@@ -79,6 +75,7 @@ class GoAgentGTK:
         self.window.set_position(gtk.WIN_POS_CENTER)
         self.window.connect('delete-event', self.delete_event)
         self.terminal = terminal
+        self.terminal.set_scrollback_lines(300)
         for cmd in ('python2.7', 'python27', 'python2'):
             if os.system('which %s' % cmd) == 0:
                 self.command[1] = cmd
@@ -113,9 +110,11 @@ class GoAgentGTK:
 
     def make_menu(self):
         menu = gtk.Menu()
-        itemlist = [(u'\u663e\u793a/\u9690\u85cf', self.show_hide_toggle),
-                    (u'\u91cd\u65b0\u8f7d\u5165', self.on_reload),
-                    (u'\u9000\u51fa', self.on_quit)]
+        itemlist = [(u'显示/隐藏', self.show_hide_toggle),
+                    (u'重新载入', self.on_reload),
+                    (u'本地规则', self.on_openlocal),
+                    (u'设置', self.on_openconf),
+                    (u'退出', self.on_quit)]
         for text, callback in itemlist:
             item = gtk.MenuItem(text)
             item.connect('activate', callback)
@@ -178,6 +177,12 @@ class GoAgentGTK:
             self.on_hide(widget, data)
         else:
             self.on_show(widget, data)
+
+    def on_openconf(self, widget, data=None):
+        os.system('xdg-open ./userconf.ini')
+
+    def on_openlocal(self, widget, data=None):
+        os.system('xdg-open ./fgfw-lite/local.txt')
 
     def on_quit(self, widget, data=None):
         gtk.main_quit()

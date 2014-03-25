@@ -131,23 +131,22 @@ class MainWindow(QtGui.QMainWindow):
     def on_Quit(self):
         with self._lock:
             self.thread.wtrigger.emit('sys.exit()\n')
-            self.thread.wait()
-            QtGui.qApp.quit()
+        self.thread.wait()
+        QtGui.qApp.quit()
 
     def send(self):
+        te = self.ui.lineEdit.text()
+        self.ui.lineEdit.clear()
         with self._lock:
-            te = self.ui.lineEdit.text()
-            self.ui.lineEdit.clear()
             self.thread.wtrigger.emit(te + '\n')
-            self.update_text(te)
+        self.update_text(te)
 
     def update_text(self, text):
-        with self._lock:
-            if text:
-                if len(self.ui.textEdit.toPlainText().splitlines()) > 300:
-                    self.ui.textEdit.setPlainText(u'\n'.join(self.ui.textEdit.toPlainText().splitlines()[-100:]))
-                self.ui.textEdit.moveCursor(QtGui.QTextCursor.End)
-                self.ui.textEdit.append(text)
+        if text:
+            if len(self.ui.textEdit.toPlainText().splitlines()) > 300:
+                self.ui.textEdit.setPlainText(u'\n'.join(self.ui.textEdit.toPlainText().splitlines()[-100:]))
+            self.ui.textEdit.moveCursor(QtGui.QTextCursor.End)
+            self.ui.textEdit.append(text)
 
     def showToggle(self):
         if self.isVisible():
@@ -159,9 +158,9 @@ class MainWindow(QtGui.QMainWindow):
     def reload(self):
         with self._lock:
             self.thread.wtrigger.emit('sys.exit()\n')
-            self.thread.wait()
-            self.ui.textEdit.clear()
-            self.createProcess()
+        self.thread.wait()
+        self.ui.textEdit.clear()
+        self.createProcess()
 
 if __name__ == "__main__":
     app = QtGui.QApplication('')
