@@ -60,7 +60,13 @@ from threading import Thread
 import urllib2
 import urlparse
 import pygeoip
-from repoze.lru import lru_cache
+try:
+    from repoze.lru import lru_cache
+except ImportError:
+    def lru_cache(size=0, timeout=0):
+        def decorator(func):
+            return func
+        return decorator
 try:
     from concurrent.futures import ThreadPoolExecutor
 except ImportError:
