@@ -54,6 +54,7 @@ import select
 import shutil
 import socket
 import struct
+import ssl
 from threading import Thread
 import urllib2
 import urlparse
@@ -423,6 +424,11 @@ class ProxyHandler(HTTPRequestHandler):
             return socket.create_connection((host, int(port)), 3)
         elif self.pproxy.startswith('http://'):
             return socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), 10)
+        elif self.pproxy.startswith('https://'):
+            s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), 10)
+            s = ssl.wrap_socket(s)
+            s.do_handshake()
+            return s
         elif self.pproxy.startswith('ss://'):
             s = sssocket(self.pproxy)
             s.connect((host, int(port)))
