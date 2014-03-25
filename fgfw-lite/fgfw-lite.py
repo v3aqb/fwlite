@@ -401,6 +401,7 @@ class ProxyHandler(HTTPRequestHandler):
             except socket.error as e:
                 logging.warning('socket error: %s' % e)
         if self.retryable:
+            logging.warning('{} {} failed! read timed out'.format(self.command, self.path))
             return self._do_CONNECT(True)
         self._read_write(remotesoc, 300)
         remotesoc.close()
@@ -416,7 +417,7 @@ class ProxyHandler(HTTPRequestHandler):
         if not self.pproxy:
             s = socket.create_connection((host, int(port)), 3)
         elif self.pproxy.startswith('http://'):
-            s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), 3)
+            s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), 5)
         return s
 
     def _read_write(self, soc, max_idling=20):
