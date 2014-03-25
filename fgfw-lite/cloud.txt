@@ -5,10 +5,11 @@
 |http://appengine.google.com forcehttps
 |http://www.google.com.hk/url forcehttps
 |http://www.google.com.hk/search forcehttps
-/^http://www\.google\.com/?$/ forcehttps
 |http://*.googlecode.com forcehttps
 |http://www.blogger.com forcehttps
 |http://*.wikipedia.org forcehttps
+@@||clients.google.com
+@@||clients1.google.com
 ||feedly.com
 ||google.com
 ||google.com.hk
