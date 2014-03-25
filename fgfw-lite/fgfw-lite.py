@@ -49,6 +49,7 @@ import atexit
 import platform
 import base64
 import ftplib
+import encrypt
 import select
 import shutil
 import socket
@@ -240,7 +241,7 @@ class ProxyHandler(HTTPRequestHandler):
                 s += "%s: %s\r\n" % key_val
             s += "\r\n"
             try:
-                remotesoc.sendall(s)
+                remotesoc.sendall(s.encode('latin'))
             except Exception as e:
                 return self.on_GET_Error(e)
             logging.debug('request header sent')
@@ -265,7 +266,7 @@ class ProxyHandler(HTTPRequestHandler):
                     except Exception as e:
                         return self.on_GET_Error(e)
                 logging.debug('request body sent')
-            remoterfile = remotesoc.makefile('rb', 0)
+            remoterfile = remotesoc if isinstance(remotesoc, sssocket) else remotesoc.makefile('rb', 0)
             try:
                 s = response_line = remoterfile.readline()
                 if not s:
@@ -420,6 +421,10 @@ class ProxyHandler(HTTPRequestHandler):
             return socket.create_connection((host, int(port)), 3)
         elif self.pproxy.startswith('http://'):
             return socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), 10)
+        elif self.pproxy.startswith('ss://'):
+            s = sssocket(self.pproxy)
+            s.connect((host, int(port)))
+            return s
 
     def _read_write(self, soc, max_idling=20):
         iw = [self.connection, soc]
@@ -465,6 +470,47 @@ class ProxyHandler(HTTPRequestHandler):
             ftp.quit()
         except Exception as e:
             logging.warning("FTP Exception: %s" % e)
+
+
+class sssocket(object):
+    def __init__(self, ssServer):
+        p = urlparse.urlparse(ssServer)
+        _, sshost, ssport, ssmethod, sspassword = (p.scheme, p.hostname, p.port, p.username, p.password)
+        self._sock = socket.create_connection((sshost, ssport), 10)
+        self.crypto = encrypt.Encryptor(sspassword, ssmethod)
+
+    def connect(self, address):
+        host, port = address
+        data = b''.join([b'\x03',
+                        chr(len(host)).encode(),
+                        host.encode(),
+                        struct.pack(b">H", port)])
+        self.sendall(data)
+
+    def recv(self, size):
+        if self.crypto.decipher is None:
+            size += self.crypto.get_cipher_len(self.crypto.method)[1]
+        return self.crypto.decrypt(self._sock.recv(size))
+
+    def sendall(self, data):
+        self._sock.sendall(self.crypto.encrypt(data))
+
+    def readline(self, bufsize=0):
+        buf = b''
+        while True:
+            data = self.recv(1)
+            buf += data
+            if bufsize and len(buf) == bufsize:
+                break
+            if b'\n' in buf:
+                break
+        return buf
+
+    def close(self):
+        self._sock.close()
+
+    def fileno(self):
+        return self._sock.fileno()
 
 
 class ExpiredError(Exception):
