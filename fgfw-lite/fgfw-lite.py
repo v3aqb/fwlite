@@ -135,6 +135,14 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
+    def finish(self):
+        """make python2 BaseHTTPRequestHandler happy"""
+        try:
+            BaseHTTPRequestHandler.finish(self)
+        except (IOError, OSError) as e:
+            if e[0] not in (errno.ECONNABORTED, errno.ECONNRESET, errno.EPIPE):
+                raise
+
 
 class ProxyHandler(HTTPRequestHandler):
     server_version = "HTTPProxy/" + __version__
