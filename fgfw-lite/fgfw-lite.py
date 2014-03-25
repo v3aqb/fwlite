@@ -50,6 +50,7 @@ import platform
 import base64
 import ftplib
 import encrypt
+import random
 import select
 import shutil
 import socket
@@ -167,7 +168,7 @@ class ProxyHandler(HTTPRequestHandler):
         if not self._proxylist:
             return 1
         self.ppname = self._proxylist.pop(0)
-        self.pproxy = conf.parentdict.get(self.ppname)
+        self.pproxy = conf.parentdict.get(self.ppname)[0]
         self.pproxyparse = urlparse.urlparse(self.pproxy)
         logging.info('{} {} via {}'.format(self.command, self.path, self.ppname))
 
@@ -746,7 +747,7 @@ class parent_proxy(object):
     @lru_cache(256, timeout=120)
     def no_goagent(self, uri):
         r = re.match(r'^([^/]+):\d+$', uri)
-        s = set(conf.parentlist) - set(['goagent', 'goagent-php', 'direct', 'local'])
+        s = set(conf.parentdict.keys()) - set(['goagent', 'goagent-php', 'direct', 'local'])
         if r and s:
             if r.groups()[0] in ['play.google.com', 'ssl.gstatic.com', 'mail-attachment.googleusercontent.com', 'webcache.googleusercontent.com', 's1.googleusercontent.com', 's2.googleusercontent.com', 'images1-focus-opensocial.googleusercontent.com', 'images2-focus-opensocial.googleusercontent.com', 'images3-focus-opensocial.googleusercontent.com', 'lh0.googleusercontent.com', 'lh1.googleusercontent.com', 'lh2.googleusercontent.com', 'lh3.googleusercontent.com', 'lh4.googleusercontent.com', 'lh5.googleusercontent.com', 'lh6.googleusercontent.com', 'lh7.googleusercontent.com', 'lh8.googleusercontent.com', 'lh9.googleusercontent.com', 'lh10.googleusercontent.com', 'lh11.googleusercontent.com', 'lh12.googleusercontent.com']:
                 return True
@@ -766,7 +767,9 @@ class parent_proxy(object):
         '''
 
         f = self.ifgfwed(uri, host, level)
-        parentlist = conf.parentlist[:]
+        parentlist = conf.parentdict.keys()
+        random.shuffle(parentlist)
+        parentlist = sorted(parentlist, key=lambda item: conf.parentdict[item][1])
         if self.no_goagent(uri):
             for i in ['goagent', 'goagent-php']:
                 if i in parentlist:
@@ -929,7 +932,7 @@ class goagentHandler(FGFWProxyHandler):
             goagent.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
             goagent.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
             goagent.set('gae', 'options', conf.userconf.dget('goagent', 'options', ''))
-            conf.addparentproxy('goagent', 'http://127.0.0.1:8087')
+            conf.addparentproxy('goagent', 'http://127.0.0.1:8087 20')
         else:
             goagent.set('gae', 'appid', 'dummy')
 
@@ -1125,7 +1128,6 @@ class Config(object):
         self.reload()
         self.UPDATE_INTV = 6
         self.parentdict = {}
-        self.parentlist = []
         listen = self.userconf.dget('fgfwproxy', 'listen', '8118')
         if listen.isdigit():
             self.listen = ('127.0.0.1', int(listen))
@@ -1158,15 +1160,15 @@ class Config(object):
     def addparentproxy(self, name, proxy):
         '''
         {
-            'direct': '',
-            'goagent': 'http://127.0.0.1:8087'
+            'direct': ('', 0),
+            'goagent': ('http://127.0.0.1:8087', 20)
         }
         '''
-        self.parentdict[name] = proxy
-        self.parentlist.append(name)
+        proxy, _, priority = proxy.partition(' ')
+        self.parentdict[name] = (proxy, int(priority) if priority else 99)
 
 conf = Config()
-conf.addparentproxy('direct', '')
+conf.addparentproxy('direct', ' 0')
 
 
 @atexit.register
