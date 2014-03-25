@@ -417,7 +417,7 @@ class ProxyHandler(HTTPRequestHandler):
         if not self.pproxy:
             s = socket.create_connection((host, int(port)), 3)
         elif self.pproxy.startswith('http://'):
-            s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), 5)
+            s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), 10)
         return s
 
     def _read_write(self, soc, max_idling=20):
