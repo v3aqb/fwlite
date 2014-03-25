@@ -621,8 +621,6 @@ class redirector(object):
                     return rule._ptrn.sub(result[1:-1], uri)
                 return result
 
-REDIRECTOR = redirector()
-
 
 def ip_from_string(ip):
     # https://github.com/fqrouter/fqsocks/blob/master/fqsocks/china_ip.py#L35
@@ -637,6 +635,7 @@ class parent_proxy(object):
         self.gfwlist_force = []
         self.localnet = []
         self.temp_rules = set()
+        self.proxy_by_rule = []
         REDIRECTOR.lst = []
 
         def add_rule(line, force=False):
@@ -644,7 +643,10 @@ class parent_proxy(object):
             if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
                 try:
                     rule, result = line.split()
-                    REDIRECTOR.lst.append((autoproxy_rule(rule), result))
+                    if result in conf.parentdict.keys():
+                        self.proxy_by_rule.append((autoproxy_rule(rule), result))
+                    else:
+                        REDIRECTOR.lst.append((autoproxy_rule(rule), result))
                 except TypeError as e:
                     logging.debug('create autoproxy rule failed: %s' % e)
             else:
@@ -755,6 +757,12 @@ class parent_proxy(object):
                 return False
             return True
 
+    def select_proxy_by_rule(self, uri):
+        '''return a parentproxy name, like: 'shadowsocks-uk' '''
+        for rule in self.proxy_by_rule:
+            if rule[0].match(uri):
+                return rule[1]
+
     def parentproxy(self, uri, host, level=1):
         '''
             decide which parentproxy to use.
@@ -765,11 +773,17 @@ class parent_proxy(object):
                    2 -- proxy if force, direct if ip in china or override, proxy if all
                    3 -- proxy if not override
         '''
-
-        f = self.ifgfwed(uri, host, level)
         parentlist = conf.parentdict.keys()
         random.shuffle(parentlist)
         parentlist = sorted(parentlist, key=lambda item: conf.parentdict[item][1])
+
+        p = self.select_proxy_by_rule(uri)
+        if p:
+            parentlist.remove(p)
+            parentlist.insert(0, p)
+            return parentlist
+        f = self.ifgfwed(uri, host, level)
+
         if self.no_goagent(uri):
             for i in ['goagent', 'goagent-php']:
                 if i in parentlist:
@@ -791,9 +805,6 @@ class parent_proxy(object):
             logging.info('add autoproxy rule: %s' % rule)
             self.gfwlist_force.append(autoproxy_rule(rule, expire=time.time() + 60 * 10))
             self.temp_rules.add(rule)
-
-PARENT_PROXY = parent_proxy()
-PARENT_PROXY.config()
 
 
 def updater():
@@ -1167,8 +1178,9 @@ class Config(object):
         proxy, _, priority = proxy.partition(' ')
         self.parentdict[name] = (proxy if proxy != 'direct' else '', int(priority) if priority else 99)
 
+REDIRECTOR = redirector()
+PARENT_PROXY = parent_proxy()
 conf = Config()
-conf.addparentproxy('direct', 'direct 0')
 
 
 @atexit.register
@@ -1182,6 +1194,8 @@ def main():
     snovaHandler()
     for k, v in conf.userconf.items('parents'):
         conf.addparentproxy(k, v)
+    conf.addparentproxy('direct', 'direct 0')
+    PARENT_PROXY.config()
     updatedaemon = Thread(target=updater)
     updatedaemon.daemon = True
     updatedaemon.start()
