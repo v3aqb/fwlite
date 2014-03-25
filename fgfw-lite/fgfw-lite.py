@@ -1165,10 +1165,10 @@ class Config(object):
         }
         '''
         proxy, _, priority = proxy.partition(' ')
-        self.parentdict[name] = (proxy, int(priority) if priority else 99)
+        self.parentdict[name] = (proxy if proxy != 'direct' else '', int(priority) if priority else 99)
 
 conf = Config()
-conf.addparentproxy('direct', ' 0')
+conf.addparentproxy('direct', 'direct 0')
 
 
 @atexit.register
