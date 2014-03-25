@@ -385,7 +385,7 @@ class ProxyHandler(HTTPRequestHandler):
             remotesoc.sendall(self.rbuffer)
         for i in range(30):
             try:
-                (ins, _, exs) = select.select([self.connection, remotesoc], [], [self.connection, remotesoc], 0.1)
+                (ins, _, exs) = select.select([self.connection, remotesoc], [], [self.connection, remotesoc], 0.2)
                 if exs:
                     break
                 for i in ins:
@@ -398,6 +398,8 @@ class ProxyHandler(HTTPRequestHandler):
                             if self.retryable:
                                 self.rbuffer += data
                             remotesoc.sendall(data)
+                if not self.retryable:
+                    break
             except socket.error as e:
                 logging.warning('socket error: %s' % e)
         if self.retryable:
