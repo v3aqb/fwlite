@@ -399,6 +399,8 @@ class ProxyHandler(HTTPRequestHandler):
                             if self.retryable:
                                 self.rbuffer += data
                             remotesoc.sendall(data)
+                    else:
+                        break
                 if not self.retryable:
                     break
             except socket.error as e:
