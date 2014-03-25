@@ -3,9 +3,16 @@ FGFW-Lite
 
 A HTTP Proxy server help to get around the Great Firewall. FGFW-Lite dectets websites blocked by GFW automatically, and forward the request to a uncensored proxy server.
 
-Supported parent proxy server: GoAgent, Shadowsocks, snova, SOCKS5 Proxy, HTTP Proxy, HTTP Proxy over SSL.
+Supported parent proxy server:
 
-For windows users, [download](https://github.com/v3aqb/fgfw-lite/archive/master.zip), edit userconf.ini as needed, and run FGFW_Lite.exe.
+* GoAgent
+* Shadowsocks
+* snova
+* SOCKS5 Proxy
+* HTTP Proxy
+* HTTP Proxy over SSL
+
+For windows users, [download](https://github.com/v3aqb/fgfw-lite/archive/0.4.zip), edit userconf.ini as needed, and run FGFW_Lite.exe.
 
 requirements under openSUSE:
 
