@@ -425,6 +425,32 @@ class ProxyHandler(HTTPRequestHandler):
             s = sssocket(self.pproxy)
             s.connect((host, int(port)))
             return s
+        elif self.pproxy.startswith('socks5://'):
+            s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), 10)
+            s.sendall(b"\x05\x02\x00\x02" if self.pproxyparse.username else b"\x05\x01\x00")
+            data = s.recv(2)
+            if data == b'\x05\x02':  # basic auth
+                s.sendall(b''.join([b"\x01",
+                                    chr(len(self.pproxyparse.username)).encode(),
+                                    self.pproxyparse.username.encode(),
+                                    chr(len(self.pproxyparse.password)).encode(),
+                                    self.pproxyparse.password.encode()]))
+                data = s.recv(2)
+            assert data[1] == b'\x00'  # no auth needed or auth passed
+            s.sendall(b''.join([b"\x05\x01\x00\x03",
+                                chr(len(host)).encode(),
+                                host.encode(),
+                                struct.pack(b">H", int(port))]))
+            data = s.recv(4)
+            assert data[1] == b'\x00'
+            if data[3] == b'\x01':  # read ipv4 addr
+                s.recv(4)
+            elif data[3] == b'\x03':  # read host addr
+                s.recv(ord(s.recv(1)))
+            elif data[3] == b'\x04':  # read ipv6 addr
+                s.recv(16)
+            s.recv(2)  # read port
+            return s
 
     def _read_write(self, soc, max_idling=20):
         iw = [self.connection, soc]
