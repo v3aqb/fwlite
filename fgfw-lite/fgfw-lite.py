@@ -101,6 +101,7 @@ else:
 HOSTS = defaultdict(list)
 ctimer = []
 CTIMEOUT = 5
+NetWorkIOError = (socket.error, ssl.SSLError, OSError)
 
 
 def prestart():
@@ -161,7 +162,7 @@ class ProxyHandler(HTTPRequestHandler):
         try:
             BaseHTTPRequestHandler.handle_one_request(self)
         except socket.error, e:
-            if e.errno == errno.ECONNRESET:
+            if e.errno in (errno.ECONNRESET, ):
                 pass  # ignore the error
             else:
                 raise
@@ -239,7 +240,7 @@ class ProxyHandler(HTTPRequestHandler):
             self.retrycount += 1
         try:
             remotesoc = self._connect_via_proxy(self.headers['Host'])
-        except Exception as e:
+        except NetWorkIOError as e:
             return self.on_GET_Error(e)
         self.wbuffer = b''
         try:
@@ -253,7 +254,7 @@ class ProxyHandler(HTTPRequestHandler):
             s += "\r\n"
             try:
                 remotesoc.sendall(s.encode('latin'))
-            except Exception as e:
+            except NetWorkIOError as e:
                 return self.on_GET_Error(e)
             logging.debug('request header sent')
             # send request body
@@ -265,7 +266,7 @@ class ProxyHandler(HTTPRequestHandler):
                     content_length -= len(self.rbuffer)
                     try:
                         remotesoc.sendall(self.rbuffer)
-                    except Exception as e:
+                    except NetWorkIOError as e:
                         return self.on_GET_Error(e)
                 while content_length:
                     data = self.rfile.read(min(8096, content_length))
@@ -274,7 +275,7 @@ class ProxyHandler(HTTPRequestHandler):
                         self.rbuffer += data
                     try:
                         remotesoc.sendall(data)
-                    except Exception as e:
+                    except NetWorkIOError as e:
                         return self.on_GET_Error(e)
                 logging.debug('request body sent')
             remoterfile = remotesoc if isinstance(remotesoc, sssocket) else remotesoc.makefile('rb', 0)
@@ -282,7 +283,7 @@ class ProxyHandler(HTTPRequestHandler):
                 s = response_line = remoterfile.readline()
                 if not s:
                     raise ValueError('empty response line')
-            except Exception as e:
+            except (socket.error, ssl.SSLError, OSError, ValueError) as e:
                 return self.on_GET_Error(e)
             logging.debug('respinse line read')
             response_line = response_line.rstrip('\r\n').split()
@@ -295,7 +296,7 @@ class ProxyHandler(HTTPRequestHandler):
                     header_data += line
                     if not line.strip():
                         break
-            except Exception as e:
+            except NetWorkIOError as e:
                 return self.on_GET_Error(e)
             logging.debug('respinse header read')
             response_header = email.message_from_string(header_data)
@@ -325,7 +326,7 @@ class ProxyHandler(HTTPRequestHandler):
                 while 1:
                     try:
                         trunk_lenth = remoterfile.readline()
-                    except Exception as e:
+                    except NetWorkIOError as e:
                         return self.on_GET_Error(e)
                     self.wfile_write(trunk_lenth)
                     trunk_lenth = int(trunk_lenth.strip(), 16) + 2
@@ -333,7 +334,7 @@ class ProxyHandler(HTTPRequestHandler):
                     while trunk_lenth:
                         try:
                             data = remotesoc.recv(min(4096, trunk_lenth))
-                        except Exception as e:
+                        except NetWorkIOError as e:
                             return self.on_GET_Error(e)
                         trunk_lenth -= len(data)
                         self.wfile_write(data)
@@ -343,7 +344,7 @@ class ProxyHandler(HTTPRequestHandler):
                 while content_length:
                     try:
                         data = remotesoc.recv(min(4096, content_length))
-                    except Exception as e:
+                    except NetWorkIOError as e:
                         return self.on_GET_Error(e)
                     content_length -= len(data)
                     self.wfile_write(data)
@@ -368,7 +369,7 @@ class ProxyHandler(HTTPRequestHandler):
             remotesoc.close()
 
     def on_GET_Error(self, e):
-        logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
+        logging.warning('{} {} failed! {}'.format(self.command, self.path, repr(e)))
         return self._do_GET(True)
 
     do_OPTIONS = do_POST = do_DELETE = do_TRACE = do_HEAD = do_PUT = do_GET
@@ -385,7 +386,7 @@ class ProxyHandler(HTTPRequestHandler):
             self.retrycount += 1
         try:
             remotesoc = self._connect_via_proxy(self.path)
-        except Exception as e:
+        except NetWorkIOError as e:
             logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
             return self._do_CONNECT()
 
