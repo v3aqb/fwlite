@@ -162,8 +162,8 @@ class ProxyHandler(HTTPRequestHandler):
         try:
             BaseHTTPRequestHandler.handle_one_request(self)
         except socket.error, e:
-            if e.errno in (errno.ECONNRESET, ):
-                pass  # ignore the error
+            if e.errno in (errno.ECONNABORTED, errno.ECONNRESET, errno.EPIPE):
+                self.close_connection = 1
             else:
                 raise
 
