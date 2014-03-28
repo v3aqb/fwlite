@@ -430,30 +430,33 @@ class ProxyHandler(HTTPRequestHandler):
             return self._do_CONNECT(True)
         self._read_write(remotesoc, 300)
         remotesoc.close()
+        self.connection.close()
         if self.retrycount:
             PARENT_PROXY.add_temp_rule('|https://%s' % self.path)
 
     def _connect_via_proxy(self, netloc):
+        timeout = None if self._proxylist else 20
+
         if ':' in netloc:
             host, port = netloc.rsplit(':', 1)
         else:
             host, port = netloc, 80
         logging.debug("Connect to %s:%s" % (host, port))
         if not self.pproxy:
-            return socket.create_connection((host, int(port)), 3)
+            return socket.create_connection((host, int(port)), timeout or 5)
         elif self.pproxy.startswith('http://'):
-            return socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), 10)
+            return socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), timeout or 10)
         elif self.pproxy.startswith('https://'):
-            s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), 10)
+            s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), timeout or 10)
             s = ssl.wrap_socket(s)
             s.do_handshake()
             return s
         elif self.pproxy.startswith('ss://'):
-            s = sssocket(self.pproxy)
+            s = sssocket(self.pproxy, timeout or 10)
             s.connect((host, int(port)))
             return s
         elif self.pproxy.startswith('socks5://'):
-            s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), 10)
+            s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), timeout or 10)
             s.sendall(b"\x05\x02\x00\x02" if self.pproxyparse.username else b"\x05\x01\x00")
             data = s.recv(2)
             if data == b'\x05\x02':  # basic auth
@@ -524,10 +527,10 @@ class ProxyHandler(HTTPRequestHandler):
 
 
 class sssocket(object):
-    def __init__(self, ssServer):
+    def __init__(self, ssServer, timeout=10):
         p = urlparse.urlparse(ssServer)
         _, sshost, ssport, ssmethod, sspassword = (p.scheme, p.hostname, p.port, p.username, p.password)
-        self._sock = socket.create_connection((sshost, ssport), 10)
+        self._sock = socket.create_connection((sshost, ssport), timeout)
         self.crypto = encrypt.Encryptor(sspassword, ssmethod)
 
     def connect(self, address):
@@ -942,7 +945,9 @@ class goagentHandler(FGFWProxyHandler):
         with open('%s/goagent/proxy.py' % WORKINGDIR, 'rb') as f:
             t = f.read()
         with open('%s/goagent/proxy.py' % WORKINGDIR, 'wb') as f:
-            f.write(t.replace(b'sys.stdout.write', b'sys.stderr.write'))
+            t = t.replace(b'sys.stdout.write', b'sys.stderr.write')
+            t = t.replace(b"ctypes.windll.kernel32.SetConsoleTitleW(u'GoAgent v%s' % __version__)", b'pass')
+            f.write(t)
         if self.enable:
             self._config()
 
@@ -1205,6 +1210,9 @@ def atexit_do():
 
 
 def main():
+    if os.name == 'nt':
+        import ctypes
+        ctypes.windll.kernel32.SetConsoleTitleW(u'FGFW-Lite v%s' % __version__)
     goagentHandler()
     snovaHandler()
     for k, v in conf.userconf.items('parents'):
