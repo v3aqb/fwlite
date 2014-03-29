@@ -718,7 +718,7 @@ class parent_proxy(object):
     @lru_cache(256, timeout=120)
     def ifhost_in_china(self, host):
         try:
-            if self.geoip.country_name_by_name(host) in ('China', ):
+            if self.geoip.country_code_by_name(host) in self.region:
                 logging.info('%s in china' % host)
                 return True
             return False
@@ -1166,6 +1166,9 @@ class Config(object):
             self.listen = ('127.0.0.1', int(listen))
         else:
             self.listen = (listen.rsplit(':', 1)[0], int(listen.rsplit(':', 1)[1]))
+
+        self.region = set(x.upper() for x in self.userconf.dget('fgfwproxy', 'region', 'cn').split('|'))
+
         for host, ip in self.userconf.items('hosts'):
             if ip not in HOSTS.get(host, []):
                 HOSTS[host].append(ip)
