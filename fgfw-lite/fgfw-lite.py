@@ -116,7 +116,7 @@ def prestart():
         with open('./fgfw-lite/local.txt', 'w') as f:
             f.write('! local gfwlist config\n! rules: https://autoproxy.org/zh-CN/Rules\n')
 
-    for item in ['./userconf.ini', './fgfw-lite/local.txt']:
+    for item in ['./userconf.ini', './fgfw-lite/local.txt', './userconf.sample.ini', ]:
         with open(item) as f:
             data = f.read()
         with open(item, 'w') as f:
