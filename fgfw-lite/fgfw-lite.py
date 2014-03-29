@@ -200,6 +200,8 @@ class ProxyHandler(HTTPRequestHandler):
             self.send_error(403)
             return
         # redirector
+        if not 'Host' in self.headers:
+            self.headers['Host'] = urlparse.urlparse(self.path).hostname.rsplit(':')[0]
         new_url = REDIRECTOR.get(self.path)
         if new_url:
             logging.info('redirecting to %s' % new_url)
@@ -376,6 +378,8 @@ class ProxyHandler(HTTPRequestHandler):
 
     def do_CONNECT(self):
         self.close_connection = 1
+        if not 'Host' in self.headers:
+            self.headers['Host'] = self.path.rsplit(':')[0]
         self.wfile.write(self.protocol_version + " 200 Connection established\r\n\r\n")
         self._do_CONNECT()
 
