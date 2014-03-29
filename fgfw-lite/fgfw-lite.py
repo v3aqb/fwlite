@@ -68,10 +68,6 @@ except ImportError:
         def decorator(func):
             return func
         return decorator
-try:
-    from concurrent.futures import ThreadPoolExecutor
-except ImportError:
-    ThreadPoolExecutor = None
 from SocketServer import ThreadingMixIn
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 try:
@@ -436,7 +432,7 @@ class ProxyHandler(HTTPRequestHandler):
         remotesoc.close()
         self.connection.close()
         if self.retrycount:
-            PARENT_PROXY.add_temp_rule('|https://%s' % self.path)
+            PARENT_PROXY.add_temp_rule('|https://%s' % self.path.rsplit(':', 1)[0])
 
     def _connect_via_proxy(self, netloc):
         timeout = None if self._proxylist else 20
