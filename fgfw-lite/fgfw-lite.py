@@ -718,7 +718,7 @@ class parent_proxy(object):
     @lru_cache(256, timeout=120)
     def ifhost_in_china(self, host):
         try:
-            if self.geoip.country_code_by_name(host) in self.region:
+            if self.geoip.country_code_by_name(host) in conf.region:
                 logging.info('%s in china' % host)
                 return True
             return False
