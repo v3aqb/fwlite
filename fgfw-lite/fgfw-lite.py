@@ -893,31 +893,26 @@ class FGFWProxyHandler(object):
         self.enable = True
         self.enableupdate = True
 
-        self.config()
-        self.daemon = Thread(target=self.start)
-        self.daemon.daemon = True
-        self.daemon.start()
+        self.start()
 
     def config(self):
         pass
 
     def start(self):
-        while 1:
-            if self.enable:
-                logging.info('starting %s' % self.cmd)
-                self.subpobj = subprocess.Popen(shlex.split(self.cmd), cwd=self.cwd, stdin=subprocess.PIPE)
-                self.subpobj.wait()
-            time.sleep(3)
+        self.config()
+        if self.enable:
+            logging.info('starting %s' % self.cmd)
+            self.subpobj = subprocess.Popen(shlex.split(self.cmd), cwd=self.cwd, stdin=subprocess.PIPE)
 
     def restart(self):
-        try:
-            self.subpobj.terminate()
-        except Exception:
-            pass
+        self.stop()
+        self.start()
 
     def stop(self):
-        self.enable = False
-        self.restart()
+        try:
+            self.subpobj.terminate()
+        finally:
+            self.subpobj = None
 
 
 class goagentHandler(FGFWProxyHandler):
