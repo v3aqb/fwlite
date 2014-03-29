@@ -850,9 +850,25 @@ def updater():
 
 def update(auto=False):
     conf.version.set('Update', 'LastUpdate', str(time.time()))
-    for item in FGFWProxyHandler.ITEMS:
-        if item.enableupdate:
-            item.update()
+    filelist = [('https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './fgfw-lite/gfwlist.txt'), ]
+    for url, path in filelist:
+        etag = conf.version.dget('Update', path.replace('./', '').replace('/', '-'), '')
+        req = urllib2.Request(url)
+        req.add_header('If-None-Match', etag)
+        try:
+            r = urllib2.urlopen(req)
+        except Exception as e:
+            logging.info('{} NOT updated. Reason: {}'.format(path, e))
+        else:
+            data = r.read()
+            if r.getcode() == 200 and data:
+                with open(path, 'wb') as localfile:
+                    localfile.write(data)
+                conf.version.set('Update', path.replace('./', '').replace('/', '-'), r.info().getheader('ETag'))
+                conf.confsave()
+                logging.info('%s Updated.' % path)
+            else:
+                logging.info('{} NOT updated. Reason: {}'.format(path, str(r.getcode())))
     restart()
 
 
@@ -902,37 +918,6 @@ class FGFWProxyHandler(object):
     def stop(self):
         self.enable = False
         self.restart()
-
-    def _update(self):
-        self._listfileupdate()
-
-    def update(self):
-        if self.enable and self.enableupdate:
-            self._update()
-
-    def _listfileupdate(self):
-        if len(self.filelist) > 0:
-            for url, path in self.filelist:
-                etag = conf.version.dget('Update', path.replace('./', '').replace('/', '-'), '')
-                self.updateViaHTTP(url, etag, path)
-
-    def updateViaHTTP(self, url, etag, path):
-        req = urllib2.Request(url)
-        req.add_header('If-None-Match', etag)
-        try:
-            r = urllib2.urlopen(req)
-        except Exception as e:
-            logging.info('{} NOT updated. Reason: {}'.format(path, e))
-        else:
-            data = r.read()
-            if r.getcode() == 200 and data:
-                with open(path, 'wb') as localfile:
-                    localfile.write(data)
-                conf.version.set('Update', path.replace('./', '').replace('/', '-'), r.info().getheader('ETag'))
-                conf.confsave()
-                logging.info('%s Updated.' % path)
-            else:
-                logging.info('{} NOT updated. Reason: {}'.format(path, str(r.getcode())))
 
 
 class goagentHandler(FGFWProxyHandler):
