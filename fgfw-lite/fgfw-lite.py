@@ -25,8 +25,9 @@ __version__ = '0.4.0.0'
 import sys
 import os
 import glob
+WORKINGDIR = '/'.join(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')).split('/')[:-1])
 sys.path.append(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')))
-sys.path += glob.glob('%s/*.egg' % os.path.dirname(os.path.abspath(__file__)))
+sys.path += glob.glob('%s/goagent/*.egg' % WORKINGDIR)
 try:
     import gevent
     import gevent.socket
@@ -707,7 +708,7 @@ class parent_proxy(object):
         self.localnet.append((ip_from_string('10.0.0.0'), ip_from_string('10.0.0.0') + 2 ** (32 - 8)))
         self.localnet.append((ip_from_string('127.0.0.0'), ip_from_string('127.0.0.0') + 2 ** (32 - 8)))
 
-        self.geoip = pygeoip.GeoIP('./fgfw-lite/GeoIP.dat')
+        self.geoip = pygeoip.GeoIP('./goagent/GeoIP.dat')
 
     @lru_cache(256, timeout=120)
     def ifhost_in_local(self, host):
@@ -1171,7 +1172,7 @@ class Config(object):
         else:
             self.listen = (listen.rsplit(':', 1)[0], int(listen.rsplit(':', 1)[1]))
 
-        self.region = set(x.upper() for x in self.userconf.dget('fgfwproxy', 'region', 'cn').split('|'))
+        self.region = set(x.upper() for x in self.userconf.dget('fgfwproxy', 'region', 'cn').split('|') if x.strip())
 
         for host, ip in self.userconf.items('hosts'):
             if ip not in HOSTS.get(host, []):
