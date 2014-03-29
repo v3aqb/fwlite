@@ -201,8 +201,6 @@ class ProxyHandler(HTTPRequestHandler):
             self.send_error(403)
             return
         # redirector
-        if not 'Host' in self.headers:
-            self.headers['Host'] = urlparse.urlparse(self.path).hostname
         new_url = REDIRECTOR.get(self.path)
         if new_url:
             logging.info('redirecting to %s' % new_url)
@@ -212,9 +210,8 @@ class ProxyHandler(HTTPRequestHandler):
                 self.redirect(new_url)
             return
 
-        # try to get host from uri
-        if 'Host' not in self.headers:
-            self.headers['Host'] = self.path.split('/')[2] if '//' in self.path else self.path
+        if not 'Host' in self.headers:
+            self.headers['Host'] = urlparse.urlparse(self.path).hostname
 
         if any(host == self.headers['Host'].rsplit(':', 1)[0] for host in self.LOCALHOST):
             self.send_error(403)
@@ -921,14 +918,9 @@ class goagentHandler(FGFWProxyHandler):
         FGFWProxyHandler.__init__(self)
 
     def config(self):
-        self.filelist = [('https://github.com/goagent/goagent/raw/3.0/local/proxy.py', './goagent/proxy.py'),
-                         ('https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.sample.ini'),
-                         ('https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'),
-                         ]
         self.cwd = '%s/goagent' % WORKINGDIR
         self.cmd = '{} {}/goagent/proxy.py'.format(PYTHON2, WORKINGDIR)
         self.enable = conf.userconf.dgetbool('goagent', 'enable', True)
-        self.enableupdate = conf.userconf.dgetbool('goagent', 'update', True)
         with open('%s/goagent/proxy.py' % WORKINGDIR, 'rb') as f:
             t = f.read()
         with open('%s/goagent/proxy.py' % WORKINGDIR, 'wb') as f:
