@@ -26,6 +26,10 @@ import sys
 import os
 import glob
 WORKINGDIR = '/'.join(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')).split('/')[:-1])
+if ' ' in WORKINGDIR:
+    print('no spacebar allowed in path')
+    sys.exit()
+os.chdir(WORKINGDIR)
 sys.path.append(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')))
 sys.path += glob.glob('%s/goagent/*.egg' % WORKINGDIR)
 try:
@@ -80,12 +84,6 @@ import logging
 logging.basicConfig(level=logging.INFO,
                     format='FGFW-Lite %(asctime)s %(levelname)s %(message)s',
                     datefmt='%H:%M:%S', filemode='a+')
-
-WORKINGDIR = '/'.join(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')).split('/')[:-1])
-if ' ' in WORKINGDIR:
-    logging.error('no spacebar allowed in path')
-    sys.exit()
-os.chdir(WORKINGDIR)
 
 if sys.platform.startswith('win'):
     PYTHON2 = '%s/Python27/python27.exe' % WORKINGDIR
@@ -710,8 +708,8 @@ class parent_proxy(object):
             if any(a[0] <= i < a[1] for a in self.localnet):
                 return True
             return False
-        except socket.error:
-            return None
+        except socket.error as e:
+            logging.warning('resolve %s failed! %s' % (host, repr(e)))
 
     @lru_cache(256, timeout=120)
     def ifhost_in_china(self, host):
@@ -784,29 +782,32 @@ class parent_proxy(object):
     def parentproxy(self, uri, host, level=1):
         '''
             decide which parentproxy to use.
-            url:  'https://www.google.com'
-            host: 'www.google.com'
+            url:  'www.google.com:443'
+                  'http://www.inxian.com'
+            host: 'www.google.com' (no port number is allowed)
             level: 0 -- direct
                    1 -- proxy if force, direct if ip in china or override, proxy if gfwlist
                    2 -- proxy if force, direct if ip in china or override, proxy if all
                    3 -- proxy if not override
         '''
-        parentlist = conf.parentdict.keys()
-        random.shuffle(parentlist)
-        parentlist = sorted(parentlist, key=lambda item: conf.parentdict[item][1])
 
         p = self.select_proxy_by_rule(uri)
         if p:
             return [p]
         f = self.ifgfwed(uri, host, level)
 
+        if f is False:
+            return ['direct']
+
+        parentlist = conf.parentdict.keys()
+        random.shuffle(parentlist)
+        parentlist = sorted(parentlist, key=lambda item: conf.parentdict[item][1])
+
         if self.no_goagent(uri):
             for i in ['goagent', 'goagent-php']:
                 if i in parentlist:
                     parentlist.remove(i)
 
-        if f is False:
-            return ['direct']
         if f is True:
             parentlist.remove('direct')
             if parentlist:
