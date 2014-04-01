@@ -797,9 +797,7 @@ class parent_proxy(object):
 
         p = self.select_proxy_by_rule(uri)
         if p:
-            parentlist.remove(p)
-            parentlist.insert(0, p)
-            return parentlist
+            return [p]
         f = self.ifgfwed(uri, host, level)
 
         if self.no_goagent(uri):
