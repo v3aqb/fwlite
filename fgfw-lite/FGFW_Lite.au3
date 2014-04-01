@@ -23,9 +23,6 @@ Func setEnv()
 		MsgBox(16, "FGFW_Lite", "路径中不允许有空格，FGFW_Lite将退出！", 5)
 		Exit (1)
 	EndIf
-	If Not FileExists("userconf.ini") Then
-		FileCopy("userconf.sample.ini", "userconf.ini")
-	EndIf
 EndFunc   ;==>setEnv
 
 Func setTray()
@@ -202,7 +199,7 @@ Func daemon()
 		$SUB_PID = Run("./Python27/python27.exe -B ./fgfw-lite/fgfw-lite.py -hide", @ScriptDir, @SW_HIDE)
 		If Not $SILENT Then TrayTip("FGFW_Lite", 'FGFW_Lite Restarting...', 0)
 		While ProcessExists($SUB_PID)
-			Sleep(100)
+			Sleep(300)
 		WEnd
 		$SILENT = 0
 	WEnd
