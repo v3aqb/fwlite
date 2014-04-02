@@ -763,15 +763,18 @@ class parent_proxy(object):
             return True
 
     @lru_cache(256, timeout=120)
-    def no_goagent(self, uri):
-        r = re.match(r'^([^/]+):\d+$', uri)
+    def no_goagent(self, uri, host):
         s = set(conf.parentdict.keys()) - set(['goagent', 'goagent-php', 'direct', 'local'])
-        if r and s:
-            if r.groups()[0] in ['play.google.com', 'ssl.gstatic.com', 'mail-attachment.googleusercontent.com', 'webcache.googleusercontent.com', 's1.googleusercontent.com', 's2.googleusercontent.com', 'images1-focus-opensocial.googleusercontent.com', 'images2-focus-opensocial.googleusercontent.com', 'images3-focus-opensocial.googleusercontent.com', 'lh0.googleusercontent.com', 'lh1.googleusercontent.com', 'lh2.googleusercontent.com', 'lh3.googleusercontent.com', 'lh4.googleusercontent.com', 'lh5.googleusercontent.com', 'lh6.googleusercontent.com', 'lh7.googleusercontent.com', 'lh8.googleusercontent.com', 'lh9.googleusercontent.com', 'lh10.googleusercontent.com', 'lh11.googleusercontent.com', 'lh12.googleusercontent.com']:
-                return True
-            if r.groups()[0].endswith(('.google.com', '.google.com.hk', '.googleapis.com', '.android.com', '.appspot.com', '.googlegroups.com', '.googlesource.com', '.googleusercontent.com', '.google-analytics.com', '.googlecode.com', '.gstatic.com')):
-                return False
-            return True
+        a = conf.userconf.dget('goagent', 'GAEAppid', 'goagent') == 'goagent'
+        if s or a:  # two reasons not to use goagent
+            if re.match(r'^([^/]+):\d+$', uri):  # connect method
+                    if host in ['play.google.com', 'ssl.gstatic.com', 'mail-attachment.googleusercontent.com', 'webcache.googleusercontent.com', 's1.googleusercontent.com', 's2.googleusercontent.com', 'images1-focus-opensocial.googleusercontent.com', 'images2-focus-opensocial.googleusercontent.com', 'images3-focus-opensocial.googleusercontent.com', 'lh0.googleusercontent.com', 'lh1.googleusercontent.com', 'lh2.googleusercontent.com', 'lh3.googleusercontent.com', 'lh4.googleusercontent.com', 'lh5.googleusercontent.com', 'lh6.googleusercontent.com', 'lh7.googleusercontent.com', 'lh8.googleusercontent.com', 'lh9.googleusercontent.com', 'lh10.googleusercontent.com', 'lh11.googleusercontent.com', 'lh12.googleusercontent.com']:
+                        return True
+                    if host.endswith(('.google.com', '.google.com.hk', '.googleapis.com', '.android.com', '.appspot.com', '.googlegroups.com', '.googlesource.com', '.googleusercontent.com', '.google-analytics.com', '.googlecode.com', '.gstatic.com')):
+                        return False
+                    return True
+            else:  # get method
+                return a
 
     def select_proxy_by_rule(self, uri):
         '''return a parentproxy name, like: 'shadowsocks-uk' '''
@@ -803,10 +806,12 @@ class parent_proxy(object):
         random.shuffle(parentlist)
         parentlist = sorted(parentlist, key=lambda item: conf.parentdict[item][1])
 
-        if self.no_goagent(uri):
-            for i in ['goagent', 'goagent-php']:
-                if i in parentlist:
-                    parentlist.remove(i)
+        if self.no_goagent(uri, host):
+            logging.debug('skip goagent')
+            if 'goagent' in parentlist:
+                parentlist.remove('goagent')
+            if 'goagent-php' in parentlist and re.match(r'^([^/]+):\d+$', uri):
+                parentlist.remove('goagent-php')
 
         if f is True:
             parentlist.remove('direct')
@@ -930,18 +935,19 @@ class goagentHandler(FGFWProxyHandler):
         goagent.read('./goagent/proxy.sample.ini')
 
         if conf.userconf.dget('goagent', 'GAEAppid', 'goagent') != 'goagent':
-            goagent.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'ipv4'))
-            goagent.set('gae', 'mode', conf.userconf.dget('goagent', 'mode', 'https'))
             goagent.set('gae', 'appid', conf.userconf.dget('goagent', 'GAEAppid', 'goagent'))
             goagent.set("gae", "password", conf.userconf.dget('goagent', 'GAEpassword', ''))
             goagent.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
             goagent.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
             goagent.set('gae', 'options', conf.userconf.dget('goagent', 'options', ''))
-            conf.addparentproxy('goagent', 'http://127.0.0.1:8087 20')
         else:
+            logging.warning('GoAgent APPID is NOT set! Fake APPID is used.')
             goagent.set('gae', 'appid', 'dummy')
+        goagent.set('gae', 'profile', conf.userconf.dget('goagent', 'profile', 'auto'))
+        goagent.set('gae', 'mode', conf.userconf.dget('goagent', 'mode', 'https'))
+        conf.addparentproxy('goagent', 'http://127.0.0.1:8087 20')
 
-        if conf.userconf.dget('goagent', 'paasfetchserver'):
+        if conf.userconf.dget('goagent', 'phpfetchserver'):
             goagent.set('php', 'enable', '1')
             goagent.set('php', 'password', conf.userconf.dget('goagent', 'phppassword', '123456'))
             goagent.set('php', 'fetchserver', conf.userconf.dget('goagent', 'phpfetchserver', 'http://.com/'))
