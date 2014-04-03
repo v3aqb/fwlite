@@ -712,10 +712,11 @@ class parent_proxy(object):
             logging.warning('resolve %s failed! %s' % (host, repr(e)))
 
     @lru_cache(256, timeout=120)
-    def ifhost_in_china(self, host):
+    def ifhost_in_region(self, host):
         try:
-            if self.geoip.country_code_by_name(host) in conf.region:
-                logging.info('%s in china' % host)
+            code = self.geoip.country_code_by_name(host)
+            if code in conf.region:
+                logging.info('%s in %s' % (host, code))
                 return True
             return False
         except socket.error:
@@ -756,7 +757,7 @@ class parent_proxy(object):
         if any(rule.match(uri) for rule in self.override):
             return None
 
-        if not gfwlist_force and (HOSTS.get(host) or self.ifhost_in_china(host)):
+        if not gfwlist_force and (HOSTS.get(host) or self.ifhost_in_region(host)):
             return None
 
         if gfwlist_force or forceproxy or self.gfwlist_match(uri):
@@ -789,8 +790,8 @@ class parent_proxy(object):
                   'http://www.inxian.com'
             host: 'www.google.com' (no port number is allowed)
             level: 0 -- direct
-                   1 -- proxy if force, direct if ip in china or override, proxy if gfwlist
-                   2 -- proxy if force, direct if ip in china or override, proxy if all
+                   1 -- proxy if force, direct if ip in region or override, proxy if gfwlist
+                   2 -- proxy if force, direct if ip in region or override, proxy if all
                    3 -- proxy if not override
         '''
 
