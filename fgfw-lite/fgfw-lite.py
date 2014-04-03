@@ -876,7 +876,7 @@ def update(auto=False):
             if v == conf.version.dget('Update', path.replace('./', '').replace('/', '-'), ''):
                 logging.info('{} NOT updated. Reason: Not Modified'.format(path))
                 continue
-            fdata = urllib2.urlopen('https://github.com/v3aqb/fgfw-lite/raw/0.4' % path[1:]).read()
+            fdata = urllib2.urlopen('https://github.com/v3aqb/fgfw-lite/raw/0.4%s' % path[1:]).read()
             h = hashlib.new("sha256", fdata).hexdigest()
             if h != v:
                 logging.info('{} NOT updated. hash mismatch.'.format(path))
@@ -926,6 +926,8 @@ class FGFWProxyHandler(object):
     def stop(self):
         try:
             self.subpobj.terminate()
+        except:
+            pass
         finally:
             self.subpobj = None
 
