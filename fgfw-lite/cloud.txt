@@ -9,8 +9,7 @@
 |http://www.blogger.com forcehttps
 |http://*.appspot.com forcehttps
 |http://*.wikipedia.org forcehttps
-@@||clients.google.com
-@@||clients1.google.com
 ||feedly.com
 ||google.com
+||googleapis.com
 ||google.com.hk
