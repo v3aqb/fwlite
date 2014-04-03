@@ -1,7 +1,7 @@
 FGFW-Lite
 ============
 
-A HTTP Proxy server help to get around the Great Firewall. FGFW-Lite dectets websites blocked by GFW automatically, and forward the request to a uncensored proxy server.
+A HTTP Proxy server help to get around internet censorship. FGFW-Lite dectets blocked websites automatically, and forward the request to a uncensored proxy server.
 
 Supported parent proxy server:
 
