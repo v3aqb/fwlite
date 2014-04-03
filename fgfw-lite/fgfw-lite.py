@@ -832,8 +832,7 @@ class parent_proxy(object):
 def updater():
     while 1:
         time.sleep(30)
-        # if conf.userconf.dgetbool('FGFW_Lite', 'autoupdate'):
-        if False:
+        if conf.userconf.dgetbool('FGFW_Lite', 'autoupdate'):
             lastupdate = conf.version.dgetfloat('Update', 'LastUpdate', 0)
             if time.time() - lastupdate > conf.UPDATE_INTV * 60 * 60:
                 update(auto=True)
@@ -866,6 +865,27 @@ def update(auto=False):
                 logging.info('%s Updated.' % path)
             else:
                 logging.info('{} NOT updated. Reason: {}'.format(path, str(r.getcode())))
+    import json
+    try:
+        r = json.loads(urllib2.urlopen('https://github.com/v3aqb/fgfw-lite/raw/0.4/fgfw-lite/update.json').read())
+    except Exception as e:
+        logging.info('read update.json failed. Reason: %r' % e)
+    else:
+        import hashlib
+        for path, v, in r.items():
+            if v == conf.version.dget('Update', path.replace('./', '').replace('/', '-'), ''):
+                logging.info('{} NOT updated. Reason: Not Modified'.format(path))
+                continue
+            fdata = urllib2.urlopen('https://github.com/v3aqb/fgfw-lite/raw/0.4' % path[1:]).read()
+            h = hashlib.new("sha256", fdata).hexdigest()
+            if h != v:
+                logging.info('{} NOT updated. hash mismatch.'.format(path))
+                continue
+            with open(path, 'wb') as localfile:
+                localfile.write(fdata)
+            logging.info('%s Updated.' % path)
+            conf.version.set('Update', path.replace('./', '').replace('/', '-'), h)
+            conf.confsave()
     restart()
 
 
@@ -888,8 +908,6 @@ class FGFWProxyHandler(object):
         self.cwd = ''
         self.filelist = []
         self.enable = True
-        self.enableupdate = True
-
         self.start()
 
     def config(self):

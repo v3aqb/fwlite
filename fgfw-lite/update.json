@@ -1,0 +1,11 @@
+{
+    "./Python27/python27.zip": "9ac8fa59a66d3a49a48d52b0153914bd40bc6429a5f5be1250bc36f8fee7fb74",
+    "./README.md": "bd83fba88937b950aa1cf4d07afcc7430dbf10ce87ed0575e58348b81c637ebf",
+    "./fgfw-lite/cloud.txt": "0e2b45b80f830dc3ca29853e64d6b1aaeac74d647f278696fe7920989f22b8b4",
+    "./fgfw-lite/encrypt.py": "bd8e2ea0082937626854fc46c55be8edc214ae249b766977a90e87cd7c32e6f7",
+    "./fgfw-lite/fgfw-lite.py": "a82c727d8c7b8073412ba366437531408020eb1119395cc0d919ada5d47fd5b7",
+    "./goagent/cacert.pem": "eb1288b800cb2fdf7c5d8d14fb79a5c00a8b05722c7f2a08763919ef6df11dc3",
+    "./goagent/proxy.py": "19be40a0db6206a2ec87843cbfb2ee5b8e4f871bd83bf239b8d07f6f5fadbcac",
+    "./goagent/proxy.sample.ini": "710d726f2cd7fef98982d72f120d94e365cd3a1331357b408fc25721925e6125",
+    "./userconf.sample.ini": "3db0e09079cc1b2bb0f28eb65290cc8b307aa6d6490acaceecc7fdb0ceea8750"
+}
