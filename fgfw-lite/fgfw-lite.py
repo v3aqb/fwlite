@@ -426,11 +426,11 @@ class ProxyHandler(HTTPRequestHandler):
             if self.retryable:
                 logging.warning('{} {} failed! read timed out'.format(self.command, self.path))
                 return self._do_CONNECT(True)
+        if self.retrycount:
+            PARENT_PROXY.add_temp_rule('|https://%s' % self.path.rsplit(':', 1)[0])
         self._read_write(remotesoc, 300)
         remotesoc.close()
         self.connection.close()
-        if self.retrycount:
-            PARENT_PROXY.add_temp_rule('|https://%s' % self.path.rsplit(':', 1)[0])
 
     def _connect_via_proxy(self, netloc):
         timeout = None if self._proxylist else 20
