@@ -501,6 +501,7 @@ class ProxyHandler(HTTPRequestHandler):
                 count += 1
             except socket.error as e:
                 logging.debug('socket error: %s' % e)
+                break
 
     def do_FTP(self):
         # fish out user and password information
