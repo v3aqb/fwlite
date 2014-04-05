@@ -42,9 +42,6 @@ def get_table(key):
         table.sort(lambda x, y: int(a % (ord(x) + i) - a % (ord(y) + i)))
     return table
 
-encrypt_table = None
-decrypt_table = None
-
 
 def init_table(key, method=None):
     if method == 'table':
@@ -55,11 +52,6 @@ def init_table(key, method=None):
         except ImportError:
             logging.error('M2Crypto is required to use encryption other than default method')
             sys.exit(1)
-    if not method:
-        global encrypt_table, decrypt_table
-        encrypt_table = ''.join(get_table(key))
-        decrypt_table = string.maketrans(encrypt_table, string.maketrans('', ''))
-    else:
         try:
             Encryptor(key, method)  # make an Encryptor to test if the settings if OK
         except Exception as e:
@@ -118,6 +110,8 @@ class Encryptor(object):
             self.cipher = self.get_cipher(key, method, 1, iv=random_string(32))
         else:
             self.cipher = None
+            self.encrypt_table = ''.join(get_table(key))
+            self.decrypt_table = string.maketrans(self.encrypt_table, string.maketrans('', ''))
 
     def get_cipher_len(self, method):
         method = method.lower()
@@ -147,7 +141,7 @@ class Encryptor(object):
         if len(buf) == 0:
             return buf
         if self.method is None:
-            return string.translate(buf, encrypt_table)
+            return string.translate(buf, self.encrypt_table)
         else:
             if self.iv_sent:
                 return self.cipher.update(buf)
@@ -159,7 +153,7 @@ class Encryptor(object):
         if len(buf) == 0:
             return buf
         if self.method is None:
-            return string.translate(buf, decrypt_table)
+            return string.translate(buf, self.decrypt_table)
         else:
             if self.decipher is None:
                 decipher_iv_len = self.get_cipher_len(self.method)[1]
