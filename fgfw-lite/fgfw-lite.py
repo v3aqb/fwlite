@@ -43,7 +43,7 @@ except ImportError:
     gevent = None
 except TypeError:
     gevent.monkey.patch_all()
-from collections import defaultdict
+from collections import defaultdict, deque
 import subprocess
 import shlex
 import time
@@ -151,8 +151,9 @@ class ProxyHandler(HTTPRequestHandler):
     def handle_one_request(self):
         self._proxylist = None
         self.retryable = True
-        self.rbuffer = b''
-        self.wbuffer = b''
+        self.rbuffer = deque()  # client side read buffer: store request body, ssl handshake package... no pop method.
+        self.wbuffer = deque()  # client write buffer: used only once, not used in connect method
+        self.wbuffer_size = 0
         self.retrycount = 0
         try:
             BaseHTTPRequestHandler.handle_one_request(self)
@@ -219,16 +220,17 @@ class ProxyHandler(HTTPRequestHandler):
             return
         self._do_GET()
 
-    def wfile_write(self, data):
-        if self.retryable:
-            self.wbuffer += data
-            if len(self.wbuffer) > 102400:
+    def wfile_write(self, data=None):
+        if self.retryable and data:
+            self.wbuffer.append(data)
+            self.wbuffer_size += len(data)
+            if self.wbuffer_size > 102400:
                 self.retryable = False
         else:
-            if self.wbuffer:
-                self.wfile.write(self.wbuffer)
-                self.wbuffer = b''
-            self.wfile.write(data)
+            while self.wbuffer:
+                self.wfile.write(self.wbuffer.popleft())
+            if data:
+                self.wfile.write(data)
 
     def _do_GET(self, retry=False):
         if self.getparent():
@@ -243,7 +245,8 @@ class ProxyHandler(HTTPRequestHandler):
             remotesoc = self._connect_via_proxy(self.headers['Host'])
         except NetWorkIOError as e:
             return self.on_GET_Error(e)
-        self.wbuffer = b''
+        self.wbuffer = deque()
+        self.wbuffer_size = 0
         try:
             if self.pproxy.startswith('http'):
                 s = '%s %s %s\r\n' % (self.command, self.path, self.request_version)
@@ -264,16 +267,19 @@ class ProxyHandler(HTTPRequestHandler):
                 if content_length > 102400:
                     self.retryable = False
                 if self.rbuffer:
-                    content_length -= len(self.rbuffer)
-                    try:
-                        remotesoc.sendall(self.rbuffer)
-                    except NetWorkIOError as e:
-                        return self.on_GET_Error(e)
+                    for s in self.rbuffer:
+                        content_length -= len(s)
+                        try:
+                            remotesoc.sendall(s)
+                        except NetWorkIOError as e:
+                            return self.on_GET_Error(e)
                 while content_length:
                     data = self.rfile.read(min(8096, content_length))
+                    if not data:
+                        break
                     content_length -= len(data)
                     if self.retryable:
-                        self.rbuffer += data
+                        self.rbuffer.append(data)
                     try:
                         remotesoc.sendall(data)
                     except NetWorkIOError as e:
@@ -361,10 +367,7 @@ class ProxyHandler(HTTPRequestHandler):
                         self.wfile_write(data)
                     except Exception:
                         break
-            if self.wbuffer:
-                self.retryable = False
-                self.wfile.write(self.wbuffer)
-                self.wbuffer = b''
+            self.wfile_write()
             if self.retrycount and response_status < 400:
                 PARENT_PROXY.add_temp_rule('|http://%s' % self.headers['Host'].split(':')[0])
         finally:
@@ -407,7 +410,8 @@ class ProxyHandler(HTTPRequestHandler):
             while data.strip():
                 data = remoterfile.readline()
         if self.rbuffer:
-            remotesoc.sendall(self.rbuffer)
+            for s in self.rbuffer:
+                remotesoc.sendall(s)
         if self._proxylist:
             for i in range(30):
                 try:
@@ -422,7 +426,7 @@ class ProxyHandler(HTTPRequestHandler):
                                 self.wfile.write(data)
                             else:
                                 if self.retryable:
-                                    self.rbuffer += data
+                                    self.rbuffer.append(data)
                                 remotesoc.sendall(data)
                         else:
                             break
