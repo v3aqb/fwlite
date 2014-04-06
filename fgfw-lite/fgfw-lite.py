@@ -142,7 +142,7 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
 
 class ProxyHandler(HTTPRequestHandler):
     server_version = "FGFW-Lite/" + __version__
-    protocol = "HTTP/1.1"
+    protocol_version = "HTTP/1.1"
     rbufsize = 0  # self.rfile Be unbuffered
     timeout = 10
     allowed_clients = ()
@@ -208,7 +208,14 @@ class ProxyHandler(HTTPRequestHandler):
             self.headers['Host'] = urlparse.urlparse(self.path).hostname
 
         if any(host == self.headers['Host'].rsplit(':', 1)[0] for host in self.LOCALHOST):
-            self.send_error(403)
+            self.send_response(200)
+            msg = 'Hello World !'
+            self.send_header('Content-type', 'text/html')
+            self.send_header('Content-Length', str(len(msg)))
+            self.send_header('Connection', 'keep_alive')
+            self.end_headers()
+            # Send the html message
+            self.wfile.write(msg)
             return
         self._do_GET()
 
