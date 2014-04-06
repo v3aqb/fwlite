@@ -279,6 +279,7 @@ class ProxyHandler(HTTPRequestHandler):
                     except NetWorkIOError as e:
                         return self.on_GET_Error(e)
                 logging.debug('request body sent')
+            # read response line
             remoterfile = remotesoc if isinstance(remotesoc, sssocket) else remotesoc.makefile('rb', 0)
             try:
                 s = response_line = remoterfile.readline()
@@ -287,9 +288,9 @@ class ProxyHandler(HTTPRequestHandler):
             except (socket.error, ssl.SSLError, OSError, ValueError) as e:
                 return self.on_GET_Error(e)
             logging.debug('respinse line read')
-            response_line = response_line.rstrip('\r\n').split()
-            response_status = int(response_line[1])
-            self.protocol_version = response_line[0]
+            protocol_version, _, response_status = response_line.rstrip('\r\n').partition(' ')
+            response_status, _, response_reason = response_status.partition(' ')
+            response_status = int(response_status)
             header_data = b''
             try:
                 while True:
@@ -299,10 +300,10 @@ class ProxyHandler(HTTPRequestHandler):
                         break
             except NetWorkIOError as e:
                 return self.on_GET_Error(e)
-            logging.debug('respinse header read')
+            logging.debug('response header read')
             response_header = email.message_from_string(header_data)
             conntype = response_header.get('Connection', "")
-            if self.protocol_version >= "HTTP/1.1":
+            if protocol_version >= "HTTP/1.1":
                 self.close_connection = conntype.lower() == 'close'
             else:
                 self.close_connection = conntype.lower() != 'keep_alive'
