@@ -110,7 +110,7 @@ def prestart():
         with open('./fgfw-lite/local.txt', 'w') as f:
             f.write('! local gfwlist config\n! rules: https://autoproxy.org/zh-CN/Rules\n')
 
-    for item in ['./userconf.ini', './fgfw-lite/local.txt', './userconf.sample.ini', ]:
+    for item in ['./userconf.ini', './fgfw-lite/local.txt', './userconf.sample.ini', './README.md']:
         with open(item) as f:
             data = f.read()
         with open(item, 'w') as f:
@@ -141,7 +141,7 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
 
 
 class ProxyHandler(HTTPRequestHandler):
-    server_version = "HTTPProxy/" + __version__
+    server_version = "FGFW-Lite/" + __version__
     protocol = "HTTP/1.1"
     rbufsize = 0  # self.rfile Be unbuffered
     timeout = 10
