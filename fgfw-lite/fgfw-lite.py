@@ -248,16 +248,17 @@ class ProxyHandler(HTTPRequestHandler):
         self.wbuffer = deque()
         self.wbuffer_size = 0
         try:
+            s = []
             if self.pproxy.startswith('http'):
-                s = '%s %s %s\r\n' % (self.command, self.path, self.request_version)
+                s.append('%s %s %s\r\n' % (self.command, self.path, self.request_version))
             else:
-                s = '%s /%s %s\r\n' % (self.command, '/'.join(self.path.split('/')[3:]), self.request_version)
+                s.append('%s /%s %s\r\n' % (self.command, '/'.join(self.path.split('/')[3:]), self.request_version))
             del self.headers['Proxy-Connection']
             for key_val in self.headers.items():
-                s += "%s: %s\r\n" % key_val
-            s += "\r\n"
+                s.append("%s: %s\r\n" % key_val)
+            s.append("\r\n")
             try:
-                remotesoc.sendall(s.encode('latin'))
+                remotesoc.sendall(''.join(s).encode('latin'))
             except NetWorkIOError as e:
                 return self.on_GET_Error(e)
             logging.debug('request header sent')
@@ -297,15 +298,16 @@ class ProxyHandler(HTTPRequestHandler):
             protocol_version, _, response_status = response_line.rstrip('\r\n').partition(' ')
             response_status, _, response_reason = response_status.partition(' ')
             response_status = int(response_status)
-            header_data = b''
+            header_data = []
             try:
                 while True:
                     line = remoterfile.readline()
-                    header_data += line
+                    header_data.append(line)
                     if not line.strip():
                         break
             except NetWorkIOError as e:
                 return self.on_GET_Error(e)
+            header_data = b''.join(header_data)
             logging.debug('response header read')
             response_header = email.message_from_string(header_data)
             conntype = response_header.get('Connection', "")
@@ -327,18 +329,20 @@ class ProxyHandler(HTTPRequestHandler):
                 content_length = int(response_header["Content-Length"])
             else:
                 content_length = None
-            self.wfile_write(s + header_data)
+            self.wfile_write(s)
+            self.wfile_write(header_data)
             if self.command == 'HEAD' or 100 <= response_status < 200 or response_status in (204, 304):
                 pass
             elif response_header.get("Transfer-Encoding") and response_header.get("Transfer-Encoding") != "identity":
-                while 1:
+                flag = 1
+                while flag:
                     try:
                         trunk_lenth = remoterfile.readline()
                     except NetWorkIOError as e:
                         return self.on_GET_Error(e)
                     self.wfile_write(trunk_lenth)
                     trunk_lenth = int(trunk_lenth.strip(), 16) + 2
-                    flag = True if trunk_lenth == 2 else False
+                    flag = trunk_lenth != 2
                     while trunk_lenth:
                         try:
                             data = remotesoc.recv(min(4096, trunk_lenth))
@@ -346,8 +350,6 @@ class ProxyHandler(HTTPRequestHandler):
                             return self.on_GET_Error(e)
                         trunk_lenth -= len(data)
                         self.wfile_write(data)
-                    if flag:
-                        break
             elif content_length is not None:
                 while content_length:
                     try:
