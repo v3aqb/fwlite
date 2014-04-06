@@ -190,7 +190,7 @@ class ProxyHandler(HTTPRequestHandler):
             return self.do_FTP()
         # transparent proxy
         if self.path.startswith('/') and 'Host' in self.headers:
-            self.request.uri = 'http://%s%s' % (self.headers['Host'], self.path)
+            self.path = 'http://%s%s' % (self.headers['Host'], self.path)
         if self.path.startswith('/'):
             self.send_error(403)
             return
