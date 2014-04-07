@@ -981,6 +981,7 @@ class goagentHandler(FGFWProxyHandler):
             goagent.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
             goagent.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
             goagent.set('gae', 'options', conf.userconf.dget('goagent', 'options', ''))
+            conf.addparentproxy('goagent.', 'http://127.0.0.1:8087 20')
         else:
             logging.warning('GoAgent APPID is NOT set! Fake APPID is used.')
             goagent.set('gae', 'appid', 'dummy')
