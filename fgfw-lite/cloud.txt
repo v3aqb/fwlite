@@ -6,7 +6,6 @@
 |http://www.google.com.hk/url forcehttps
 |http://www.google.com.hk/search forcehttps
 |http://*.googlecode.com forcehttps
-|http://www.blogger.com forcehttps
 |http://*.wikipedia.org forcehttps
 ||feedly.com
 ||google.com
