@@ -704,7 +704,7 @@ class parent_proxy(object):
             with open('./fgfw-lite/gfwlist.txt') as f:
                 data = f.read()
                 if not '!' in data:
-                    data = ''.join(f.read().split())
+                    data = ''.join(data.split())
                     if len(data) % 4:
                         data += '=' * (4 - len(data) % 4)
                     data = base64.b64decode(data)
