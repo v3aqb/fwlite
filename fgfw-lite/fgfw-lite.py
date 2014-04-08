@@ -1021,7 +1021,6 @@ class goagentHandler(FGFWProxyHandler):
             goagent.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
             goagent.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
             goagent.set('gae', 'options', conf.userconf.dget('goagent', 'options', ''))
-            conf.addparentproxy('goagent.', 'http://127.0.0.1:8087 20')
         else:
             logging.warning('GoAgent APPID is NOT set! Fake APPID is used.')
             goagent.set('gae', 'appid', 'dummy')
@@ -1261,7 +1260,10 @@ class Config(object):
         }
         '''
         proxy, _, priority = proxy.partition(' ')
-        self.parentdict[name] = (proxy if proxy != 'direct' else '', int(priority) if priority else 99)
+        if proxy == 'direct':
+            proxy = ''
+        logging.info('adding parent proxy: %s: %s' % (name, proxy))
+        self.parentdict[name] = (proxy, int(priority) if priority else 99)
 
 REDIRECTOR = redirector()
 PARENT_PROXY = parent_proxy()

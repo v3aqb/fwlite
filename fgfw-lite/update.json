@@ -3,7 +3,7 @@
     "./README.md": "49c373090e9acd1b88ac73c585551053ac519cc0e3a51d67e4094588507b4048",
     "./fgfw-lite/cloud.txt": "9ca79cc1937f6ea567ad6a6255dae1f5f5d061f1dd6646287b61ba1fe7683d5f",
     "./fgfw-lite/encrypt.py": "9d050b942726652f8285e4afbd0eab5ba1c3ed1b8de04519bb2c93f7fe3165d5",
-    "./fgfw-lite/fgfw-lite.py": "66698f77893bc80557a5bbb3531e77883ac43a98b8d402cecc62c98b7651c3ac",
+    "./fgfw-lite/fgfw-lite.py": "74a1a3e8bcd110e9a21595d1fbdd02c942678c10dad2bf78cb22b2935db97092",
     "./goagent/cacert.pem": "eb1288b800cb2fdf7c5d8d14fb79a5c00a8b05722c7f2a08763919ef6df11dc3",
     "./goagent/proxy.py": "46d5ca8fbc36ba51cad4ed7151d0aba6440c16d79fdd9ab3c848bae0c83c4a98",
     "./goagent/proxy.sample.ini": "005403370ab0ba1a7c5d7db7d17a8f03276a7e7e08796d27ae3997b9b58001f3",
