@@ -93,6 +93,7 @@ else:
             PYTHON2 = cmd
             break
 
+UPSTREAM_POOL = defaultdict(deque)
 HOSTS = defaultdict(list)
 ctimer = []
 CTIMEOUT = 5
@@ -218,6 +219,10 @@ class ProxyHandler(HTTPRequestHandler):
             # Send the html message
             self.wfile.write(msg)
             return
+
+        host, _, port = urlparse.urlparse(self.path).netloc.partition(':')
+        port = port or 80
+        self.requesthost = '%s:%s' % (host, port)
         self._do_GET()
 
     def wfile_write(self, data=None):
@@ -232,6 +237,37 @@ class ProxyHandler(HTTPRequestHandler):
             if data:
                 self.wfile.write(data)
 
+    def is_connection_dropped(self, sock):  # from urllib3
+        """
+        Returns True if the connection is dropped and should be closed.
+
+        """
+        if not hasattr(select, 'poll'):
+            try:
+                return select.select([sock], [], [], 0.0)[0]
+            except socket.error:
+                return True
+        # This version is better on platforms that support it.
+        p = select.poll()
+        p.register(sock, select.POLLIN)
+        for (fno, ev) in p.poll(0.0):
+            if fno == sock.fileno():
+                # Either data is buffered (bad), or the connection is dropped.
+                return True
+
+    def _http_connect_via_proxy(self, netloc):
+        if self.retrycount == 0:
+            pool = UPSTREAM_POOL.get(self.upstream_name)
+            while pool:
+                sock = pool.popleft()
+                if not self.is_connection_dropped(sock):
+                    logging.debug('reuse connection')
+                    self._proxylist.insert(0, self.ppname)
+                    return sock
+                else:
+                    sock.close()
+        return self._connect_via_proxy(netloc)
+
     def _do_GET(self, retry=False):
         if self.getparent():
             self.send_error(504)
@@ -241,138 +277,144 @@ class ProxyHandler(HTTPRequestHandler):
             return
         if retry:
             self.retrycount += 1
+        if self.pproxyparse.scheme in ('socks5', 'ss'):
+            self.upstream_name = '{}-{}'.format(self.ppname, self.requesthost)
+        else:
+            self.upstream_name = self.ppname if self.pproxy else self.requesthost
         try:
-            remotesoc = self._connect_via_proxy(self.headers['Host'])
+            remotesoc = self._http_connect_via_proxy(self.headers['Host'])
         except NetWorkIOError as e:
             return self.on_GET_Error(e)
         self.wbuffer = deque()
         self.wbuffer_size = 0
-        try:
-            s = []
-            if self.pproxy.startswith('http'):
-                s.append('%s %s %s\r\n' % (self.command, self.path, self.request_version))
-            else:
-                s.append('%s /%s %s\r\n' % (self.command, '/'.join(self.path.split('/')[3:]), self.request_version))
-            del self.headers['Proxy-Connection']
-            for key_val in self.headers.items():
-                s.append("%s: %s\r\n" % key_val)
-            s.append("\r\n")
-            try:
-                remotesoc.sendall(''.join(s).encode('latin'))
-            except NetWorkIOError as e:
-                return self.on_GET_Error(e)
-            logging.debug('request header sent')
-            # send request body
-            content_length = int(self.headers.get('Content-Length', 0))
-            if content_length:
-                if content_length > 102400:
-                    self.retryable = False
-                if self.rbuffer:
-                    for s in self.rbuffer:
-                        content_length -= len(s)
-                        try:
-                            remotesoc.sendall(s)
-                        except NetWorkIOError as e:
-                            return self.on_GET_Error(e)
-                while content_length:
-                    data = self.rfile.read(min(8096, content_length))
-                    if not data:
-                        break
-                    content_length -= len(data)
-                    if self.retryable:
-                        self.rbuffer.append(data)
-                    try:
-                        remotesoc.sendall(data)
-                    except NetWorkIOError as e:
-                        return self.on_GET_Error(e)
-                logging.debug('request body sent')
-            # read response line
-            remoterfile = remotesoc if isinstance(remotesoc, sssocket) else remotesoc.makefile('rb', 0)
-            try:
-                s = response_line = remoterfile.readline()
-                if not s:
-                    raise ValueError('empty response line')
-            except (socket.error, ssl.SSLError, OSError, ValueError) as e:
-                return self.on_GET_Error(e)
-            logging.debug('respinse line read')
-            protocol_version, _, response_status = response_line.rstrip('\r\n').partition(' ')
-            response_status, _, response_reason = response_status.partition(' ')
-            response_status = int(response_status)
-            header_data = []
-            try:
-                while True:
-                    line = remoterfile.readline()
-                    header_data.append(line)
-                    if not line.strip():
-                        break
-            except NetWorkIOError as e:
-                return self.on_GET_Error(e)
-            header_data = b''.join(header_data)
-            logging.debug('response header read')
-            response_header = email.message_from_string(header_data)
-            conntype = response_header.get('Connection', "")
-            if protocol_version >= "HTTP/1.1":
-                self.close_connection = conntype.lower() == 'close'
-            else:
-                self.close_connection = conntype.lower() != 'keep_alive'
 
-            if "Content-Length" in response_header:
-                if "," in response_header["Content-Length"]:
-                    # Proxies sometimes cause Content-Length headers to get
-                    # duplicated.  If all the values are identical then we can
-                    # use them but if they differ it's an error.
-                    pieces = re.split(r',\s*', response_header["Content-Length"])
-                    if any(i != pieces[0] for i in pieces):
-                        raise ValueError("Multiple unequal Content-Lengths: %r" %
-                                         response_header["Content-Length"])
-                    response_header["Content-Length"] = pieces[0]
-                content_length = int(response_header["Content-Length"])
-            else:
-                content_length = None
-            self.wfile_write(s)
-            self.wfile_write(header_data)
-            if self.command == 'HEAD' or 100 <= response_status < 200 or response_status in (204, 304):
-                pass
-            elif response_header.get("Transfer-Encoding") and response_header.get("Transfer-Encoding") != "identity":
-                flag = 1
-                while flag:
-                    try:
-                        trunk_lenth = remoterfile.readline()
-                    except NetWorkIOError as e:
-                        return self.on_GET_Error(e)
-                    self.wfile_write(trunk_lenth)
-                    trunk_lenth = int(trunk_lenth.strip(), 16) + 2
-                    flag = trunk_lenth != 2
-                    while trunk_lenth:
-                        try:
-                            data = remotesoc.recv(min(4096, trunk_lenth))
-                        except NetWorkIOError as e:
-                            return self.on_GET_Error(e)
-                        trunk_lenth -= len(data)
-                        self.wfile_write(data)
-            elif content_length is not None:
-                while content_length:
-                    try:
-                        data = remotesoc.recv(min(4096, content_length))
-                    except NetWorkIOError as e:
-                        return self.on_GET_Error(e)
-                    content_length -= len(data)
-                    self.wfile_write(data)
-            else:
-                self.close_connection = 1
+        s = []
+        if self.pproxy.startswith('http'):
+            s.append('%s %s %s\r\n' % (self.command, self.path, self.request_version))
+        else:
+            s.append('%s /%s %s\r\n' % (self.command, '/'.join(self.path.split('/')[3:]), self.request_version))
+        del self.headers['Proxy-Connection']
+        for key_val in self.headers.items():
+            s.append("%s: %s\r\n" % key_val)
+        s.append("\r\n")
+        try:
+            remotesoc.sendall(''.join(s).encode('latin'))
+        except NetWorkIOError as e:
+            return self.on_GET_Error(e)
+        logging.debug('request header sent')
+        # send request body
+        content_length = int(self.headers.get('Content-Length', 0))
+        if content_length:
+            if content_length > 102400:
                 self.retryable = False
-                while 1:
+            if self.rbuffer:
+                for s in self.rbuffer:
+                    content_length -= len(s)
                     try:
-                        data = remotesoc.recv(4096)
-                        if not data:
-                            raise
-                        self.wfile_write(data)
-                    except Exception:
-                        break
-            self.wfile_write()
-            if self.retrycount and response_status < 400:
-                PARENT_PROXY.add_temp_rule('|http://%s' % self.headers['Host'].split(':')[0])
-        finally:
+                        remotesoc.sendall(s)
+                    except NetWorkIOError as e:
+                        return self.on_GET_Error(e)
+            while content_length:
+                data = self.rfile.read(min(8096, content_length))
+                if not data:
+                    break
+                content_length -= len(data)
+                if self.retryable:
+                    self.rbuffer.append(data)
+                try:
+                    remotesoc.sendall(data)
+                except NetWorkIOError as e:
+                    return self.on_GET_Error(e)
+            logging.debug('request body sent')
+        # read response line
+        remoterfile = remotesoc if isinstance(remotesoc, sssocket) else remotesoc.makefile('rb', 0)
+        try:
+            s = response_line = remoterfile.readline()
+            if not s:
+                raise ValueError('empty response line')
+        except (socket.error, ssl.SSLError, OSError, ValueError) as e:
+            return self.on_GET_Error(e)
+        logging.debug('respinse line read')
+        protocol_version, _, response_status = response_line.rstrip('\r\n').partition(' ')
+        response_status, _, response_reason = response_status.partition(' ')
+        response_status = int(response_status)
+        header_data = []
+        try:
+            while True:
+                line = remoterfile.readline()
+                header_data.append(line)
+                if not line.strip():
+                    break
+        except NetWorkIOError as e:
+            return self.on_GET_Error(e)
+        header_data = b''.join(header_data)
+        logging.debug('response header read')
+        response_header = email.message_from_string(header_data)
+        conntype = response_header.get('Connection', "")
+        if protocol_version >= "HTTP/1.1":
+            self.close_connection = conntype.lower() == 'close'
+        else:
+            self.close_connection = conntype.lower() != 'keep_alive'
+
+        if "Content-Length" in response_header:
+            if "," in response_header["Content-Length"]:
+                # Proxies sometimes cause Content-Length headers to get
+                # duplicated.  If all the values are identical then we can
+                # use them but if they differ it's an error.
+                pieces = re.split(r',\s*', response_header["Content-Length"])
+                if any(i != pieces[0] for i in pieces):
+                    raise ValueError("Multiple unequal Content-Lengths: %r" %
+                                     response_header["Content-Length"])
+                response_header["Content-Length"] = pieces[0]
+            content_length = int(response_header["Content-Length"])
+        else:
+            content_length = None
+        self.wfile_write(s)
+        self.wfile_write(header_data)
+        if self.command == 'HEAD' or 100 <= response_status < 200 or response_status in (204, 304):
+            pass
+        elif response_header.get("Transfer-Encoding") and response_header.get("Transfer-Encoding") != "identity":
+            flag = 1
+            while flag:
+                try:
+                    trunk_lenth = remoterfile.readline()
+                except NetWorkIOError as e:
+                    return self.on_GET_Error(e)
+                self.wfile_write(trunk_lenth)
+                trunk_lenth = int(trunk_lenth.strip(), 16) + 2
+                flag = trunk_lenth != 2
+                while trunk_lenth:
+                    try:
+                        data = remotesoc.recv(min(4096, trunk_lenth))
+                    except NetWorkIOError as e:
+                        return self.on_GET_Error(e)
+                    trunk_lenth -= len(data)
+                    self.wfile_write(data)
+        elif content_length is not None:
+            while content_length:
+                try:
+                    data = remotesoc.recv(min(4096, content_length))
+                except NetWorkIOError as e:
+                    return self.on_GET_Error(e)
+                content_length -= len(data)
+                self.wfile_write(data)
+        else:
+            self.close_connection = 1
+            self.retryable = False
+            while 1:
+                try:
+                    data = remotesoc.recv(4096)
+                    if not data:
+                        raise
+                    self.wfile_write(data)
+                except Exception:
+                    break
+        self.wfile_write()
+        if self.retrycount and response_status < 400:
+            PARENT_PROXY.add_temp_rule('|http://%s' % self.headers['Host'].split(':')[0])
+        if not self.close_connection and not self.is_connection_dropped(remotesoc):
+            UPSTREAM_POOL[self.upstream_name].append(remotesoc)
+        else:
             remotesoc.close()
 
     def on_GET_Error(self, e):
@@ -449,10 +491,8 @@ class ProxyHandler(HTTPRequestHandler):
     def _connect_via_proxy(self, netloc):
         timeout = None if self._proxylist else 20
 
-        if ':' in netloc:
-            host, port = netloc.rsplit(':', 1)
-        else:
-            host, port = netloc, 80
+        host, _, port = netloc.partition(':')
+        port = port or 80
         logging.debug("Connect to %s:%s" % (host, port))
         if not self.pproxy:
             return socket.create_connection((host, int(port)), timeout or 5)
