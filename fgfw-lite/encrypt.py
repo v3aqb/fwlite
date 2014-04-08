@@ -110,6 +110,7 @@ class Encryptor(object):
             self.cipher = self.get_cipher(key, method, 1, iv=random_string(32))
         else:
             self.cipher = None
+            self.decipher = 0
             self.encrypt_table = ''.join(get_table(key))
             self.decrypt_table = string.maketrans(self.encrypt_table, string.maketrans('', ''))
 
