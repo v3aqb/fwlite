@@ -37,11 +37,16 @@
 #      Toshio Xiang      <snachx@gmail.com>
 #      Bo Tian           <dxmtb@163.com>
 
-__version__ = '3.1.7'
+__version__ = '3.1.8'
 
 import sys
 import os
 import glob
+
+default_encoding = 'utf-8'
+if sys.getdefaultencoding() != default_encoding:
+    reload(sys)
+    sys.setdefaultencoding(default_encoding)
 
 sys.dont_write_bytecode = True
 sys.path += glob.glob('%s/*.egg' % os.path.dirname(os.path.abspath(__file__)))
@@ -598,6 +603,20 @@ def spawn_later(seconds, target, *args, **kwargs):
     return __import__('thread').start_new_thread(wrap, args, kwargs)
 
 
+def is_clienthello(data):
+    if len(data) < 20:
+        return False
+    if data.startswith('\x16\x03'):
+        # TLSv12/TLSv11/TLSv1/SSLv3
+        length, = struct.unpack('>h', data[3:5])
+        return len(data) == 5 + length
+    elif data[0] == '\x80' and data[2:4] == '\x01\x03':
+        # SSLv23
+        return len(data) == 2 + ord(data[1])
+    else:
+        return False
+
+
 class BaseProxyHandlerFilter(object):
     """base proxy handler filter"""
     def filter(self, handler):
@@ -646,8 +665,6 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
     scheme = 'http'
     skip_headers = frozenset(['Vary', 'Via', 'X-Forwarded-For', 'Proxy-Authorization', 'Proxy-Connection', 'Upgrade', 'X-Chrome-Variations', 'Connection', 'Cache-Control'])
-    normcookie = functools.partial(re.compile(', ([^ =]+(?:=|$))').sub, '\\r\\nSet-Cookie: \\1')
-    normattachment = functools.partial(re.compile(r'filename=([^"\']+)').sub, 'filename="\\1"')
     bufsize = 256 * 1024
     max_timeout = 16
     connect_timeout = 8
@@ -675,6 +692,19 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if self.request_version != 'HTTP/0.9':
             self.wfile.write("%s %d %s\r\n" %
                              (self.protocol_version, code, message))
+
+    def send_header(self, keyword, value):
+        """Send a MIME header."""
+        base_send_header = BaseHTTPServer.BaseHTTPRequestHandler.send_header
+        keyword = keyword.title()
+        if keyword == 'Set-Cookie':
+            for cookie in re.split(r', (?=[^ =]+(?:=|$))', value):
+                base_send_header(self, keyword, cookie)
+        elif keyword == 'Content-Disposition' and '"' not in value:
+            value = re.sub(r'filename=([^"\']+)', 'filename="\\1"', value)
+            base_send_header(self, keyword, value)
+        else:
+            base_send_header(self, keyword, value)
 
     def setup(self):
         if isinstance(self.__class__.first_run, collections.Callable):
@@ -792,22 +822,33 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         local = self.connection
         max_retry = int(kwargs.get('max_retry', 3))
         remote = None
-        for i in xrange(max_retry):
+        self.send_response(200)
+        self.end_headers()
+        self.close_connection = 1
+        data = local.recv(1024)
+        data_is_clienthello = is_clienthello(data)
+        if data_is_clienthello:
+            kwargs['client_hello'] = data
+        for i in xrange(5):
             try:
                 if do_ssl_handshake:
                     remote = self.create_ssl_connection(hostname, port, timeout, **kwargs)
                 else:
                     remote = self.create_tcp_connection(hostname, port, timeout, **kwargs)
-                if remote and not isinstance(remote, Exception):
-                    self.send_response(200)
-                    self.send_header('Connection', 'close')
-                    self.end_headers()
-                    break
+                if not data_is_clienthello and remote and not isinstance(remote, Exception):
+                    remote.sendall(data)
+                break
             except Exception as e:
-                logging.warning('%s "FWD %s %s:%d %s" %r', self.address_string(), self.command, hostname, port, self.protocol_version, e)
+                logging.exception('%s "FWD %s %s:%d %s" %r', self.address_string(), self.command, hostname, port, self.protocol_version, e)
+                if hasattr(remote, 'close'):
+                    remote.close()
                 if i == max_retry - 1:
                     raise
         logging.info('%s "FWD %s %s:%d %s" - -', self.address_string(), self.command, hostname, port, self.protocol_version)
+        if hasattr(remote, 'fileno'):
+            # reset timeout default to avoid long http upload failure, but it will delay timeout retry :(
+            remote.settimeout(None)
+        del kwargs
         try:
             tick = 1
             bufsize = self.bufsize
@@ -834,6 +875,8 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         except NetWorkIOError as e:
             if e.args[0] not in (errno.ECONNABORTED, errno.ECONNRESET, errno.ENOTCONN, errno.EPIPE):
                 raise
+            if e.args[0] in (errno.EBADF,):
+                return
         finally:
             if local:
                 local.close()
@@ -851,11 +894,8 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         response = self.create_http_request(method, url, headers, body, timeout=self.connect_timeout, **kwargs)
         logging.info('%s "DIRECT %s %s %s" %s %s', self.address_string(), self.command, url, self.protocol_version, response.status, response.getheader('Content-Length', '-'))
         response_headers = {k.title(): v for k, v in response.getheaders()}
-        if 'Set-Cookie' in response_headers:
-            response_headers['Set-Cookie'] = self.normcookie(response_headers['Set-Cookie'])
         self.send_response(response.status)
         for key, value in response.getheaders():
-            key = key.title()
             self.send_header(key, value)
         self.end_headers()
         need_chunked = 'Transfer-Encoding' in response_headers
@@ -892,7 +932,7 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         fetchserver = fetchservers[0]
         for i in xrange(max_retry):
             try:
-                response = self.create_http_request_withserver(fetchserver, method, url, headers, body, timeout=self.max_timeout, **kwargs)
+                response = self.create_http_request_withserver(fetchserver, method, url, headers, body, timeout=self.connect_timeout, **kwargs)
                 # appid over qouta, switch to next appid
                 if response.app_status >= 500:
                     message = {503: 'Current APPID Over Quota'}.get(response.status) or 'URLFETCH retrun %s' % response.status
@@ -909,13 +949,8 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                     logging.info('%s "URL %s %s %s" %s %s', self.address_string(), method, url, self.protocol_version, response.status, response.getheader('Content-Length', '-'))
                     if response.status == 206:
                         return RangeFetch(self, response, fetchservers, **kwargs).fetch()
-                    if response.getheader('Set-Cookie'):
-                        response.msg['Set-Cookie'] = self.normcookie(response.getheader('Set-Cookie'))
-                    if response.getheader('Content-Disposition') and '"' not in response.getheader('Content-Disposition'):
-                        response.msg['Content-Disposition'] = self.normattachment(response.getheader('Content-Disposition'))
                     self.send_response(response.status)
                     for key, value in response.getheaders():
-                        key = key.title()
                         self.send_header(key, value)
                     self.end_headers()
                     headers_sent = True
@@ -1089,7 +1124,7 @@ class RangeFetch(object):
                         fetchserver = random.choice(self.fetchservers)
                         if self._last_app_status.get(fetchserver, 200) >= 500:
                             time.sleep(5)
-                        response = self.handler.create_http_request_withserver(fetchserver, self.handler.command, self.url, headers, self.handler.body, timeout=self.handler.max_timeout, **self.kwargs)
+                        response = self.handler.create_http_request_withserver(fetchserver, self.handler.command, self.url, headers, self.handler.body, timeout=self.handler.connect_timeout, **self.kwargs)
                 except Queue.Empty:
                     continue
                 except Exception as e:
@@ -1174,8 +1209,9 @@ class AdvancedProxyHandler(SimpleProxyHandler):
         return iplist
 
     def create_tcp_connection(self, hostname, port, timeout, **kwargs):
-        cache_key = kwargs.get('cache_key')
+        #cache_key = kwargs.get('cache_key')
         cache_key = ''
+        client_hello = kwargs.get('client_hello', None)
         def create_connection(ipaddr, timeout, queobj):
             sock = None
             try:
@@ -1188,37 +1224,45 @@ class AdvancedProxyHandler(SimpleProxyHandler):
                 # disable nagle algorithm to send http request quickly.
                 sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, True)
                 # set a short timeout to trigger timeout retry more quickly.
-                sock.settimeout(timeout or self.max_timeout)
+                sock.settimeout(timeout or self.connect_timeout)
                 # start connection time record
                 start_time = time.time()
                 # TCP connect
                 sock.connect(ipaddr)
                 # record TCP connection time
                 self.tcp_connection_time[ipaddr] = time.time() - start_time
-                # put ssl socket object to output queobj
+                # send client hello and peek server hello
+                if client_hello:
+                    sock.sendall(client_hello)
+                    if hasattr(socket, 'MSG_PEEK'):
+                        peek_data = sock.recv(1, socket.MSG_PEEK)
+                        if not peek_data:
+                            logging.debug('create_tcp_connection %r with client_hello return NULL byte, continue %r', ipaddr, time.time()-start_time)
+                            raise socket.error('timed out')
+                # put tcp socket object to output queobj
                 queobj.put(sock)
             except (socket.error, OSError) as e:
                 # any socket.error, put Excpetions to output queobj.
                 queobj.put(e)
                 # reset a large and random timeout to the ipaddr
-                self.tcp_connection_time[ipaddr] = self.max_timeout+random.random()
+                self.tcp_connection_time[ipaddr] = self.connect_timeout+random.random()
                 # close tcp socket
                 if sock:
                     sock.close()
         def close_connection(count, queobj, first_tcp_time):
             for _ in range(count):
                 sock = queobj.get()
-                tcp_time_threshold = min(1, 1.5 * first_tcp_time)
+                tcp_time_threshold = min(1, 1.3 * first_tcp_time)
                 if sock and not isinstance(sock, Exception):
                     ipaddr = sock.getpeername()
-                    if cache_key and self.tcp_connection_time[ipaddr] < tcp_time_threshold:
-                        self.ssl_connection_cache[cache_key].put((time.time(), sock))
+                    if cache_key and self.tcp_connection_time[ipaddr] < tcp_time_threshold and not client_hello:
+                        self.tcp_connection_cache[cache_key].put((time.time(), sock))
                     else:
                         sock.close()
         try:
             while cache_key:
                 ctime, sock = self.tcp_connection_cache[cache_key].get_nowait()
-                if time.time() - ctime < 16:
+                if time.time() - ctime < 30:
                     return sock
                 else:
                     sock.close()
@@ -1226,23 +1270,20 @@ class AdvancedProxyHandler(SimpleProxyHandler):
             pass
         result = None
         addresses = [(x, port) for x in self.gethostbyname2(hostname)]
-        if port == 443:
-            get_connection_time = lambda addr: self.ssl_connection_time.__getitem__(addr) or self.tcp_connection_time.__getitem__(addr)
-        else:
-            get_connection_time = self.tcp_connection_time.__getitem__
         errors = []
         for i in range(3):
-            window = min((self.max_window+1)//2 + min(i, 1), len(addresses))
-            addresses.sort(key=get_connection_time)
-            addrs = addresses[:window] + random.sample(addresses, min(len(addresses), window, self.max_window-window))
-            queobj = Queue.Queue()
+            window = min((self.max_window+1)//2, len(addresses))
+            addresses.sort(key=self.tcp_connection_time.__getitem__)
+            addrs = addresses[:window] + random.sample(addresses, window)
+            queobj = gevent.queue.Queue() if gevent else Queue.Queue()
             for addr in addrs:
                 thread.start_new_thread(create_connection, (addr, timeout, queobj))
             for i in range(len(addrs)):
                 result = queobj.get()
                 if not isinstance(result, (socket.error, OSError)):
-                    ipaddr = result.getpeername()
-                    thread.start_new_thread(close_connection, (len(addrs)-i-1, queobj, self.tcp_connection_time[ipaddr]))
+                    # first_tcp_time = self.tcp_connection_time[result.getpeername()]
+                    first_tcp_time = 0
+                    thread.start_new_thread(close_connection, (len(addrs)-i-1, queobj, first_tcp_time))
                     return result
                 else:
                     if i == 0:
@@ -1267,7 +1308,7 @@ class AdvancedProxyHandler(SimpleProxyHandler):
                 # disable negal algorithm to send http request quickly.
                 sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, True)
                 # set a short timeout to trigger timeout retry more quickly.
-                sock.settimeout(timeout or self.max_timeout)
+                sock.settimeout(timeout or self.connect_timeout)
                 # pick up the certificate
                 if not validate:
                     ssl_sock = ssl.wrap_socket(sock, do_handshake_on_connect=False)
@@ -1321,7 +1362,7 @@ class AdvancedProxyHandler(SimpleProxyHandler):
                 # disable negal algorithm to send http request quickly.
                 sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, True)
                 # set a short timeout to trigger timeout retry more quickly.
-                sock.settimeout(timeout or self.max_timeout)
+                sock.settimeout(timeout or self.connect_timeout)
                 # pick up the certificate
                 server_hostname = b'www.google.com' if hostname.endswith('.appspot.com') else None
                 ssl_sock = SSLConnection(self.openssl_context, sock)
@@ -1354,7 +1395,7 @@ class AdvancedProxyHandler(SimpleProxyHandler):
                 # any socket.error, put Excpetions to output queobj.
                 queobj.put(e)
                 # reset a large and random timeout to the ipaddr
-                self.ssl_connection_time[ipaddr] = self.max_timeout + random.random()
+                self.ssl_connection_time[ipaddr] = self.connect_timeout + random.random()
                 # close ssl socket
                 if ssl_sock:
                     ssl_sock.close()
@@ -1364,7 +1405,7 @@ class AdvancedProxyHandler(SimpleProxyHandler):
         def close_connection(count, queobj, first_tcp_time, first_ssl_time):
             for _ in range(count):
                 sock = queobj.get()
-                ssl_time_threshold = min(1, 1.5 * first_ssl_time)
+                ssl_time_threshold = min(1, 1.3 * first_ssl_time)
                 if sock and not isinstance(sock, Exception):
                     if cache_key and sock.ssl_time < ssl_time_threshold:
                         self.ssl_connection_cache[cache_key].put((time.time(), sock))
@@ -1373,7 +1414,7 @@ class AdvancedProxyHandler(SimpleProxyHandler):
         try:
             while cache_key:
                 ctime, sock = self.ssl_connection_cache[cache_key].get_nowait()
-                if time.time() - ctime < 16:
+                if time.time() - ctime < 30:
                     return sock
                 else:
                     sock.close()
@@ -1382,10 +1423,10 @@ class AdvancedProxyHandler(SimpleProxyHandler):
         result = None
         addresses = [(x, port) for x in self.gethostbyname2(hostname)]
         for i in range(3):
-            window = min((self.max_window+1)//2 + min(i, 1), len(addresses))
+            window = min((self.max_window+1)//2, len(addresses))
             addresses.sort(key=self.ssl_connection_time.__getitem__)
-            addrs = addresses[:window] + random.sample(addresses, min(len(addresses), window, self.max_window-window))
-            queobj = Queue.Queue()
+            addrs = addresses[:window] + random.sample(addresses, window)
+            queobj = gevent.queue.Queue() if gevent else Queue.Queue()
             for addr in addrs:
                 thread.start_new_thread(create_connection, (addr, timeout, queobj))
             errors = []
@@ -1619,7 +1660,7 @@ class Common(object):
                 logging.error('resolve remote host=%r failed: %s', host, e)
                 queue.put((host, dnsservers, []))
         # https://support.google.com/websearch/answer/186669?hl=zh-Hans
-        google_blacklist = ['216.239.32.20', '74.125.127.102', '74.125.155.102', '74.125.39.102', '74.125.39.113', '209.85.229.138']
+        google_blacklist = ['216.239.32.20'] + list(common.DNS_BLACKLIST)
         for name, need_resolve_hosts in list(self.IPLIST_MAP.items()):
             if all(re.match(r'\d+\.\d+\.\d+\.\d+', x) or ':' in x for x in need_resolve_hosts):
                 continue
@@ -2171,6 +2212,7 @@ class GreenForwardMixin:
 
     def FORWARD(self, hostname, port, timeout, kwargs={}):
         """forward socket"""
+        self.close_connection = 1
         bufsize = kwargs.pop('bufsize', 8192)
         do_ssl_handshake = kwargs.pop('do_ssl_handshake', False)
         local = self.connection
