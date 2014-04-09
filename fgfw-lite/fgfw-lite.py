@@ -28,7 +28,7 @@ import glob
 WORKINGDIR = '/'.join(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')).split('/')[:-1])
 if ' ' in WORKINGDIR:
     print('no spacebar allowed in path')
-    sys.exit()
+    sys.exit(-1)
 os.chdir(WORKINGDIR)
 sys.path.append(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')))
 sys.path += glob.glob('%s/goagent/*.egg' % WORKINGDIR)
@@ -112,6 +112,7 @@ def prestart():
             f.write('''
 ! local gfwlist config
 ! rules: https://autoproxy.org/zh-CN/Rules
+! /^http://www.baidu.com/.*wd=([^&]*).*$/ /https://www.google.com/search?q=\1/
 ''')
 
     for item in ['./userconf.ini', './fgfw-lite/local.txt', './userconf.sample.ini', './README.md']:
@@ -144,34 +145,6 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
         except (IOError, OSError) as e:
             if e[0] not in (errno.ECONNABORTED, errno.ECONNRESET, errno.EPIPE):
                 raise
-
-    def handle_one_request(self):
-        """Handle a single HTTP request. """
-        try:
-            self.raw_requestline = self.rfile.readline(65537)
-            if len(self.raw_requestline) > 65536:
-                self.requestline = ''
-                self.request_version = ''
-                self.command = ''
-                self.send_error(414)
-                return
-            if not self.raw_requestline:
-                self.close_connection = 1
-                return
-            if not self.parse_request():
-                # An error code has been sent, just exit
-                return
-            mname = 'do_' + self.command
-            if not hasattr(self, mname):
-                self.send_error(501, "Unsupported method (%r)" % self.command)
-                return
-            method = getattr(self, mname)
-            method()
-            self.wfile.flush()  # actually send the response if not already done.
-        except socket.timeout:
-            #a read or a write timed out.  Discard this connection
-            self.close_connection = 1
-            return
 
 
 class ProxyHandler(HTTPRequestHandler):
@@ -1029,9 +1002,6 @@ class FGFWProxyHandler(object):
 
 class goagentHandler(FGFWProxyHandler):
     """docstring for ClassName"""
-    def __init__(self):
-        FGFWProxyHandler.__init__(self)
-
     def config(self):
         self.cwd = '%s/goagent' % WORKINGDIR
         self.cmd = '{} {}/goagent/proxy.py'.format(PYTHON2, WORKINGDIR)
@@ -1163,10 +1133,6 @@ class goagentHandler(FGFWProxyHandler):
 
 class snovaHandler(FGFWProxyHandler):
     """docstring for ClassName"""
-    def __init__(self, arg=''):
-        FGFWProxyHandler.__init__(self)
-        self.arg = arg
-
     def config(self):
         self.cmd = '%s/snova/bin/start.%s' % (WORKINGDIR, 'bat' if sys.platform.startswith('win') else 'sh')
         self.cwd = '%s/snova' % WORKINGDIR
