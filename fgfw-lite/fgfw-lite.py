@@ -127,6 +127,8 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
     def redirect(self, url):
         self.send_response(302)
         self.send_header("Location", url)
+        self.send_header('Connection', 'keep_alive')
+        self.send_header("Content-Length", '0')
         self.end_headers()
 
     def log_message(self, format, *args):
