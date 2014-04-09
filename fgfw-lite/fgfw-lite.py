@@ -240,7 +240,7 @@ class ProxyHandler(HTTPRequestHandler):
             return
 
         if not 'Host' in self.headers:
-            self.headers['Host'] = urlparse.urlparse(self.path).hostname
+            self.headers['Host'] = urlparse.urlparse(self.path).netloc
 
         if any(host == self.headers['Host'].rsplit(':', 1)[0] for host in self.LOCALHOST):
             self.send_response(200)
@@ -253,53 +253,10 @@ class ProxyHandler(HTTPRequestHandler):
             self.wfile.write(msg)
             return
 
-        host, _, port = urlparse.urlparse(self.path).netloc.partition(':')
+        host, _, port = self.headers['Host'].partition(':')
         port = port or 80
         self.requesthost = '%s:%s' % (host, port)
         self._do_GET()
-
-    def wfile_write(self, data=None):
-        if self.retryable and data:
-            self.wbuffer.append(data)
-            self.wbuffer_size += len(data)
-            if self.wbuffer_size > 102400:
-                self.retryable = False
-        else:
-            while self.wbuffer:
-                self.wfile.write(self.wbuffer.popleft())
-            if data:
-                self.wfile.write(data)
-
-    def is_connection_dropped(self, sock):  # from urllib3
-        """
-        Returns True if the connection is dropped and should be closed.
-
-        """
-        if not hasattr(select, 'poll'):
-            try:
-                return select.select([sock], [], [], 0.0)[0]
-            except socket.error:
-                return True
-        # This version is better on platforms that support it.
-        p = select.poll()
-        p.register(sock, select.POLLIN)
-        for (fno, ev) in p.poll(0.0):
-            if fno == sock.fileno():
-                # Either data is buffered (bad), or the connection is dropped.
-                return True
-
-    def _http_connect_via_proxy(self, netloc):
-        if self.retrycount == 0:
-            pool = UPSTREAM_POOL.get(self.upstream_name)
-            while pool:
-                sock = pool.popleft()
-                if not self.is_connection_dropped(sock):
-                    logging.debug('reuse connection')
-                    self._proxylist.insert(0, self.ppname)
-                    return sock
-                else:
-                    sock.close()
-        return self._connect_via_proxy(netloc)
 
     def _do_GET(self, retry=False):
         if self.getparent():
@@ -315,7 +272,7 @@ class ProxyHandler(HTTPRequestHandler):
         else:
             self.upstream_name = self.ppname if self.pproxy else self.requesthost
         try:
-            remotesoc = self._http_connect_via_proxy(self.headers['Host'])
+            remotesoc = self._http_connect_via_proxy(self.requesthost)
         except NetWorkIOError as e:
             return self.on_GET_Error(e)
         self.wbuffer = deque()
@@ -521,14 +478,57 @@ class ProxyHandler(HTTPRequestHandler):
         remotesoc.close()
         self.connection.close()
 
+    def wfile_write(self, data=None):
+        if self.retryable and data:
+            self.wbuffer.append(data)
+            self.wbuffer_size += len(data)
+            if self.wbuffer_size > 102400:
+                self.retryable = False
+        else:
+            while self.wbuffer:
+                self.wfile.write(self.wbuffer.popleft())
+            if data:
+                self.wfile.write(data)
+
+    def is_connection_dropped(self, sock):  # from urllib3
+        """
+        Returns True if the connection is dropped and should be closed.
+
+        """
+        if not hasattr(select, 'poll'):
+            try:
+                return select.select([sock], [], [], 0.0)[0]
+            except socket.error:
+                return True
+        # This version is better on platforms that support it.
+        p = select.poll()
+        p.register(sock, select.POLLIN)
+        for (fno, ev) in p.poll(0.0):
+            if fno == sock.fileno():
+                # Either data is buffered (bad), or the connection is dropped.
+                return True
+
+    def _http_connect_via_proxy(self, netloc):
+        if self.retrycount == 0:
+            pool = UPSTREAM_POOL.get(self.upstream_name)
+            while pool:
+                sock = pool.popleft()
+                if not self.is_connection_dropped(sock):
+                    logging.debug('reuse connection')
+                    self._proxylist.insert(0, self.ppname)
+                    return sock
+                else:
+                    sock.close()
+        return self._connect_via_proxy(netloc)
+
     def _connect_via_proxy(self, netloc):
         timeout = None if self._proxylist else 20
 
         host, _, port = netloc.partition(':')
-        port = port or 80
+        port = int(port)
         logging.debug("Connect to %s:%s" % (host, port))
         if not self.pproxy:
-            return socket.create_connection((host, int(port)), timeout or 5)
+            return socket.create_connection((host, port), timeout or 5)
         elif self.pproxy.startswith('http://'):
             return socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), timeout or 10)
         elif self.pproxy.startswith('https://'):
@@ -538,7 +538,7 @@ class ProxyHandler(HTTPRequestHandler):
             return s
         elif self.pproxy.startswith('ss://'):
             s = sssocket(self.pproxy, timeout or 10)
-            s.connect((host, int(port)))
+            s.connect((host, port))
             return s
         elif self.pproxy.startswith('socks5://'):
             s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), timeout or 10)
@@ -555,7 +555,7 @@ class ProxyHandler(HTTPRequestHandler):
             s.sendall(b''.join([b"\x05\x01\x00\x03",
                                 chr(len(host)).encode(),
                                 host.encode(),
-                                struct.pack(b">H", int(port))]))
+                                struct.pack(b">H", port)]))
             data = s.recv(4)
             assert data[1] == b'\x00'
             if data[3] == b'\x01':  # read ipv4 addr
