@@ -109,7 +109,10 @@ def prestart():
 
     if not os.path.isfile('./fgfw-lite/local.txt'):
         with open('./fgfw-lite/local.txt', 'w') as f:
-            f.write('! local gfwlist config\n! rules: https://autoproxy.org/zh-CN/Rules\n')
+            f.write('''
+! local gfwlist config
+! rules: https://autoproxy.org/zh-CN/Rules
+''')
 
     for item in ['./userconf.ini', './fgfw-lite/local.txt', './userconf.sample.ini', './README.md']:
         with open(item) as f:
@@ -182,8 +185,8 @@ class ProxyHandler(HTTPRequestHandler):
     def handle_one_request(self):
         self._proxylist = None
         self.retryable = True
-        self.rbuffer = deque()  # client side read buffer: store request body, ssl handshake package... no pop method.
-        self.wbuffer = deque()  # client write buffer: used only once, not used in connect method
+        self.rbuffer = deque()  # client read buffer: store request body, ssl handshake package for retry. no pop method.
+        self.wbuffer = deque()  # client write buffer: read only once, not used in connect method
         self.wbuffer_size = 0
         self.retrycount = 0
         try:
