@@ -142,6 +142,34 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
             if e[0] not in (errno.ECONNABORTED, errno.ECONNRESET, errno.EPIPE):
                 raise
 
+    def handle_one_request(self):
+        """Handle a single HTTP request. """
+        try:
+            self.raw_requestline = self.rfile.readline(65537)
+            if len(self.raw_requestline) > 65536:
+                self.requestline = ''
+                self.request_version = ''
+                self.command = ''
+                self.send_error(414)
+                return
+            if not self.raw_requestline:
+                self.close_connection = 1
+                return
+            if not self.parse_request():
+                # An error code has been sent, just exit
+                return
+            mname = 'do_' + self.command
+            if not hasattr(self, mname):
+                self.send_error(501, "Unsupported method (%r)" % self.command)
+                return
+            method = getattr(self, mname)
+            method()
+            self.wfile.flush()  # actually send the response if not already done.
+        except socket.timeout:
+            #a read or a write timed out.  Discard this connection
+            self.close_connection = 1
+            return
+
 
 class ProxyHandler(HTTPRequestHandler):
     server_version = "FGFW-Lite/" + __version__
@@ -159,7 +187,7 @@ class ProxyHandler(HTTPRequestHandler):
         self.wbuffer_size = 0
         self.retrycount = 0
         try:
-            BaseHTTPRequestHandler.handle_one_request(self)
+            HTTPRequestHandler.handle_one_request(self)
         except socket.error, e:
             if e.errno in (errno.ECONNABORTED, errno.ECONNRESET, errno.EPIPE):
                 self.close_connection = 1
@@ -174,7 +202,7 @@ class ProxyHandler(HTTPRequestHandler):
             if self.parse_request():
                 self.send_error(403)
         else:
-            BaseHTTPRequestHandler.handle(self)
+            HTTPRequestHandler.handle(self)
 
     def _getparent(self, level=1):
         if self._proxylist is None:
