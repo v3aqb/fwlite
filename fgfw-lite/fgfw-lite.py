@@ -212,7 +212,7 @@ class ProxyHandler(HTTPRequestHandler):
                 self.redirect(new_url)
             return
 
-        if not 'Host' in self.headers:
+        if 'Host' not in self.headers:
             self.headers['Host'] = urlparse.urlparse(self.path).netloc
 
         if self.headers['Host'].rsplit(':', 1)[0] in self.LOCALHOST:
@@ -391,6 +391,8 @@ class ProxyHandler(HTTPRequestHandler):
         if self.path.rsplit(':', 1)[0] in self.LOCALHOST:
             self.send_error(403)
             return
+        if 'Host' not in self.headers:
+            self.headers['Host'] = self.path
         self.wfile.write(self.protocol_version + " 200 Connection established\r\n\r\n")
         self._do_CONNECT()
 
@@ -750,7 +752,7 @@ class parent_proxy(object):
         try:
             with open('./fgfw-lite/gfwlist.txt') as f:
                 data = f.read()
-                if not '!' in data:
+                if '!' not in data:
                     data = ''.join(data.split())
                     if len(data) % 4:
                         data += '=' * (4 - len(data) % 4)
