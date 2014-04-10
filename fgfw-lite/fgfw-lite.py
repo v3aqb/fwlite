@@ -128,6 +128,9 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 class HTTPRequestHandler(BaseHTTPRequestHandler):
+    def _quote_html(html):
+        return html.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
     def redirect(self, url):
         self.send_response(302)
         self.send_header("Location", url)
@@ -145,6 +148,36 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
         except (IOError, OSError) as e:
             if e[0] not in (errno.ECONNABORTED, errno.ECONNRESET, errno.EPIPE):
                 raise
+
+    def send_error(self, code, message=None):
+        """Send and log an error reply. """
+        try:
+            short, long = self.responses[code]
+        except KeyError:
+            short, long = '???', '???'
+        if message is None:
+            message = short
+        explain = long
+        # using _quote_html to prevent Cross Site Scripting attacks (see bug #1100201)
+        content = (self.error_message_format %
+                   {'code': code, 'message': self._quote_html(message), 'explain': explain})
+        self.send_response(code, message)
+        self.send_header("Content-Type", self.error_content_type)
+        self.send_header('Connection', 'keep_alive')
+        self.end_headers()
+        if self.command != 'HEAD' and code >= 200 and code not in (204, 304):
+            self.wfile.write(content)
+
+    def send_response(self, code, message=None):
+        if message is None:
+            if code in self.responses:
+                message = self.responses[code][0]
+            else:
+                message = ''
+        if self.request_version != 'HTTP/0.9':
+            self.wfile.write("%s %d %s\r\n" % (self.protocol_version, code, message))
+        self.send_header('ProxyServer', self.version_string())
+        self.send_header('Date', self.date_time_string())
 
 
 class ProxyHandler(HTTPRequestHandler):
