@@ -115,7 +115,7 @@ def prestart():
 ! /^http://www.baidu.com/.*wd=([^&]*).*$/ /https://www.google.com/search?q=\1/
 ''')
 
-    for item in ['./userconf.ini', './fgfw-lite/local.txt', './userconf.sample.ini', './README.md']:
+    for item in []:
         with open(item) as f:
             data = f.read()
         with open(item, 'w') as f:
@@ -1283,7 +1283,7 @@ class Config(object):
         self.userconf.read('userconf.ini')
 
     def confsave(self):
-        with open('version.ini', 'w') as f:
+        with open('version.ini', 'wb') as f:
             self.version.write(f)
         self.userconf.read('userconf.ini')
 
