@@ -995,7 +995,6 @@ def update(auto=False):
 def restart():
     conf.confsave()
     for item in FGFWProxyHandler.ITEMS:
-        item.config()
         item.restart()
     PARENT_PROXY.config()
 
