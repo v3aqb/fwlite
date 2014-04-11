@@ -43,11 +43,7 @@ import sys
 import os
 import glob
 
-default_encoding = 'utf-8'
-if sys.getdefaultencoding() != default_encoding:
-    reload(sys)
-    sys.setdefaultencoding(default_encoding)
-
+reload(sys).setdefaultencoding('UTF-8')
 sys.dont_write_bytecode = True
 sys.path += glob.glob('%s/*.egg' % os.path.dirname(os.path.abspath(__file__)))
 
@@ -69,7 +65,6 @@ import time
 import struct
 import collections
 import zlib
-import functools
 import itertools
 import re
 import io
@@ -551,7 +546,7 @@ def dns_remote_resolve(qname, dnsservers, blacklist, timeout):
         socks.append(sock_v6)
     timeout_at = time.time() + timeout
     try:
-        for _ in xrange(5):
+        for _ in xrange(4):
             try:
                 for dnsserver in dns_v4_servers:
                     sock_v4.sendto(query_data, (dnsserver, 53))
@@ -571,6 +566,7 @@ def dns_remote_resolve(qname, dnsservers, blacklist, timeout):
                             return iplist
             except socket.error as e:
                 logging.warning('handle dns query=%s socket: %r', query, e)
+        raise socket.gaierror(11004, 'getaddrinfo %r from %r failed' % (qname, dnsservers))
     finally:
         for sock in socks:
             sock.close()
@@ -663,6 +659,7 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     """SimpleProxyHandler for GoAgent 3.x"""
 
     protocol_version = 'HTTP/1.1'
+    ssl_version = ssl.PROTOCOL_SSLv23
     scheme = 'http'
     skip_headers = frozenset(['Vary', 'Via', 'X-Forwarded-For', 'Proxy-Authorization', 'Proxy-Connection', 'Upgrade', 'X-Chrome-Variations', 'Connection', 'Cache-Control'])
     bufsize = 256 * 1024
@@ -736,7 +733,7 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def create_ssl_connection(self, hostname, port, timeout, **kwargs):
         sock = self.create_tcp_connection(hostname, port, timeout, **kwargs)
-        ssl_sock = ssl.wrap_socket(sock)
+        ssl_sock = ssl.wrap_socket(sock, ssl_version=self.ssl_version)
         return ssl_sock
 
     def create_http_request(self, method, url, headers, body, timeout, **kwargs):
@@ -785,7 +782,7 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
         try:
-            ssl_sock = ssl.wrap_socket(self.connection, keyfile=certfile, certfile=certfile, server_side=True)
+            ssl_sock = ssl.wrap_socket(self.connection, ssl_version=self.ssl_version, keyfile=certfile, certfile=certfile, server_side=True)
         except Exception as e:
             if e.args[0] not in (errno.ECONNABORTED, errno.ECONNRESET):
                 logging.exception('ssl.wrap_socket(self.connection=%r) failed: %s', self.connection, e)
@@ -885,12 +882,14 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def DIRECT(self, kwargs):
         method = self.command
-        if self.path.lower().startswith(('http://', 'https://', 'ftp://')):
+        if 'url' in kwargs:
+            url = kwargs.pop('url')
+        elif self.path.lower().startswith(('http://', 'https://', 'ftp://')):
             url = self.path
         else:
             url = 'http://%s%s' % (self.headers['Host'], self.path)
         headers = {k.title(): v for k, v in self.headers.items()}
-        body = self.rfile.read(int(headers.get('Content-Length', 0)))
+        body = self.body
         response = self.create_http_request(method, url, headers, body, timeout=self.connect_timeout, **kwargs)
         logging.info('%s "DIRECT %s %s %s" %s %s', self.address_string(), self.command, url, self.protocol_version, response.status, response.getheader('Content-Length', '-'))
         response_headers = {k.title(): v for k, v in response.getheaders()}
@@ -935,14 +934,10 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 response = self.create_http_request_withserver(fetchserver, method, url, headers, body, timeout=self.connect_timeout, **kwargs)
                 # appid over qouta, switch to next appid
                 if response.app_status >= 500:
-                    message = {503: 'Current APPID Over Quota'}.get(response.status) or 'URLFETCH retrun %s' % response.status
-                    if i == max_retry - 1:
-                        content = message_html('502 URLFetch failed', 'Local URLFetch %r failed' % url, message)
-                        return self.MOCK(response.status, {'Content-Type': 'text/html'}, content)
-                    else:
-                        fetchserver = random.choice(fetchservers)
-                        logging.info('%s, trying another fetchserver=%r', message, fetchserver)
+                    if i < max_retry - 1:
                         response.close()
+                        fetchserver = random.choice(fetchservers)
+                        logging.info('URLFETCH return %d, trying another fetchserver=%r', response.app_status, fetchserver)
                         continue
                 # first response, has no retry.
                 if not headers_sent and not raw_response:
@@ -1201,7 +1196,9 @@ class AdvancedProxyHandler(SimpleProxyHandler):
         try:
             iplist = self.dns_cache[hostname]
         except KeyError:
-            if self.dns_servers:
+            if re.match(r'^\d+\.\d+\.\d+\.\d+$', hostname) or ':' in hostname:
+                iplist = [hostname]
+            elif self.dns_servers:
                 iplist = dns_remote_resolve(hostname, self.dns_servers, self.dns_blacklist, timeout=2)
             else:
                 iplist = socket.gethostbyname_ex(hostname)[-1]
@@ -1268,10 +1265,9 @@ class AdvancedProxyHandler(SimpleProxyHandler):
                     sock.close()
         except Queue.Empty:
             pass
-        result = None
         addresses = [(x, port) for x in self.gethostbyname2(hostname)]
-        errors = []
-        for i in range(3):
+        sock = None
+        for _ in range(kwargs.get('max_retry', 3)):
             window = min((self.max_window+1)//2, len(addresses))
             addresses.sort(key=self.tcp_connection_time.__getitem__)
             addrs = addresses[:window] + random.sample(addresses, window)
@@ -1279,18 +1275,17 @@ class AdvancedProxyHandler(SimpleProxyHandler):
             for addr in addrs:
                 thread.start_new_thread(create_connection, (addr, timeout, queobj))
             for i in range(len(addrs)):
-                result = queobj.get()
-                if not isinstance(result, (socket.error, OSError)):
-                    # first_tcp_time = self.tcp_connection_time[result.getpeername()]
+                sock = queobj.get()
+                if not isinstance(sock, Exception):
+                    # first_tcp_time = self.tcp_connection_time[sock.getpeername()]
                     first_tcp_time = 0
                     thread.start_new_thread(close_connection, (len(addrs)-i-1, queobj, first_tcp_time))
-                    return result
-                else:
-                    if i == 0:
-                        # only output first error
-                        logging.warning('create_connection to %s return %r, try again.', addrs, result)
-                    errors.append(result)
-        raise errors[-1]
+                    return sock
+                elif i == 0:
+                    # only output first error
+                    logging.warning('create_connection to %s return %r, try again.', addrs, sock)
+        if isinstance(sock, Exception):
+            raise sock
 
     def create_ssl_connection(self, hostname, port, timeout, **kwargs):
         cache_key = kwargs.get('cache_key')
@@ -1311,9 +1306,9 @@ class AdvancedProxyHandler(SimpleProxyHandler):
                 sock.settimeout(timeout or self.connect_timeout)
                 # pick up the certificate
                 if not validate:
-                    ssl_sock = ssl.wrap_socket(sock, do_handshake_on_connect=False)
+                    ssl_sock = ssl.wrap_socket(sock, ssl_version=self.ssl_version, do_handshake_on_connect=False)
                 else:
-                    ssl_sock = ssl.wrap_socket(sock, cert_reqs=ssl.CERT_REQUIRED, ca_certs=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cacert.pem'), do_handshake_on_connect=False)
+                    ssl_sock = ssl.wrap_socket(sock, ssl_version=self.ssl_version, cert_reqs=ssl.CERT_REQUIRED, ca_certs=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cacert.pem'), do_handshake_on_connect=False)
                 ssl_sock.settimeout(timeout or self.connect_timeout)
                 # start connection time record
                 start_time = time.time()
@@ -1420,31 +1415,27 @@ class AdvancedProxyHandler(SimpleProxyHandler):
                     sock.close()
         except Queue.Empty:
             pass
-        result = None
         addresses = [(x, port) for x in self.gethostbyname2(hostname)]
-        for i in range(3):
+        sock = None
+        for _ in range(kwargs.get('max_retry', 3)):
             window = min((self.max_window+1)//2, len(addresses))
             addresses.sort(key=self.ssl_connection_time.__getitem__)
             addrs = addresses[:window] + random.sample(addresses, window)
             queobj = gevent.queue.Queue() if gevent else Queue.Queue()
             for addr in addrs:
                 thread.start_new_thread(create_connection, (addr, timeout, queobj))
-            errors = []
             for i in range(len(addrs)):
-                result = queobj.get()
-                if not isinstance(result, Exception):
-                    thread.start_new_thread(close_connection, (len(addrs)-i-1, queobj, result.tcp_time, result.ssl_time))
-                    if i > 0:
-                        logging.info('create_ssl_connection to %s return OK.', addrs)
-                    return result
-                else:
-                    if i == 0:
-                        # only output first error
-                        logging.warning('create_ssl_connection to %s return %r, try again.', addrs, result)
-                errors.append(result)
-        raise errors[-1]
+                sock = queobj.get()
+                if not isinstance(sock, Exception):
+                    thread.start_new_thread(close_connection, (len(addrs)-i-1, queobj, sock.tcp_time, sock.ssl_time))
+                    return sock
+                elif i == 0:
+                    # only output first error
+                    logging.warning('create_ssl_connection to %s return %r, try again.', addrs, sock)
+        if isinstance(sock, Exception):
+            raise sock
 
-    def create_http_request(self, method, url, headers, body, timeout, max_retry=3, bufsize=8192, crlf=None, validate=None, cache_key=None):
+    def create_http_request(self, method, url, headers, body, timeout, max_retry=2, bufsize=8192, crlf=None, validate=None, cache_key=None):
         scheme, netloc, path, query, _ = urlparse.urlsplit(url)
         if netloc.rfind(':') <= netloc.rfind(']'):
             # no port number
@@ -1460,19 +1451,15 @@ class AdvancedProxyHandler(SimpleProxyHandler):
         if body and 'Content-Length' not in headers:
             headers['Content-Length'] = str(len(body))
         sock = None
-        errors = []
-        for _ in range(max_retry):
+        for i in range(max_retry):
             try:
                 create_connection = self.create_ssl_connection if scheme == 'https' else self.create_tcp_connection
                 sock = create_connection(host, port, timeout, validate=validate, cache_key=cache_key)
-                if sock and not isinstance(sock, Exception):
-                    break
+                break
             except Exception as e:
                 logging.exception('create_http_request "%s %s" failed:%s', method, url, e)
-                errors.append(e)
-                continue
-        if not sock and errors:
-            raise errors[-1]
+                if i == max_retry - 1:
+                    raise
         request_data = ''
         crlf_counter = 0
         if scheme != 'https' and crlf:
@@ -1516,10 +1503,7 @@ class AdvancedProxyHandler(SimpleProxyHandler):
             logging.exception('crlf skip read host=%r path=%r error: %r', headers.get('Host'), path, e)
             return None
         response = httplib.HTTPResponse(sock, buffering=True)
-        try:
-            response.begin()
-        except httplib.BadStatusLine:
-            response = None
+        response.begin()
         return response
 
 
@@ -1657,10 +1641,10 @@ class Common(object):
                 iplist = dns_remote_resolve(host, dnsservers, self.DNS_BLACKLIST, timeout=2)
                 queue.put((host, dnsservers, iplist or []))
             except (socket.error, OSError) as e:
-                logging.error('resolve remote host=%r failed: %s', host, e)
+                logging.warning('resolve remote host=%r failed: %s', host, e)
                 queue.put((host, dnsservers, []))
         # https://support.google.com/websearch/answer/186669?hl=zh-Hans
-        google_blacklist = ['216.239.32.20'] + list(common.DNS_BLACKLIST)
+        google_blacklist = ['216.239.32.20'] + list(self.DNS_BLACKLIST)
         for name, need_resolve_hosts in list(self.IPLIST_MAP.items()):
             if all(re.match(r'\d+\.\d+\.\d+\.\d+', x) or ':' in x for x in need_resolve_hosts):
                 continue
@@ -2573,6 +2557,19 @@ class PacFileFilter(BaseProxyHandlerFilter):
                 uptime = get_uptime()
                 if uptime and uptime > 1800:
                     thread.start_new_thread(lambda: os.utime(pacfile, (time.time(), time.time())) or PacUtil.update_pacfile(pacfile), tuple())
+            with open(pacfile, 'rb') as fp:
+                content = fp.read()
+                headers = {'Content-Type': 'text/plain'}
+                if 'gzip' in handler.headers.get('Accept-Encoding', ''):
+                    headers['Content-Encoding'] = 'gzip'
+                    compressobj = zlib.compressobj(zlib.Z_DEFAULT_COMPRESSION, zlib.DEFLATED, -zlib.MAX_WBITS, zlib.DEF_MEM_LEVEL, 0)
+                    dataio = io.BytesIO()
+                    dataio.write('\x1f\x8b\x08\x00\x00\x00\x00\x00\x02\xff')
+                    dataio.write(compressobj.compress(content))
+                    dataio.write(compressobj.flush())
+                    dataio.write(struct.pack('<LL', zlib.crc32(content) & 0xFFFFFFFFL, len(content) & 0xFFFFFFFFL))
+                    content = dataio.getvalue()
+                return [handler.MOCK, 200, headers, content]
 
 
 class StaticFileFilter(BaseProxyHandlerFilter):
@@ -2585,8 +2582,6 @@ class StaticFileFilter(BaseProxyHandlerFilter):
                 with open(filename, 'rb') as fp:
                     content = fp.read()
                     headers = {'Content-Type': 'application/octet-stream', 'Connection': 'close'}
-                    if path.endswith('pac'):
-                        headers['Content-Type'] = 'text/plain'
                     return [handler.MOCK, 200, headers, content]
 
 
@@ -2603,7 +2598,7 @@ class BlackholeFilter(BaseProxyHandlerFilter):
                        'Expires': 'Oct, 01 Aug 2100 00:00:00 GMT',
                        'Connection': 'close'}
             content = ''
-            if urlparts.path.endswith(('.jpg', '.gif', '.jpeg', '.bmp')):
+            if urlparts.path.lower().endswith(('.jpg', '.gif', '.png','.jpeg', '.bmp')):
                 headers['Content-Type'] = 'image/gif'
                 content = self.one_pixel_gif
             return [handler.MOCK, 200, headers, content]
