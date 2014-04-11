@@ -128,7 +128,7 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 class HTTPRequestHandler(BaseHTTPRequestHandler):
-    def _quote_html(html):
+    def _quote_html(self, html):
         return html.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
     def redirect(self, url):
