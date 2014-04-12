@@ -159,6 +159,7 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
                    {'code': code, 'message': self._quote_html(message), 'explain': explain})
         self.send_response(code, message)
         self.send_header("Content-Type", self.error_content_type)
+        self.send_header('Content-Length', str(len(content)))
         self.send_header('Connection', 'keep_alive')
         self.end_headers()
         if self.command != 'HEAD' and code >= 200 and code not in (204, 304):
