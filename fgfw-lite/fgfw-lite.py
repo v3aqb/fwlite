@@ -55,6 +55,7 @@ import platform
 import base64
 import ftplib
 import encrypt
+import markdown
 import random
 import select
 import shutil
@@ -173,6 +174,14 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write("%s %d %s\r\n" % (self.protocol_version, code, message))
         self.send_header('ProxyServer', self.version_string())
         self.send_header('Date', self.date_time_string())
+
+    def send_trunk(self, data):
+        self.wfile.write(b"%x\r\n" % len(data))
+        self.wfile.write(data)
+        self.wfile.write(b'\r\n')
+
+    def end_trunk(self):
+        self.wfile.write(b'0\r\n\r\n')
 
 
 class ProxyHandler(HTTPRequestHandler):
@@ -595,6 +604,7 @@ class ProxyHandler(HTTPRequestHandler):
                 break
 
     def do_FTP(self):
+        logging.info('{} {}'.format(self.command, self.path))
         # fish out user and password information
         scm, netloc, path, params, query, fragment = urlparse.urlparse(
             self.path, 'http')
@@ -607,13 +617,52 @@ class ProxyHandler(HTTPRequestHandler):
         else:
             user, passwd = "anonymous", None
         try:
-            ftp = ftplib.FTP(netloc)
-            ftp.login(user, passwd)
             if self.command == "GET":
-                ftp.retrbinary("RETR %s" % path, self.wfile.write)
-            ftp.quit()
+                ftp = ftplib.FTP(netloc)
+                ftp.login(user, passwd)
+                if path.endswith('/'):
+                    self.send_response(200)
+                    self.send_header('Content-type', 'text/html')
+                    self.send_header('Transfer-Encoding', 'chunked')
+                    self.send_header('Connection', 'keep_alive')
+                    self.end_headers()
+                    self.send_trunk('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">')
+                    self.send_trunk("<html>\n<title>Directory listing for %s</title>\n" % path)
+                    self.send_trunk("<body>\n<h2>Directory listing for %s</h2>\n" % path)
+                    self.send_trunk("<hr>\n")
+
+                    lst = []
+                    md = '''
+| Content        | Size           | Modify  |
+| :------------  |---------------:| -------:|'''
+                    try:
+                        response = ftp.retrlines("LIST %s" % path, lst.append)
+                        for line in lst:
+                            line_split = line.split()
+                            if line.startswith('d'):
+                                line_split[8] += '/'
+                            md += '|[%s](%s%s)|%s|%s %s %s|\r\n' % (line_split[8], self.path, line_split[8], line_split[4], line_split[5], line_split[6], line_split[7])
+                        md += '|================|==========|=============|\r\n'
+                        md += '\r\n%s\r\n' % response
+                    except Exception as e:
+                        logging.warning("FTP Exception: %s" % e)
+
+                    self.send_trunk(markdown.markdown(md, extensions=['tables', ]))
+
+                    self.send_trunk("<hr>\n</body>\n</html>\n")
+                    self.end_trunk()
+                else:
+                    try:
+                        self.close_connection = 1
+                        ftp.retrbinary("RETR %s" % path, self.wfile.write, 8192)
+                    except Exception as e:  # Possibly no such file
+                        logging.warning("FTP Exception: %s" % e)
+                        self.redirect('%s/' % self.path)
+                ftp.quit()
+            else:
+                self.send_error(501)
         except Exception as e:
-            logging.warning("FTP Exception: %s" % e)
+            logging.warning("FTP Exception: %r" % e)
 
 
 class sssocket(object):
