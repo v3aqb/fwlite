@@ -115,11 +115,6 @@ def prestart():
 ! /^http://www.baidu.com/.*wd=([^&]*).*$/ /https://www.google.com/search?q=\1/
 ''')
 
-    for item in []:
-        with open(item) as f:
-            data = f.read()
-        with open(item, 'w') as f:
-            f.write(data)
 prestart()
 
 
@@ -752,35 +747,11 @@ class parent_proxy(object):
         self.proxy_by_rule = []
         REDIRECTOR.lst = []
 
-        def add_rule(line, force=False):
-            line = line.strip()
-            if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
-                try:
-                    rule, result = line.split()
-                    if result in conf.parentdict.keys():
-                        self.proxy_by_rule.append((autoproxy_rule(rule), result))
-                    else:
-                        REDIRECTOR.lst.append((autoproxy_rule(rule), result))
-                except TypeError as e:
-                    logging.debug('create autoproxy rule failed: %s' % e)
-            else:
-                try:
-                    o = autoproxy_rule(line)
-                except TypeError as e:
-                    logging.debug('create autoproxy rule failed: %s' % e)
-                else:
-                    if o.override:
-                        self.override.append(o)
-                    elif force:
-                        self.gfwlist_force.append(o)
-                    else:
-                        self.gfwlist.append(o)
-
         for line in open('./fgfw-lite/local.txt'):
-            add_rule(line, force=True)
+            self.add_rule(line, force=True)
 
         for line in open('./fgfw-lite/cloud.txt'):
-            add_rule(line, force=True)
+            self.add_rule(line, force=True)
 
         try:
             with open('./fgfw-lite/gfwlist.txt') as f:
@@ -792,7 +763,7 @@ class parent_proxy(object):
                     data = base64.b64decode(data)
                 data = data.splitlines()
                 for line in data:
-                    add_rule(line)
+                    self.add_rule(line)
         except TypeError:
             logging.warning('./fgfw-lite/gfwlist.txt is corrupted!')
 
@@ -802,6 +773,30 @@ class parent_proxy(object):
         self.localnet.append((ip_from_string('127.0.0.0'), ip_from_string('127.0.0.0') + 2 ** (32 - 8)))
 
         self.geoip = pygeoip.GeoIP('./goagent/GeoIP.dat')
+
+    def add_rule(self, line, force=False):
+        line = line.strip()
+        if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
+            try:
+                rule, result = line.split()
+                if result in conf.parentdict.keys():
+                    self.proxy_by_rule.append((autoproxy_rule(rule), result))
+                else:
+                    REDIRECTOR.lst.append((autoproxy_rule(rule), result))
+            except TypeError as e:
+                logging.debug('create autoproxy rule failed: %s' % e)
+        else:
+            try:
+                o = autoproxy_rule(line)
+            except TypeError as e:
+                logging.debug('create autoproxy rule failed: %s' % e)
+            else:
+                if o.override:
+                    self.override.append(o)
+                elif force:
+                    self.gfwlist_force.append(o)
+                else:
+                    self.gfwlist.append(o)
 
     @lru_cache(256, timeout=120)
     def ifhost_in_local(self, host):
@@ -871,12 +866,24 @@ class parent_proxy(object):
         a = conf.userconf.dget('goagent', 'GAEAppid', 'goagent') == 'goagent'
         if s or a:  # two reasons not to use goagent
             if re.match(r'^([^/]+):\d+$', uri):  # connect method
-                    if host in ['play.google.com', 'ssl.gstatic.com', 'mail-attachment.googleusercontent.com', 'webcache.googleusercontent.com', 's1.googleusercontent.com', 's2.googleusercontent.com', 'images1-focus-opensocial.googleusercontent.com', 'images2-focus-opensocial.googleusercontent.com', 'images3-focus-opensocial.googleusercontent.com', 'lh0.googleusercontent.com', 'lh1.googleusercontent.com', 'lh2.googleusercontent.com', 'lh3.googleusercontent.com', 'lh4.googleusercontent.com', 'lh5.googleusercontent.com', 'lh6.googleusercontent.com', 'lh7.googleusercontent.com', 'lh8.googleusercontent.com', 'lh9.googleusercontent.com', 'lh10.googleusercontent.com', 'lh11.googleusercontent.com', 'lh12.googleusercontent.com']:
-                        return True
-                    if host.endswith(('.google.com', '.google.com.hk', '.googleapis.com', '.android.com', '.googlegroups.com', '.googlesource.com', '.googleusercontent.com', '.google-analytics.com', '.googlecode.com', '.gstatic.com')):
-                        return False
+                if host in conf.FAKEHTTPS:
                     return True
+                if host in conf.WITHGAE:
+                    return True
+                if host in conf.HOST:
+                    return False
+                if host.endswith(conf.HOST_POSTFIX):
+                    return False
+                if host.endswith(conf.CONN_POSTFIX):
+                    return False
+                return True
             else:  # get method
+                if host in conf.WITHGAE:
+                    return a
+                if host in conf.HOST:
+                    return False
+                if host.endswith(conf.HOST_POSTFIX):
+                    return False
                 return a
 
     def select_proxy_by_rule(self, uri):
@@ -1088,6 +1095,14 @@ class goagentHandler(FGFWProxyHandler):
 
         with open('./goagent/proxy.ini', 'w') as configfile:
             goagent.write(configfile)
+
+        conf.FAKEHTTPS = set(goagent.get('ipv4/http', 'fakehttps').split('|'))
+        conf.WITHGAE = set(goagent.get('ipv4/http', 'withgae').split('|'))
+        conf.HOST = ('upload.youtube.com', )
+        conf.HOST_POSTFIX = ('.google.com', '.google.com.hk', '.googleapis.com', '.android.com', '.appspot.com', '.googlegroups.com', '.googlesource.com', '.googleusercontent.com', '.google-analytics.com', '.googlecode.com', '.gstatic.com')
+        conf.CONN_POSTFIX = ('.dropbox.com', '.box.com', '.copy.com')
+        for s in goagent.get('ipv4/http', 'forcehttps').split('|'):
+            PARENT_PROXY.add_rule('%s forcehttps' % s)
 
         if not os.path.isfile('./goagent/CA.crt'):
             self.createCA()
