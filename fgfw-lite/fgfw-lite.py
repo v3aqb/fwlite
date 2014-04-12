@@ -243,7 +243,7 @@ class ProxyHandler(HTTPRequestHandler):
         if 'Host' not in self.headers:
             self.headers['Host'] = urlparse.urlparse(self.path).netloc
 
-        if self.headers['Host'].rsplit(':', 1)[0] in self.LOCALHOST:
+        if self.headers['Host'].rsplit(':', 1)[0].lower() in self.LOCALHOST:
             self.send_response(200)
             msg = 'Hello World !'
             self.send_header('Content-type', 'text/html')
@@ -416,7 +416,7 @@ class ProxyHandler(HTTPRequestHandler):
 
     def do_CONNECT(self):
         self.close_connection = 1
-        if self.path.rsplit(':', 1)[0] in self.LOCALHOST:
+        if self.path.rsplit(':', 1)[0].lower() in self.LOCALHOST:
             self.send_error(403)
             return
         if 'Host' not in self.headers:
