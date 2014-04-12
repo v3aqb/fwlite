@@ -636,7 +636,7 @@ class ProxyHandler(HTTPRequestHandler):
                     md += '|================|==========|=============|\r\n'
                     md += '\r\n%s\r\n' % response
                 except Exception as e:
-                    logging.warning("FTP Exception: %s" % e)
+                    logging.warning("FTP Exception: %r" % e)
                     self.send_error(504, repr(e))
                 else:
                     self.send_response(200)
@@ -1144,7 +1144,7 @@ class goagentHandler(FGFWProxyHandler):
         conf.FAKEHTTPS = set(goagent.get('ipv4/http', 'fakehttps').split('|'))
         conf.WITHGAE = set(goagent.get('ipv4/http', 'withgae').split('|'))
         conf.HOST = ('upload.youtube.com', )
-        conf.HOST_POSTFIX = ('.google.com', '.google.com.hk', '.googleapis.com', '.android.com', '.appspot.com', '.googlegroups.com', '.googlesource.com', '.googleusercontent.com', '.google-analytics.com', '.googlecode.com', '.gstatic.com', '.ggpht.com')
+        conf.HOST_POSTFIX = tuple([k for k, v in goagent.items('ipv4/hosts') if '\\' not in k and ':' not in k and k.startswith('.')])
         conf.CONN_POSTFIX = ('.box.com', '.copy.com')
         for s in goagent.get('ipv4/http', 'forcehttps').split('|'):
             PARENT_PROXY.add_rule('%s forcehttps' % s)
