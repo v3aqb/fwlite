@@ -693,12 +693,8 @@ class autoproxy_rule(object):
                     regex = re.sub(r'^', r'^http://.*', regex)
                 return re.compile(regex)
 
-        if rule.startswith('@@'):
-            self.override = True
-            return parse(rule[2:])
-        else:
-            self.override = False
-            return parse(rule)
+        self.override = rule.startswith('@@')
+        return parse(rule[2:]) if self.override else parse(rule)
 
     def match(self, uri):
         if self.expire and self.expire < time.time():
@@ -761,8 +757,7 @@ class parent_proxy(object):
                     if len(data) % 4:
                         data += '=' * (4 - len(data) % 4)
                     data = base64.b64decode(data)
-                data = data.splitlines()
-                for line in data:
+                for line in data.splitlines():
                     self.add_rule(line)
         except TypeError:
             logging.warning('./fgfw-lite/gfwlist.txt is corrupted!')
@@ -775,28 +770,29 @@ class parent_proxy(object):
         self.geoip = pygeoip.GeoIP('./goagent/GeoIP.dat')
 
     def add_rule(self, line, force=False):
-        line = line.strip()
-        if len(line.split()) == 2:  # |http://www.google.com/url forcehttps
+        rule = line.strip().split()
+        if len(rule) == 2:  # |http://www.google.com/url forcehttps
             try:
-                rule, result = line.split()
+                rule, result = rule
                 if result in conf.parentdict.keys():
                     self.proxy_by_rule.append((autoproxy_rule(rule), result))
                 else:
                     REDIRECTOR.lst.append((autoproxy_rule(rule), result))
             except TypeError as e:
                 logging.debug('create autoproxy rule failed: %s' % e)
-        else:
+        elif len(rule) == 1:
             try:
-                o = autoproxy_rule(line)
-            except TypeError as e:
-                logging.debug('create autoproxy rule failed: %s' % e)
-            else:
+                o = autoproxy_rule(rule[0])
                 if o.override:
                     self.override.append(o)
                 elif force:
                     self.gfwlist_force.append(o)
                 else:
                     self.gfwlist.append(o)
+            except TypeError as e:
+                logging.debug('create autoproxy rule failed: %s' % e)
+        elif rule and '!' not in line:
+            logging.warning('Bad autoproxy rule: %r' % line)
 
     @lru_cache(256, timeout=120)
     def ifhost_in_local(self, host):
