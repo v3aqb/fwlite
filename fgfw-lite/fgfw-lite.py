@@ -306,7 +306,7 @@ class ProxyHandler(HTTPRequestHandler):
                     except NetWorkIOError as e:
                         return self.on_GET_Error(e)
             while content_length:
-                data = self.rfile.read(min(8096, content_length))
+                data = self.rfile.read(min(8192, content_length))
                 if not data:
                     break
                 content_length -= len(data)
