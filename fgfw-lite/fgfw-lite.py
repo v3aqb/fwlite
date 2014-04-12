@@ -1096,7 +1096,7 @@ class goagentHandler(FGFWProxyHandler):
         conf.WITHGAE = set(goagent.get('ipv4/http', 'withgae').split('|'))
         conf.HOST = ('upload.youtube.com', )
         conf.HOST_POSTFIX = ('.google.com', '.google.com.hk', '.googleapis.com', '.android.com', '.appspot.com', '.googlegroups.com', '.googlesource.com', '.googleusercontent.com', '.google-analytics.com', '.googlecode.com', '.gstatic.com', '.ggpht.com')
-        conf.CONN_POSTFIX = ('.dropbox.com', '.box.com', '.copy.com')
+        conf.CONN_POSTFIX = ('.box.com', '.copy.com')
         for s in goagent.get('ipv4/http', 'forcehttps').split('|'):
             PARENT_PROXY.add_rule('%s forcehttps' % s)
 

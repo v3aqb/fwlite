@@ -817,7 +817,6 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         """forward socket"""
         do_ssl_handshake = kwargs.pop('do_ssl_handshake', False)
         local = self.connection
-        max_retry = int(kwargs.get('max_retry', 3))
         remote = None
         self.send_response(200)
         self.end_headers()
@@ -826,7 +825,8 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         data_is_clienthello = is_clienthello(data)
         if data_is_clienthello:
             kwargs['client_hello'] = data
-        for i in xrange(5):
+        max_retry = kwargs.get('max_retry', 3)
+        for i in xrange(max_retry):
             try:
                 if do_ssl_handshake:
                     remote = self.create_ssl_connection(hostname, port, timeout, **kwargs)
@@ -2196,17 +2196,38 @@ class GreenForwardMixin:
 
     def FORWARD(self, hostname, port, timeout, kwargs={}):
         """forward socket"""
-        self.close_connection = 1
-        bufsize = kwargs.pop('bufsize', 8192)
         do_ssl_handshake = kwargs.pop('do_ssl_handshake', False)
+        bufsize = self.bufsize
         local = self.connection
-        if do_ssl_handshake:
-            remote = self.create_ssl_connection(hostname, port, timeout, **kwargs)
-        else:
-            remote = self.create_tcp_connection(hostname, port, timeout, **kwargs)
-        if remote and not isinstance(remote, Exception):
-            self.wfile.write(b'HTTP/1.1 200 OK\r\n\r\n')
-        logging.info('%s "GREEN FORWARD %s %s:%d %s" - -', self.address_string(), self.command, hostname, port, self.protocol_version)
+        remote = None
+        self.send_response(200)
+        self.end_headers()
+        self.close_connection = 1
+        data = local.recv(1024)
+        data_is_clienthello = is_clienthello(data)
+        if data_is_clienthello:
+            kwargs['client_hello'] = data
+        max_retry = kwargs.get('max_retry', 3)
+        for i in xrange(max_retry):
+            try:
+                if do_ssl_handshake:
+                    remote = self.create_ssl_connection(hostname, port, timeout, **kwargs)
+                else:
+                    remote = self.create_tcp_connection(hostname, port, timeout, **kwargs)
+                if not data_is_clienthello and remote and not isinstance(remote, Exception):
+                    remote.sendall(data)
+                break
+            except Exception as e:
+                logging.exception('%s "FWD %s %s:%d %s" %r', self.address_string(), self.command, hostname, port, self.protocol_version, e)
+                if hasattr(remote, 'close'):
+                    remote.close()
+                if i == max_retry - 1:
+                    raise
+        logging.info('%s "FWD %s %s:%d %s" - -', self.address_string(), self.command, hostname, port, self.protocol_version)
+        if hasattr(remote, 'fileno'):
+            # reset timeout default to avoid long http upload failure, but it will delay timeout retry :(
+            remote.settimeout(None)
+        del kwargs
         thread.start_new_thread(GreenForwardMixin.io_copy, (remote.dup(), local.dup(), timeout, bufsize))
         GreenForwardMixin.io_copy(local, remote, timeout, bufsize)
 
