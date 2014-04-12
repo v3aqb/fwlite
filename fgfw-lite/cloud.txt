@@ -1,10 +1,7 @@
-|http://www.google.com/search forcehttps
-|http://www.google.com/url forcehttps
+|http://www.google.com forcehttps
 |http://code.google.com/ forcehttps
 |http://news.google.com forcehttps
 |http://appengine.google.com forcehttps
-|http://www.google.com.hk/url forcehttps
-|http://www.google.com.hk/search forcehttps
 |http://*.googlecode.com forcehttps
 |http://*.wikipedia.org forcehttps
 ||feedly.com
