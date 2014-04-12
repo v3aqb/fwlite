@@ -47,9 +47,6 @@ Func setTray()
 
 	$trayMenuAdvanced = TrayCreateMenu("高级")
 
-	TrayCreateItem("软件升级", $trayMenuAdvanced)
-	TrayItemSetOnEvent(-1, "update")
-
 	TrayCreateItem("清除DNS缓存", $trayMenuAdvanced)
 	TrayItemSetOnEvent(-1, "flushDNS")
 
@@ -77,10 +74,6 @@ Func setTray()
 	TraySetClick(16)
 
 EndFunc   ;==>setTray
-
-Func update()
-	TrayTip("FGFW_Lite", "打开Console，输入 update()，回车", 0)
-EndFunc   ;==>update
 
 Func showHideConsole()
 	Dim $SUB_PID
