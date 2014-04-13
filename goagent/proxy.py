@@ -207,9 +207,11 @@ class LRUCache(object):
             self.key_order.remove(key)
         self.key_order.insert(0, key)
         if len(self.key_order) > self.max_items:
-            remove = self.key_order[self.max_items]
-            del self.cache[remove]
-            self.key_order.pop(self.max_items)
+            index = self.max_items // 2
+            delitem = self.cache.__delitem__
+            key_order = self.key_order
+            any(delitem(key_order[x]) for x in xrange(index, len(key_order)))
+            self.key_order = self.key_order[:index]
 
     def clear(self):
         self.cache = {}
@@ -760,6 +762,29 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def create_http_request_withserver(self, fetchserver, method, url, headers, body, timeout, **kwargs):
         raise NotImplementedError
 
+    def parse_header(self):
+        if self.has_auth_filter:
+            auth_headers = {k.title(): v for k, v in self.headers.items() if k.title().endswith('-Authorization')}
+            original_auth_headers = getattr(self, 'auth_headers', {})
+            if auth_headers or original_auth_headers:
+                for key, value in original_auth_headers.items():
+                    if key not in auth_headers:
+                        self.headers[key] = value
+        if self.command == 'CONNECT':
+            netloc = self.path
+        elif self.path[0] == '/':
+            netloc = self.headers.get('Host', 'localhost')
+            self.path = '%s://%s%s' % (self.scheme, netloc, self.path)
+        else:
+            netloc = urlparse.urlsplit(self.path).netloc
+        m = re.match(r'^(.+):(\d+)$', netloc)
+        if m:
+            self.host = m.group(1).strip('[]')
+            self.port = int(m.group(2))
+        else:
+            self.host = netloc
+            self.port = 443 if self.scheme == 'http' else 80
+
     def MOCK(self, status, headers, content):
         """mock response"""
         logging.info('%s "MOCK %s %s %s" %d %d', self.address_string(), self.command, self.path, self.protocol_version, status, len(content))
@@ -894,15 +919,16 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             url = 'http://%s%s' % (self.headers['Host'], self.path)
         headers = {k.title(): v for k, v in self.headers.items()}
         body = self.body
-        response = self.create_http_request(method, url, headers, body, timeout=self.connect_timeout, **kwargs)
-        logging.info('%s "DIRECT %s %s %s" %s %s', self.address_string(), self.command, url, self.protocol_version, response.status, response.getheader('Content-Length', '-'))
-        response_headers = {k.title(): v for k, v in response.getheaders()}
-        self.send_response(response.status)
-        for key, value in response.getheaders():
-            self.send_header(key, value)
-        self.end_headers()
-        need_chunked = 'Transfer-Encoding' in response_headers
+        response = None
         try:
+            response = self.create_http_request(method, url, headers, body, timeout=self.connect_timeout, **kwargs)
+            logging.info('%s "DIRECT %s %s %s" %s %s', self.address_string(), self.command, url, self.protocol_version, response.status, response.getheader('Content-Length', '-'))
+            response_headers = {k.title(): v for k, v in response.getheaders()}
+            self.send_response(response.status)
+            for key, value in response.getheaders():
+                self.send_header(key, value)
+            self.end_headers()
+            need_chunked = 'Transfer-Encoding' in response_headers
             while True:
                 data = response.read(8192)
                 if not data:
@@ -916,7 +942,8 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                     self.wfile.write('\r\n')
                 del data
         finally:
-            response.close()
+            if response:
+                response.close()
 
     def URLFETCH(self, fetchservers, max_retry=2, raw_response=False, kwargs={}):
         """urlfetch from fetchserver"""
@@ -992,27 +1019,7 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             return self.MOCK(502, {'Content-Type': 'text/html'}, content)
 
     def do_METHOD(self):
-        if self.command == 'CONNECT':
-            netloc = self.path
-        elif self.path[0] == '/':
-            netloc = self.headers.get('Host', 'localhost')
-            self.path = '%s://%s%s' % (self.scheme, netloc, self.path)
-        else:
-            netloc = urlparse.urlsplit(self.path).netloc
-        m = re.match(r'^(.+):(\d+)$', netloc)
-        if m:
-            self.host = m.group(1).strip('[]')
-            self.port = int(m.group(2))
-        else:
-            self.host = netloc
-            self.port = 443 if self.scheme == 'http' else 80
-        if self.has_auth_filter:
-            auth_headers = {k.title(): v for k, v in self.headers.items() if k.title().endswith('-Authorization')}
-            original_auth_headers = getattr(self, 'auth_headers', {})
-            if auth_headers or original_auth_headers:
-                for key, value in original_auth_headers.items():
-                    if key not in auth_headers:
-                        self.headers[key] = value
+        self.parse_header()
         self.body = self.rfile.read(int(self.headers['Content-Length'])) if 'Content-Length' in self.headers else ''
         for handler_filter in self.handler_filters:
             action = handler_filter.filter(self)
@@ -1210,9 +1217,8 @@ class AdvancedProxyHandler(SimpleProxyHandler):
         return iplist
 
     def create_tcp_connection(self, hostname, port, timeout, **kwargs):
-        #cache_key = kwargs.get('cache_key')
-        cache_key = ''
         client_hello = kwargs.get('client_hello', None)
+        cache_key = kwargs.get('cache_key') if not client_hello else None
         def create_connection(ipaddr, timeout, queobj):
             sock = None
             try:
@@ -1256,7 +1262,7 @@ class AdvancedProxyHandler(SimpleProxyHandler):
                 tcp_time_threshold = min(1, 1.3 * first_tcp_time)
                 if sock and not isinstance(sock, Exception):
                     ipaddr = sock.getpeername()
-                    if cache_key and self.tcp_connection_time[ipaddr] < tcp_time_threshold and not client_hello:
+                    if cache_key and self.tcp_connection_time[ipaddr] < tcp_time_threshold:
                         self.tcp_connection_cache[cache_key].put((time.time(), sock))
                     else:
                         sock.close()
@@ -1281,8 +1287,7 @@ class AdvancedProxyHandler(SimpleProxyHandler):
             for i in range(len(addrs)):
                 sock = queobj.get()
                 if not isinstance(sock, Exception):
-                    # first_tcp_time = self.tcp_connection_time[sock.getpeername()]
-                    first_tcp_time = 0
+                    first_tcp_time = self.tcp_connection_time[sock.getpeername()]
                     thread.start_new_thread(close_connection, (len(addrs)-i-1, queobj, first_tcp_time))
                     return sock
                 elif i == 0:
@@ -1462,6 +1467,8 @@ class AdvancedProxyHandler(SimpleProxyHandler):
                 break
             except Exception as e:
                 logging.exception('create_http_request "%s %s" failed:%s', method, url, e)
+                if sock:
+                    sock.close()
                 if i == max_retry - 1:
                     raise
         request_data = ''
@@ -1505,6 +1512,8 @@ class AdvancedProxyHandler(SimpleProxyHandler):
                 crlf_counter -= 1
         except Exception as e:
             logging.exception('crlf skip read host=%r path=%r error: %r', headers.get('Host'), path, e)
+            if sock:
+                sock.close()
             return None
         response = httplib.HTTPResponse(sock, buffering=True)
         response.begin()
