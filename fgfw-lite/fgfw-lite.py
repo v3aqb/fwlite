@@ -238,17 +238,15 @@ class ProxyHandler(HTTPRequestHandler):
         if self.path.startswith('/') and 'Host' in self.headers:
             self.path = 'http://%s%s' % (self.headers['Host'], self.path)
         if self.path.startswith('/'):
-            self.send_error(403)
-            return
+            return self.send_error(403)
         # redirector
         new_url = REDIRECTOR.get(self.path)
         if new_url:
             logging.info('redirecting to %s' % new_url)
             if new_url.startswith('403'):
-                self.send_error(403)
+                return self.send_error(403)
             else:
-                self.redirect(new_url)
-            return
+                return self.redirect(new_url)
 
         if 'Host' not in self.headers:
             self.headers['Host'] = urlparse.urlparse(self.path).netloc
@@ -271,8 +269,7 @@ class ProxyHandler(HTTPRequestHandler):
 
     def _do_GET(self, retry=False):
         if self.getparent():
-            self.send_error(504)
-            return
+            return self.send_error(504)
         if not self.retryable:
             self.close_connection = 1
             return
@@ -427,8 +424,7 @@ class ProxyHandler(HTTPRequestHandler):
     def do_CONNECT(self):
         self.close_connection = 1
         if self.path.rsplit(':', 1)[0].lower() in self.LOCALHOST:
-            self.send_error(403)
-            return
+            return self.send_error(403)
         if 'Host' not in self.headers:
             self.headers['Host'] = self.path
         self.wfile.write(self.protocol_version + " 200 Connection established\r\n\r\n")
@@ -619,36 +615,7 @@ class ProxyHandler(HTTPRequestHandler):
             user, passwd = "anonymous", None
         if self.command == "GET":
             if path.endswith('/'):
-                lst = []
-                md = '|Content|Size|Modify|\r\n|:----|----:|----:|\r\n'
-                try:
-                    ftp = ftplib.FTP(netloc)
-                    ftp.login(user, passwd)
-                    response = ftp.retrlines("LIST %s" % path, lst.append)
-                    ftp.quit()
-                    for line in lst:
-                        line_split = line.split()
-                        if line.startswith('d'):
-                            line_split[8] += '/'
-                        md += '|[%s](%s%s)|%s|%s %s %s|\r\n' % (line_split[8], self.path, line_split[8], line_split[4], line_split[5], line_split[6], line_split[7])
-                    md += '|================|==========|=============|\r\n'
-                    md += '\r\n%s\r\n' % response
-                except Exception as e:
-                    logging.warning("FTP Exception: %r" % e)
-                    self.send_error(504, repr(e))
-                else:
-                    self.send_response(200)
-                    self.send_header('Content-type', 'text/html')
-                    self.send_header('Transfer-Encoding', 'chunked')
-                    self.send_header('Connection', 'keep_alive')
-                    self.end_headers()
-                    self.send_trunk('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">')
-                    self.send_trunk("<html>\n<title>Directory listing for %s</title>\n" % path)
-                    self.send_trunk("<body>\n<h2>Directory listing for %s</h2>\n" % path)
-                    self.send_trunk("<hr>\n")
-                    self.send_trunk(markdown.markdown(md, extensions=['tables', ]))
-                    self.send_trunk("<hr>\n</body>\n</html>\n")
-                    self.end_trunk()
+                return self.do_FTP_LIST(netloc, path, user, passwd)
             else:
                 try:
                     ftp = ftplib.FTP(netloc)
@@ -656,7 +623,9 @@ class ProxyHandler(HTTPRequestHandler):
                     lst = []
                     response = ftp.retrlines("LIST %s" % path, lst.append)
                     if len(lst) > 1 or lst[0].split()[8] != path:
-                        return self.redirect('%s/' % self.path)
+                        return self.do_FTP_LIST(netloc, path, user, passwd)
+                    if not lst:
+                        return self.send_error(504, response)
                     self.send_response(200)
                     self.send_header('Content-Length', lst[0].split()[4])
                     self.send_header('Connection', 'keep_alive')
@@ -668,6 +637,40 @@ class ProxyHandler(HTTPRequestHandler):
                     self.send_error(504, repr(e))
         else:
             self.send_error(501)
+
+    def do_FTP_LIST(self, netloc, path, user, passwd):
+        if not path.endswith('/'):
+            self.path += '/'
+        lst = []
+        md = '|Content|Size|Modify|\r\n|:----|----:|----:|\r\n'
+        try:
+            ftp = ftplib.FTP(netloc)
+            ftp.login(user, passwd)
+            response = ftp.retrlines("LIST %s" % path, lst.append)
+            ftp.quit()
+            for line in lst:
+                line_split = line.split()
+                if line.startswith('d'):
+                    line_split[8] += '/'
+                md += '|[%s](%s%s)|%s|%s %s %s|\r\n' % (line_split[8], self.path, line_split[8], line_split[4], line_split[5], line_split[6], line_split[7])
+            md += '|================|==========|=============|\r\n'
+            md += '\r\n%s\r\n' % response
+        except Exception as e:
+            logging.warning("FTP Exception: %r" % e)
+            self.send_error(504, repr(e))
+        else:
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.send_header('Transfer-Encoding', 'chunked')
+            self.send_header('Connection', 'keep_alive')
+            self.end_headers()
+            self.send_trunk('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">')
+            self.send_trunk("<html>\n<title>Directory listing for %s</title>\n" % path)
+            self.send_trunk("<body>\n<h2>Directory listing for %s</h2>\n" % path)
+            self.send_trunk("<hr>\n")
+            self.send_trunk(markdown.markdown(md, extensions=['tables', ]))
+            self.send_trunk("<hr>\n</body>\n</html>\n")
+            self.end_trunk()
 
 
 class sssocket(object):
