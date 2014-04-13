@@ -620,9 +620,7 @@ class ProxyHandler(HTTPRequestHandler):
         if self.command == "GET":
             if path.endswith('/'):
                 lst = []
-                md = '''
-| Content        | Size           | Modify  |
-| :------------  |---------------:| -------:|'''
+                md = '|Content|Size|Modify|\r\n|:----|----:|----:|\r\n'
                 try:
                     ftp = ftplib.FTP(netloc)
                     ftp.login(user, passwd)
@@ -655,7 +653,14 @@ class ProxyHandler(HTTPRequestHandler):
                 try:
                     ftp = ftplib.FTP(netloc)
                     ftp.login(user, passwd)
-                    self.close_connection = 1
+                    lst = []
+                    response = ftp.retrlines("LIST %s" % path, lst.append)
+                    if len(lst) > 1 or lst[0].split()[8] != path:
+                        return self.redirect('%s/' % self.path)
+                    self.send_response(200)
+                    self.send_header('Content-Length', lst[0].split()[4])
+                    self.send_header('Connection', 'keep_alive')
+                    self.end_headers()
                     ftp.retrbinary("RETR %s" % path, self.wfile.write, 8192)
                     ftp.quit()
                 except Exception as e:  # Possibly no such file
