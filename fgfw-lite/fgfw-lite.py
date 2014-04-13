@@ -232,18 +232,18 @@ class ProxyHandler(HTTPRequestHandler):
         self.ppname = self._proxylist.pop(0)
         self.pproxy = conf.parentdict.get(self.ppname)[0]
         self.pproxyparse = urlparse.urlparse(self.pproxy)
-        logging.info('{} {} via {}'.format(self.command, self.path, self.ppname))
+        logging.info('{} {} via {}'.format(self.command, self.path.decode('latin1'), self.ppname))
 
     def getparent(self, level=1):
         return self._getparent(level)
 
     def do_GET(self):
-        if self.path.lower().startswith('ftp://'):
+        if self.path.lower().startswith(b'ftp://'):
             return self.do_FTP()
         # transparent proxy
-        if self.path.startswith('/') and 'Host' in self.headers:
+        if self.path.startswith(b'/') and 'Host' in self.headers:
             self.path = 'http://%s%s' % (self.headers['Host'], self.path)
-        if self.path.startswith('/'):
+        if self.path.startswith(b'/'):
             return self.send_error(403)
         # redirector
         new_url = REDIRECTOR.get(self.path)
@@ -296,13 +296,13 @@ class ProxyHandler(HTTPRequestHandler):
         if self.pproxy.startswith('http'):
             s.append('%s %s %s\r\n' % (self.command, self.path, self.request_version))
         else:
-            s.append('%s /%s %s\r\n' % (self.command, '/'.join(self.path.split('/')[3:]), self.request_version))
+            s.append('%s /%s %s\r\n' % (self.command, '/'.join(self.path.decode('latin1').split('/')[3:]), self.request_version))
         del self.headers['Proxy-Connection']
-        for key_val in self.headers.items():
-            s.append("%s: %s\r\n" % key_val)
+        for k, v in self.headers.items():
+            s.append("%s: %s\r\n" % (k, v.decode('latin1')))
         s.append("\r\n")
         try:
-            remotesoc.sendall(''.join(s).encode('latin'))
+            remotesoc.sendall(''.join(s).encode('latin1'))
         except NetWorkIOError as e:
             return self.on_GET_Error(e)
         logging.debug('request header sent')
