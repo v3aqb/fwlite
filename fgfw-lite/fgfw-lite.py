@@ -27,7 +27,7 @@ import os
 import glob
 WORKINGDIR = '/'.join(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')).split('/')[:-1])
 if ' ' in WORKINGDIR:
-    print('no spacebar allowed in path')
+    sys.stderr.write('no spacebar allowed in path\n')
     sys.exit(-1)
 os.chdir(WORKINGDIR)
 sys.path.append(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')))
@@ -43,7 +43,7 @@ except ImportError:
     gevent = None
 except TypeError:
     gevent.monkey.patch_all()
-    sys.stderr.write('Warning: Please update gevent to the latest 1.0 version!')
+    sys.stderr.write('Warning: Please update gevent to the latest 1.0 version!\n')
 from collections import defaultdict, deque
 import subprocess
 import shlex
@@ -67,13 +67,11 @@ from threading import Thread
 import urllib2
 import urlparse
 import pygeoip
-from SocketServer import ThreadingMixIn
-from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 try:
     import markdown
 except ImportError:
     markdown = None
-    sys.stderr.write('Warning: python-Markdown is NOT installed!')
+    sys.stderr.write('Warning: python-Markdown is NOT installed!\n')
 try:
     from repoze.lru import lru_cache
 except ImportError:
@@ -81,11 +79,14 @@ except ImportError:
         def decorator(func):
             return func
         return decorator
-
 try:
     import configparser
+    from socketserver import ThreadingMixIn
+    from http.server import BaseHTTPRequestHandler, HTTPServer
 except ImportError:
     import ConfigParser as configparser
+    from SocketServer import ThreadingMixIn
+    from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 configparser.RawConfigParser.OPTCRE = re.compile(r'(?P<option>[^=\s][^=]*)\s*(?P<vi>[=])\s*(?P<value>.*)$')
 
 logging.basicConfig(level=logging.INFO,
@@ -99,6 +100,7 @@ else:
         if subprocess.call(shlex.split('which %s' % cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE) == 0:
             PYTHON2 = cmd
             break
+PYTHON = sys.executable.replace('\\', '/')
 
 UPSTREAM_POOL = defaultdict(deque)
 HOSTS = defaultdict(list)
@@ -208,7 +210,7 @@ class ProxyHandler(HTTPRequestHandler):
         self.retrycount = 0
         try:
             HTTPRequestHandler.handle_one_request(self)
-        except socket.error, e:
+        except socket.error as e:
             if e.errno in (errno.ECONNABORTED, errno.ECONNRESET, errno.EPIPE):
                 self.close_connection = 1
             else:
