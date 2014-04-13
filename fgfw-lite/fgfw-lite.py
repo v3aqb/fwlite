@@ -43,6 +43,7 @@ except ImportError:
     gevent = None
 except TypeError:
     gevent.monkey.patch_all()
+    sys.stderr.write('Warning: Please update gevent to the latest 1.0 version!')
 from collections import defaultdict, deque
 import subprocess
 import shlex
@@ -55,7 +56,7 @@ import platform
 import base64
 import ftplib
 import encrypt
-import markdown
+import logging
 import random
 import select
 import shutil
@@ -66,6 +67,13 @@ from threading import Thread
 import urllib2
 import urlparse
 import pygeoip
+from SocketServer import ThreadingMixIn
+from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+try:
+    import markdown
+except ImportError:
+    markdown = None
+    sys.stderr.write('Warning: python-Markdown is NOT installed!')
 try:
     from repoze.lru import lru_cache
 except ImportError:
@@ -73,15 +81,13 @@ except ImportError:
         def decorator(func):
             return func
         return decorator
-from SocketServer import ThreadingMixIn
-from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+
 try:
     import configparser
 except ImportError:
     import ConfigParser as configparser
 configparser.RawConfigParser.OPTCRE = re.compile(r'(?P<option>[^=\s][^=]*)\s*(?P<vi>[=])\s*(?P<value>.*)$')
 
-import logging
 logging.basicConfig(level=logging.INFO,
                     format='FGFW-Lite %(asctime)s %(levelname)s %(message)s',
                     datefmt='%H:%M:%S', filemode='a+')
