@@ -812,18 +812,19 @@ class parent_proxy(object):
         for line in open('./fgfw-lite/cloud.txt'):
             self.add_rule(line, force=True)
 
-        try:
-            with open('./fgfw-lite/gfwlist.txt') as f:
-                data = f.read()
-                if '!' not in data:
-                    data = ''.join(data.split())
-                    if len(data) % 4:
-                        data += '=' * (4 - len(data) % 4)
-                    data = base64.b64decode(data)
-                for line in data.splitlines():
-                    self.add_rule(line)
-        except TypeError:
-            logging.warning('./fgfw-lite/gfwlist.txt is corrupted!')
+        if conf.userconf.dgetbool('fgfwproxy', 'enable_gfwlist', True):
+            try:
+                with open('./fgfw-lite/gfwlist.txt') as f:
+                    data = f.read()
+                    if '!' not in data:
+                        data = ''.join(data.split())
+                        if len(data) % 4:
+                            data += '=' * (4 - len(data) % 4)
+                        data = base64.b64decode(data)
+                    for line in data.splitlines():
+                        self.add_rule(line)
+            except TypeError:
+                logging.warning('./fgfw-lite/gfwlist.txt is corrupted!')
 
         self.localnet.append((ip_from_string('192.168.0.0'), ip_from_string('192.168.0.0') + 2 ** (32 - 16)))
         self.localnet.append((ip_from_string('172.16.0.0'), ip_from_string('172.16.0.0') + 2 ** (32 - 12)))
