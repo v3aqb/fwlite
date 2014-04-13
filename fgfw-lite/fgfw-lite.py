@@ -253,6 +253,8 @@ class ProxyHandler(HTTPRequestHandler):
             logging.info('redirecting to %s' % new_url)
             if new_url.startswith('403'):
                 return self.send_error(403)
+            elif new_url in conf.parentdict.keys():
+                self._proxylist = [new_url]
             else:
                 return self.redirect(new_url)
 
@@ -805,7 +807,6 @@ class parent_proxy(object):
         self.gfwlist_force = []
         self.localnet = []
         self.temp_rules = set()
-        self.proxy_by_rule = []
         REDIRECTOR.lst = []
 
         for line in open('./fgfw-lite/local.txt'):
@@ -840,10 +841,7 @@ class parent_proxy(object):
         if len(rule) == 2:  # |http://www.google.com/url forcehttps
             try:
                 rule, result = rule
-                if result in conf.parentdict.keys():
-                    self.proxy_by_rule.append((autoproxy_rule(rule), result))
-                else:
-                    REDIRECTOR.lst.append((autoproxy_rule(rule), result))
+                REDIRECTOR.lst.append((autoproxy_rule(rule), result))
             except TypeError as e:
                 logging.debug('create autoproxy rule failed: %s' % e)
         elif len(rule) == 1:
@@ -948,12 +946,6 @@ class parent_proxy(object):
                     return False
                 return a
 
-    def select_proxy_by_rule(self, uri):
-        '''return a parentproxy name, like: 'shadowsocks-uk' '''
-        for rule in self.proxy_by_rule:
-            if rule[0].match(uri):
-                return rule[1]
-
     def parentproxy(self, uri, host, level=1):
         '''
             decide which parentproxy to use.
@@ -966,9 +958,6 @@ class parent_proxy(object):
                    3 -- proxy if not override
         '''
 
-        p = self.select_proxy_by_rule(uri)
-        if p:
-            return [p]
         f = self.ifgfwed(uri, host, level)
 
         if f is False:
@@ -1379,6 +1368,7 @@ class Config(object):
 REDIRECTOR = redirector()
 PARENT_PROXY = parent_proxy()
 conf = Config()
+PARENT_PROXY.config()
 
 
 @atexit.register
@@ -1396,7 +1386,6 @@ def main():
     for k, v in conf.userconf.items('parents'):
         conf.addparentproxy(k, v)
     conf.addparentproxy('direct', 'direct 0')
-    PARENT_PROXY.config()
     updatedaemon = Thread(target=updater)
     updatedaemon.daemon = True
     updatedaemon.start()
