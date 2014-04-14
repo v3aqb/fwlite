@@ -184,7 +184,8 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
             else:
                 message = ''
         if self.request_version != 'HTTP/0.9':
-            self.wfile.write("%s %d %s\r\n" % (self.protocol_version, code, message))
+            s = "%s %d %s\r\n" % (self.protocol_version, code, message)
+            self.wfile.write(s.encode())
         self.send_header('ProxyServer', self.version_string())
         self.send_header('Date', self.date_time_string())
 
@@ -244,7 +245,7 @@ class ProxyHandler(HTTPRequestHandler):
         return self._getparent(level)
 
     def do_GET(self):
-        if platform.python_version() < '3.0':
+        if isinstance(self.path, bytes):
             self.path = self.path.decode('latin1')
         if self.path.lower().startswith('ftp://'):
             return self.do_FTP()
@@ -309,7 +310,7 @@ class ProxyHandler(HTTPRequestHandler):
             s.append('%s /%s %s\r\n' % (self.command, '/'.join(self.path.split('/')[3:]), self.request_version))
         del self.headers['Proxy-Connection']
         for k, v in self.headers.items():
-            if platform.python_version() < '3.0':
+            if isinstance(v, bytes):
                 v = v.decode('latin1')
             s.append("%s: %s\r\n" % (k, v))
         s.append("\r\n")
@@ -461,10 +462,10 @@ class ProxyHandler(HTTPRequestHandler):
             return self._do_CONNECT()
 
         if self.pproxy.startswith('http'):
-            s = [b'%s %s %s\r\n' % (self.command, self.path, self.request_version), ]
-            s.append(b'\r\n'.join(['%s: %s' % (key, value) for key, value in self.headers.items()]))
-            s.append(b'\r\n\r\n')
-            remotesoc.sendall(b''.join(s))
+            s = ['%s %s %s\r\n' % (self.command, self.path, self.request_version), ]
+            s.append('\r\n'.join(['%s: %s' % (key, value) for key, value in self.headers.items()]))
+            s.append('\r\n\r\n')
+            remotesoc.sendall(''.join(s).encode())
             remoterfile = remotesoc.makefile('rb', 0)
             data = remoterfile.readline()
             if b'200' not in data:
@@ -786,7 +787,7 @@ class redirector(object):
         if searchword:
             q = searchword.group(1)
             if 'xn--' in q:
-                q = q.decode('idna')
+                q = q.encode().decode('idna')
             logging.debug('Match redirect rule addressbar-search')
             return 'https://www.google.com/search?q=%s&ie=utf-8&oe=utf-8&aq=t&rls=org.mozilla:zh-CN:official' % urlquote(q.encode('utf-8'))
         for rule, result in self.lst:
