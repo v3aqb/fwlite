@@ -832,7 +832,7 @@ class parent_proxy(object):
                         data = ''.join(data.split())
                         if len(data) % 4:
                             data += '=' * (4 - len(data) % 4)
-                        data = base64.b64decode(data)
+                        data = base64.b64decode(data).decode()
                     for line in data.splitlines():
                         self.add_rule(line)
             except TypeError:
