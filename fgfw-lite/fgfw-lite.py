@@ -114,7 +114,8 @@ NetWorkIOError = (socket.error, ssl.SSLError, OSError)
 
 
 def prestart():
-    s = 'FGFW_Lite ' + __version__ + ' with gevent' if gevent else ''
+    s = 'FGFW_Lite ' + __version__
+    s += ' with gevent' if gevent else ''
     logging.info(s)
 
     if not os.path.isfile('./userconf.ini'):
@@ -1119,9 +1120,9 @@ class goagentHandler(FGFWProxyHandler):
         goagent = SConfigParser()
         goagent.read('./goagent/proxy.sample.ini')
 
-        if conf.userconf.dget('goagent', 'GAEAppid', 'goagent') != 'goagent':
-            goagent.set('gae', 'appid', conf.userconf.dget('goagent', 'GAEAppid', 'goagent'))
-            goagent.set("gae", "password", conf.userconf.dget('goagent', 'GAEpassword', ''))
+        if conf.userconf.dget('goagent', 'gaeappid', 'goagent') != 'goagent':
+            goagent.set('gae', 'appid', conf.userconf.dget('goagent', 'gaeappid', 'goagent'))
+            goagent.set("gae", "password", conf.userconf.dget('goagent', 'gaepassword', ''))
             goagent.set('gae', 'obfuscate', conf.userconf.dget('goagent', 'obfuscate', '0'))
             goagent.set('gae', 'validate', conf.userconf.dget('goagent', 'validate', '0'))
             goagent.set('gae', 'options', conf.userconf.dget('goagent', 'options', ''))
@@ -1155,12 +1156,12 @@ class goagentHandler(FGFWProxyHandler):
         with open('./goagent/proxy.ini', 'w') as configfile:
             goagent.write(configfile)
 
-        conf.FAKEHTTPS = set(goagent.get('ipv4/http', 'fakehttps').split('|'))
-        conf.WITHGAE = set(goagent.get('ipv4/http', 'withgae').split('|'))
+        conf.FAKEHTTPS = set(goagent.dget('ipv4/http', 'fakehttps').split('|'))
+        conf.WITHGAE = set(goagent.dget('ipv4/http', 'withgae').split('|'))
         conf.HOST = ('upload.youtube.com', )
         conf.HOST_POSTFIX = tuple([k for k, v in goagent.items('ipv4/hosts') if '\\' not in k and ':' not in k and k.startswith('.')])
         conf.CONN_POSTFIX = ('.box.com', '.copy.com')
-        for s in goagent.get('ipv4/http', 'forcehttps').split('|'):
+        for s in goagent.dget('ipv4/http', 'forcehttps').split('|'):
             PARENT_PROXY.add_rule('%s forcehttps' % s)
 
         if not os.path.isfile('./goagent/CA.crt'):
@@ -1256,7 +1257,7 @@ class snovaHandler(FGFWProxyHandler):
 
         proxy.set('GAE', 'Enable', '0')
 
-        worknodes = conf.userconf.get('snova', 'C4worknodes')
+        worknodes = conf.userconf.dget('snova', 'C4worknodes')
         if worknodes:
             worknodes = worknodes.split('|')
             for i, v in enumerate(worknodes):
@@ -1274,11 +1275,14 @@ class snovaHandler(FGFWProxyHandler):
 
 class SConfigParser(configparser.ConfigParser):
     """docstring for SSafeConfigParser"""
-    def dget(self, section, option, default=None):
-        if default is None:
-            default = ''
-        value = self.get(section, option)
-        if not value:
+    optionxform = str
+
+    def dget(self, section, option, default=''):
+        try:
+            value = self.get(section, option)
+            if not value:
+                value = default
+        except Exception:
             value = default
         return value
 
@@ -1299,15 +1303,6 @@ class SConfigParser(configparser.ConfigParser):
             return self.getboolean(section, option)
         except Exception:
             return bool(default)
-
-    def get(self, section, option, raw=False, vars=None):
-        try:
-            value = configparser.ConfigParser.get(self, section, option, raw, vars)
-            if value is None:
-                raise Exception
-        except Exception:
-            value = ''
-        return value
 
     def items(self, section):
         try:

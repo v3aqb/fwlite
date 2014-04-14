@@ -4,7 +4,10 @@
 import os
 import hashlib
 import json
-import ConfigParser as configparser
+try:
+    import configparser
+except ImportError:
+    import ConfigParser as configparser
 os.chdir(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')))
 
 if raw_input('update? y/n: ').lower().startswith('y'):
@@ -13,7 +16,10 @@ if raw_input('update? y/n: ').lower().startswith('y'):
                  ('https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'),
                  ('https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './fgfw-lite/gfwlist.txt'),
                  ]
-    import urllib2
+    try:
+        import urllib2
+    except ImportError:
+        import urllib.request as urllib2
     for url, path in updatelst:
         try:
             print 'downloading %s' % url
