@@ -1351,7 +1351,7 @@ class Config(object):
         self.userconf.read('userconf.ini')
 
     def confsave(self):
-        with open('version.ini', 'wb') as f:
+        with open('version.ini', 'w') as f:
             self.version.write(f)
         self.userconf.read('userconf.ini')
 

@@ -61,6 +61,6 @@ for f in flist:
 
 with open('./fgfw-lite/update.json', 'wb') as f:
     f.write(json.dumps(v, sort_keys=True, indent=4, separators=(',', ': ')))
-with open('version.ini', 'wb') as f:
+with open('version.ini', 'w') as f:
     version.write(f)
 raw_input('press Enter to exit...')
