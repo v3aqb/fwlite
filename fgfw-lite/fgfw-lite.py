@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #-*- coding: UTF-8 -*-
 #
 # FGFW_Lite.py A Proxy Server help go around the Great Firewall
@@ -64,8 +64,6 @@ import socket
 import struct
 import ssl
 from threading import Thread
-import urllib2
-import urlparse
 import pygeoip
 try:
     import markdown
@@ -81,9 +79,15 @@ except ImportError:
         return decorator
 try:
     import configparser
+    import urllib.request as urllib2
+    import urllib.parse as urlparse
+    urlquote = urlparse.quote
     from socketserver import ThreadingMixIn
     from http.server import BaseHTTPRequestHandler, HTTPServer
 except ImportError:
+    import urllib2
+    import urlparse
+    urlquote = urllib2.quote
     import ConfigParser as configparser
     from SocketServer import ThreadingMixIn
     from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
@@ -234,18 +238,20 @@ class ProxyHandler(HTTPRequestHandler):
         self.ppname = self._proxylist.pop(0)
         self.pproxy = conf.parentdict.get(self.ppname)[0]
         self.pproxyparse = urlparse.urlparse(self.pproxy)
-        logging.info('{} {} via {}'.format(self.command, self.path.decode('latin1'), self.ppname))
+        logging.info('{} {} via {}'.format(self.command, self.path, self.ppname))
 
     def getparent(self, level=1):
         return self._getparent(level)
 
     def do_GET(self):
-        if self.path.lower().startswith(b'ftp://'):
+        if platform.python_version() < '3.0':
+            self.path = self.path.decode('latin1')
+        if self.path.lower().startswith('ftp://'):
             return self.do_FTP()
         # transparent proxy
-        if self.path.startswith(b'/') and 'Host' in self.headers:
+        if self.path.startswith('/') and 'Host' in self.headers:
             self.path = 'http://%s%s' % (self.headers['Host'], self.path)
-        if self.path.startswith(b'/'):
+        if self.path.startswith('/'):
             return self.send_error(403)
         # redirector
         new_url = REDIRECTOR.get(self.path)
@@ -300,10 +306,12 @@ class ProxyHandler(HTTPRequestHandler):
         if self.pproxy.startswith('http'):
             s.append('%s %s %s\r\n' % (self.command, self.path, self.request_version))
         else:
-            s.append('%s /%s %s\r\n' % (self.command, '/'.join(self.path.decode('latin1').split('/')[3:]), self.request_version))
+            s.append('%s /%s %s\r\n' % (self.command, '/'.join(self.path.split('/')[3:]), self.request_version))
         del self.headers['Proxy-Connection']
         for k, v in self.headers.items():
-            s.append("%s: %s\r\n" % (k, v.decode('latin1')))
+            if platform.python_version() < '3.0':
+                v = v.decode('latin1')
+            s.append("%s: %s\r\n" % (k, v))
         s.append("\r\n")
         try:
             remotesoc.sendall(''.join(s).encode('latin1'))
@@ -342,24 +350,24 @@ class ProxyHandler(HTTPRequestHandler):
                 raise ValueError('empty response line')
         except (socket.error, ssl.SSLError, OSError, ValueError) as e:
             return self.on_GET_Error(e)
-        logging.debug('respinse line read')
-        protocol_version, _, response_status = response_line.rstrip('\r\n').partition(' ')
-        response_status, _, response_reason = response_status.partition(' ')
+        logging.debug('response line read')
+        protocol_version, _, response_status = response_line.rstrip(b'\r\n').partition(b' ')
+        response_status, _, response_reason = response_status.partition(b' ')
         response_status = int(response_status)
         header_data = []
         try:
             while True:
                 line = remoterfile.readline()
                 header_data.append(line)
-                if not line.strip():
+                if line in (b'\r\n', b'\n', b''):
                     break
         except NetWorkIOError as e:
             return self.on_GET_Error(e)
         header_data = b''.join(header_data)
         logging.debug('response header read')
-        response_header = email.message_from_string(header_data)
+        response_header = email.message_from_string(header_data.decode('latin1'))
         conntype = response_header.get('Connection', "")
-        if protocol_version >= "HTTP/1.1":
+        if protocol_version >= b"HTTP/1.1":
             self.close_connection = conntype.lower() == 'close'
         else:
             self.close_connection = conntype.lower() != 'keep_alive'
@@ -437,7 +445,8 @@ class ProxyHandler(HTTPRequestHandler):
             return self.send_error(403)
         if 'Host' not in self.headers:
             self.headers['Host'] = self.path
-        self.wfile.write(self.protocol_version + " 200 Connection established\r\n\r\n")
+        self.wfile.write(self.protocol_version.encode())
+        self.wfile.write(b" 200 Connection established\r\n\r\n")
         self._do_CONNECT()
 
     def _do_CONNECT(self, retry=False):
@@ -458,10 +467,10 @@ class ProxyHandler(HTTPRequestHandler):
             remotesoc.sendall(b''.join(s))
             remoterfile = remotesoc.makefile('rb', 0)
             data = remoterfile.readline()
-            if '200' not in data:
+            if b'200' not in data:
                 logging.warning('{} {} failed! 200 not in response'.format(self.command, self.path))
                 return self._do_CONNECT(True)
-            while data.strip():
+            while not data in (b'\r\n', b'\n', b''):
                 data = remoterfile.readline()
         if self.rbuffer:
             for s in self.rbuffer:
@@ -731,8 +740,6 @@ class ExpiredError(Exception):
 class autoproxy_rule(object):
     def __init__(self, arg, expire=None):
         super(autoproxy_rule, self).__init__()
-        if not isinstance(arg, str):
-            arg = str(arg)
         self.rule = arg.strip()
         logging.debug('parsing autoproxy rule: %r' % self.rule)
         if len(self.rule) < 3 or self.rule.startswith(('!', '[')) or '#' in self.rule:
@@ -781,7 +788,7 @@ class redirector(object):
             if 'xn--' in q:
                 q = q.decode('idna')
             logging.debug('Match redirect rule addressbar-search')
-            return 'https://www.google.com/search?q=%s&ie=utf-8&oe=utf-8&aq=t&rls=org.mozilla:zh-CN:official' % urllib2.quote(q.encode('utf-8'))
+            return 'https://www.google.com/search?q=%s&ie=utf-8&oe=utf-8&aq=t&rls=org.mozilla:zh-CN:official' % urlquote(q.encode('utf-8'))
         for rule, result in self.lst:
             if rule.match(uri):
                 logging.debug('Match redirect rule {}, {}'.format(rule.rule, result))
@@ -963,7 +970,7 @@ class parent_proxy(object):
         if f is False:
             return ['direct']
 
-        parentlist = conf.parentdict.keys()
+        parentlist = list(conf.parentdict.keys())
         random.shuffle(parentlist)
         parentlist = sorted(parentlist, key=lambda item: conf.parentdict[item][1])
 
