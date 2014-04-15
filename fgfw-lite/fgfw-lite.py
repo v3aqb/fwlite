@@ -634,6 +634,7 @@ class ProxyHandler(HTTPRequestHandler):
                 break
 
     def do_FTP(self):
+        self.request_body_read = True  # no request body should to be there in FTP method
         logging.info('{} {}'.format(self.command, self.path))
         # fish out user and password information
         scm, netloc, path, params, query, fragment = urlparse.urlparse(
