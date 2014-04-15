@@ -25,6 +25,8 @@ __version__ = '0.4.0.0'
 import sys
 import os
 import glob
+reload(sys).setdefaultencoding('UTF-8')
+sys.dont_write_bytecode = True
 WORKINGDIR = '/'.join(os.path.dirname(os.path.abspath(__file__).replace('\\', '/')).split('/')[:-1])
 if ' ' in WORKINGDIR:
     sys.stderr.write('no spacebar allowed in path\n')
