@@ -210,6 +210,7 @@ class ProxyHandler(HTTPRequestHandler):
     def handle_one_request(self):
         self._proxylist = None
         self.retryable = True
+        self.request_body_read = False
         self.rbuffer = deque()  # client read buffer: store request body, ssl handshake package for retry. no pop method.
         self.wbuffer = deque()  # client write buffer: read only once, not used in connect method
         self.wbuffer_size = 0
@@ -221,6 +222,11 @@ class ProxyHandler(HTTPRequestHandler):
                 self.close_connection = 1
             else:
                 raise
+
+    def send_response(self, code, message=None):
+        if not self.request_body_read:
+            raise ValueError('request body not read, should close connection')
+        HTTPRequestHandler.send_response(self, code, message=None)
 
     def handle(self):
         ip, port = self.client_address
@@ -251,6 +257,8 @@ class ProxyHandler(HTTPRequestHandler):
         if self.path.lower().startswith('ftp://'):
             return self.do_FTP()
         # transparent proxy
+        if int(self.headers.get('Content-Length', 0)) == 0:
+            self.request_body_read = True
         if self.path.startswith('/') and 'Host' in self.headers:
             self.path = 'http://%s%s' % (self.headers['Host'], self.path)
         if self.path.startswith('/'):
@@ -344,6 +352,7 @@ class ProxyHandler(HTTPRequestHandler):
                 except NetWorkIOError as e:
                     return self.on_GET_Error(e)
             logging.debug('request body sent')
+            self.request_body_read = True
         # read response line
         remoterfile = remotesoc if isinstance(remotesoc, sssocket) else remotesoc.makefile('rb', 0)
         try:
@@ -443,6 +452,7 @@ class ProxyHandler(HTTPRequestHandler):
 
     def do_CONNECT(self):
         self.close_connection = 1
+        self.request_body_read = True  # no request body should to be there in CONNECT method
         if self.path.rsplit(':', 1)[0].lower() in self.LOCALHOST:
             return self.send_error(403)
         if 'Host' not in self.headers:
@@ -935,7 +945,7 @@ class parent_proxy(object):
     @lru_cache(256, timeout=120)
     def no_goagent(self, uri, host):
         s = set(conf.parentdict.keys()) - set(['goagent', 'goagent-php', 'direct', 'local'])
-        a = conf.userconf.dget('goagent', 'GAEAppid', 'goagent') == 'goagent'
+        a = conf.userconf.dget('goagent', 'gaeappid', 'goagent') == 'goagent'
         if s or a:  # two reasons not to use goagent
             if re.match(r'^([^/]+):\d+$', uri):  # connect method
                 if host in conf.FAKEHTTPS:
@@ -1165,7 +1175,7 @@ class goagentHandler(FGFWProxyHandler):
         conf.HOST_POSTFIX = tuple([k for k, v in goagent.items('ipv4/hosts') if '\\' not in k and ':' not in k and k.startswith('.')])
         conf.CONN_POSTFIX = ('.box.com', '.copy.com')
         for s in goagent.dget('ipv4/http', 'forcehttps').split('|'):
-            PARENT_PROXY.add_rule('%s forcehttps' % s)
+            PARENT_PROXY.add_rule('|http://%s forcehttps' % s)
 
         if not os.path.isfile('./goagent/CA.crt'):
             self.createCA()
