@@ -700,6 +700,7 @@ class sssocket(object):
         _, sshost, ssport, ssmethod, sspassword = (p.scheme, p.hostname, p.port, p.username, p.password)
         self._sock = socket.create_connection((sshost, ssport), timeout)
         self.crypto = encrypt.Encryptor(sspassword, ssmethod)
+        self.__rbuffer = b''
 
     def connect(self, address):
         host, port = address
@@ -710,9 +711,11 @@ class sssocket(object):
         self.sendall(data)
 
     def recv(self, size):
-        if self.crypto.decipher is None:
-            size += self.crypto.get_cipher_len(self.crypto.method)[1]
-        return self.crypto.decrypt(self._sock.recv(size))
+        if len(self.__rbuffer) < size:
+            data = self.crypto.decrypt(self._sock.recv(max(size, 4096)))
+            self.__rbuffer = b''.join([self.__rbuffer, data])
+        result, self.__rbuffer = self.__rbuffer[:size], self.__rbuffer[size:]
+        return result
 
     def sendall(self, data):
         self._sock.sendall(self.crypto.encrypt(data))
@@ -1323,6 +1326,11 @@ class Config(object):
         self.reload()
         self.UPDATE_INTV = 6
         self.parentdict = {}
+        self.FAKEHTTPS = set()
+        self.WITHGAE = set()
+        self.HOST = tuple()
+        self.HOST_POSTFIX = tuple()
+        self.CONN_POSTFIX = tuple()
         listen = self.userconf.dget('fgfwproxy', 'listen', '8118')
         if listen.isdigit():
             self.listen = ('127.0.0.1', int(listen))

@@ -46,6 +46,7 @@ flist = ['./fgfw-lite/fgfw-lite.py',
          ]
 
 version = configparser.ConfigParser()
+version.optionxform = str
 version.read('version.ini')
 
 for f in flist:
