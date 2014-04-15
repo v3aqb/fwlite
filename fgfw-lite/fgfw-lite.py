@@ -313,7 +313,7 @@ class ProxyHandler(HTTPRequestHandler):
             return self.on_GET_Error(e)
         self.wbuffer = deque()
         self.wbuffer_size = 0
-
+        logging.debug('sending request header')
         s = []
         if self.pproxy.startswith('http'):
             s.append('%s %s %s\r\n' % (self.command, self.path, self.request_version))
@@ -329,7 +329,7 @@ class ProxyHandler(HTTPRequestHandler):
             remotesoc.sendall(''.join(s).encode('latin1'))
         except NetWorkIOError as e:
             return self.on_GET_Error(e)
-        logging.debug('request header sent')
+        logging.debug('sending request body')
         # send request body
         content_length = int(self.headers.get('Content-Length', 0))
         if content_length:
@@ -353,9 +353,9 @@ class ProxyHandler(HTTPRequestHandler):
                     remotesoc.sendall(data)
                 except NetWorkIOError as e:
                     return self.on_GET_Error(e)
-            logging.debug('request body sent')
             self.request_body_read = True
         # read response line
+        logging.debug('reading response_line')
         remoterfile = remotesoc if isinstance(remotesoc, sssocket) else remotesoc.makefile('rb', 0)
         try:
             s = response_line = remoterfile.readline()
@@ -363,10 +363,10 @@ class ProxyHandler(HTTPRequestHandler):
                 raise ValueError('empty response line')
         except (socket.error, ssl.SSLError, OSError, ValueError) as e:
             return self.on_GET_Error(e)
-        logging.debug('response line read')
         protocol_version, _, response_status = response_line.rstrip(b'\r\n').partition(b' ')
         response_status, _, response_reason = response_status.partition(b' ')
         response_status = int(response_status)
+        logging.debug('reading response header')
         header_data = []
         try:
             while True:
@@ -377,14 +377,13 @@ class ProxyHandler(HTTPRequestHandler):
         except NetWorkIOError as e:
             return self.on_GET_Error(e)
         header_data = b''.join(header_data)
-        logging.debug('response header read')
         response_header = email.message_from_string(header_data.decode('latin1'))
         conntype = response_header.get('Connection', "")
         if protocol_version >= b"HTTP/1.1":
             self.close_connection = conntype.lower() == 'close'
         else:
             self.close_connection = conntype.lower() != 'keep_alive'
-
+        logging.debug('reading response body')
         if "Content-Length" in response_header:
             if "," in response_header["Content-Length"]:
                 # Proxies sometimes cause Content-Length headers to get
@@ -439,6 +438,7 @@ class ProxyHandler(HTTPRequestHandler):
                 except Exception:
                     break
         self.wfile_write()
+        logging.debug('request finish')
         if self.retrycount and response_status < 400:
             PARENT_PROXY.add_temp_rule('|http://%s' % self.headers['Host'].split(':')[0])
         if not self.close_connection and not self.is_connection_dropped(remotesoc):
