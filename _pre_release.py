@@ -31,6 +31,12 @@ if raw_input('update? y/n: ').lower().startswith('y'):
             if r.getcode() == 200 and data:
                 with open(path, 'wb') as localfile:
                     localfile.write(data)
+    with open('./goagent/proxy.py', 'rb') as f:
+        t = f.read()
+    with open('./goagent/proxy.py', 'wb') as f:
+        t = t.replace(b'sys.stdout.write', b'sys.stderr.write')
+        t = t.replace(b"ctypes.windll.kernel32.SetConsoleTitleW(u'GoAgent v%s' % __version__)", b'pass')
+        f.write(t)
 
 BLOCKSIZE = 8192
 v = {}
