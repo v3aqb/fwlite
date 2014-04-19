@@ -5,7 +5,7 @@
     "./fgfw-lite/encrypt.py": "9d050b942726652f8285e4afbd0eab5ba1c3ed1b8de04519bb2c93f7fe3165d5",
     "./fgfw-lite/fgfw-lite.py": "67c082fdd7fda049284b4b3fd9e9e6c7b6a6645664c5426e3ef70893a94b5610",
     "./goagent/cacert.pem": "eb1288b800cb2fdf7c5d8d14fb79a5c00a8b05722c7f2a08763919ef6df11dc3",
-    "./goagent/proxy.py": "9034264400e6736d341133f4dfab00450b41cdd3ae9eb8f1dc3a1801d204b399",
-    "./goagent/proxy.sample.ini": "7e995ef03aee1dffa4fdf2c4a8f8ea92ccc8315f4e75e166fe67131f4dbf1031",
+    "./goagent/proxy.py": "0349910fb88170d5dc6afc490bbf947b47919894aa6b5c602f015ecad1cdb360",
+    "./goagent/proxy.sample.ini": "583106f2561c798592503bd97c17ba0273e7da50c3dbe374193b8c37f7c9c6c0",
     "./userconf.sample.ini": "f01344ca0ce4fb8c7e33f5d3c547fed7334336a0ff7a9dbc25e9a4247957374a"
 }

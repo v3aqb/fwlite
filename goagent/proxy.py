@@ -64,6 +64,7 @@ import errno
 import time
 import struct
 import collections
+import binascii
 import zlib
 import itertools
 import re
@@ -330,11 +331,13 @@ class CertUtil(object):
     @staticmethod
     def import_ca(certfile):
         commonname = os.path.splitext(os.path.basename(certfile))[0]
+        sha1digest = 'AB:70:2C:DF:18:EB:E8:B4:38:C5:28:69:CD:4A:5D:EF:48:B4:0E:33'
         if OpenSSL:
             try:
                 with open(certfile, 'rb') as fp:
                     x509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, fp.read())
                     commonname = next(v.decode() for k, v in x509.get_subject().get_components() if k == b'O')
+                    sha1digest = x509.digest('sha1')
             except Exception as e:
                 logging.error('load_certificate(certfile=%r) failed:%s', certfile, e)
         if sys.platform.startswith('win'):
@@ -349,7 +352,14 @@ class CertUtil(object):
                 store_handle = crypt32.CertOpenStore(10, 0, 0, 0x4000 | 0x20000, b'ROOT'.decode())
                 if not store_handle:
                     return -1
-                if crypt32.CertFindCertificateInStore(store_handle, 0x1, 0, 0x80007, CertUtil.ca_vendor.decode(), None):
+                X509_ASN_ENCODING = 0x00000001
+                CERT_FIND_HASH = 0x10000
+                class CRYPT_HASH_BLOB(ctypes.Structure):
+                    _fields_ = [('cbData', ctypes.c_ulong), ('pbData', ctypes.c_char_p)]
+                crypt_hash = CRYPT_HASH_BLOB(20, binascii.a2b_hex(sha1digest.replace(':', '')))
+                crypt_handle = crypt32.CertFindCertificateInStore(store_handle, X509_ASN_ENCODING, 0, CERT_FIND_HASH, ctypes.byref(crypt_hash), None)
+                if crypt_handle:
+                    crypt32.CertFreeCertificateContext(crypt_handle)
                     return 0
                 ret = crypt32.CertAddEncodedCertificateToStore(store_handle, 0x1, certdata, len(certdata), 4, None)
                 crypt32.CertCloseStore(store_handle, 0)
@@ -662,7 +672,7 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     """SimpleProxyHandler for GoAgent 3.x"""
 
     protocol_version = 'HTTP/1.1'
-    ssl_version = ssl.PROTOCOL_SSLv23
+    ssl_version = ssl.PROTOCOL_TLSv1
     scheme = 'http'
     skip_headers = frozenset(['Vary', 'Via', 'X-Forwarded-For', 'Proxy-Authorization', 'Proxy-Connection', 'Upgrade', 'X-Chrome-Variations', 'Connection', 'Cache-Control'])
     bufsize = 256 * 1024
@@ -670,7 +680,7 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     connect_timeout = 8
     first_run_lock = threading.Lock()
     handler_filters = [SimpleProxyHandlerFilter()]
-    stripssl_handler_filter = None
+    sticky_filter = None
 
     def finish(self):
         """make python2 BaseHTTPRequestHandler happy"""
@@ -817,6 +827,9 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def MOCK(self, status, headers, content):
         """mock response"""
         logging.info('%s "MOCK %s %s %s" %d %d', self.address_string(), self.command, self.path, self.protocol_version, status, len(content))
+        headers = {k.title(): v for k, v in headers.items()}
+        if 'Transfer-Encoding' in headers:
+            del headers['Transfer-Encoding']
         if 'Content-Length' not in headers:
             headers['Content-Length'] = len(content)
         if 'Connection' not in headers:
@@ -827,7 +840,7 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(content)
 
-    def STRIPSSL(self, stripssl_handler_filter=None):
+    def STRIPSSL(self, sticky_filter=None):
         """strip ssl"""
         certfile = CertUtil.get_cert(self.host)
         logging.info('%s "SSL %s %s:%d %s" - -', self.address_string(), self.command, self.host, self.port, self.protocol_version)
@@ -859,7 +872,7 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             if e.args[0] not in (errno.ECONNABORTED, errno.ECONNRESET, errno.EPIPE):
                 raise
         self.scheme = 'https'
-        self.stripssl_handler_filter = stripssl_handler_filter
+        self.sticky_filter = sticky_filter
         try:
             self.do_METHOD()
         except NetWorkIOError as e:
@@ -923,6 +936,9 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             for key, value in response.getheaders():
                 self.send_header(key, value)
             self.end_headers()
+            if self.command == 'HEAD' or response.status in (204, 304):
+                response.close()
+                return
             need_chunked = 'Transfer-Encoding' in response_headers
             while True:
                 data = response.read(8192)
@@ -965,7 +981,13 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 response = self.create_http_request_withserver(fetchserver, method, url, headers, body, timeout=self.connect_timeout, **kwargs)
                 # appid over qouta, switch to next appid
                 if response.app_status >= 500:
-                    if i < max_retry - 1:
+                    if i == max_retry - 1:
+                        headers = dict(response.getheaders())
+                        content = response.read()
+                        response.close()
+                        logging.warning('URLFETCH fetchserver=%r return %d, failed.', fetchserver, response.app_status)
+                        return self.MOCK(response.app_status, headers, content)
+                    else:
                         response.close()
                         fetchserver = random.choice(fetchservers)
                         logging.info('URLFETCH return %d, trying another fetchserver=%r', response.app_status, fetchserver)
@@ -980,6 +1002,9 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                         self.send_header(key, value)
                     self.end_headers()
                     headers_sent = True
+                if self.command == 'HEAD' or response.status in (204, 304):
+                    response.close()
+                    return
                 content_length = int(response.getheader('Content-Length', 0))
                 content_range = response.getheader('Content-Range', '')
                 accept_ranges = response.getheader('Accept-Ranges', 'none')
@@ -1021,8 +1046,8 @@ class SimpleProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def do_METHOD(self):
         self.parse_header()
         self.body = self.rfile.read(int(self.headers['Content-Length'])) if 'Content-Length' in self.headers else ''
-        if self.stripssl_handler_filter:
-            action = self.stripssl_handler_filter.filter(self)
+        if self.sticky_filter:
+            action = self.sticky_filter.filter(self)
             if action:
                 return action.pop(0)(*action)
         for handler_filter in self.handler_filters:
@@ -1309,7 +1334,7 @@ class AdvancedProxyHandler(SimpleProxyHandler):
                     return sock
                 elif i == 0:
                     # only output first error
-                    logging.warning('create_connection to %s return %r, try again.', addrs, sock)
+                    logging.warning('create_tcp_connection to %r with %s return %r, try again.', hostname, addrs, sock)
         if isinstance(sock, Exception):
             raise sock
 
@@ -1464,7 +1489,7 @@ class AdvancedProxyHandler(SimpleProxyHandler):
                     return sock
                 elif i == 0:
                     # only output first error
-                    logging.warning('create_ssl_connection to %s return %r, try again.', addrs, sock)
+                    logging.warning('create_ssl_connection to %r with %s return %r, try again.', hostname, addrs, sock)
         if isinstance(sock, Exception):
             raise sock
 
@@ -1929,18 +1954,21 @@ class HostsFilter(BaseProxyHandlerFilter):
         host, port = handler.host, handler.port
         hostport = handler.path if handler.command == 'CONNECT' else '%s:%d' % (host, port)
         hostname = ''
-        if handler.command != 'CONNECT' and any(x(handler.path) for x in common.URLRE_MAP):
-            hostname = next(common.URLRE_MAP[x] for x in common.URLRE_MAP if x(handler.path)) or host
-        if hostport in common.HOSTPORT_MAP:
-            hostname = common.HOSTPORT_MAP[hostport] or host
-        elif hostport.endswith(common.HOSTPORT_POSTFIX_ENDSWITH):
-            hostname = next(common.HOSTPORT_POSTFIX_MAP[x] for x in common.HOSTPORT_POSTFIX_MAP if hostport.endswith(x)) or host
-            common.HOSTPORT_MAP[hostport] = hostname
         if host in common.HOST_MAP:
             hostname = common.HOST_MAP[host] or host
         elif host.endswith(common.HOST_POSTFIX_ENDSWITH):
             hostname = next(common.HOST_POSTFIX_MAP[x] for x in common.HOST_POSTFIX_MAP if host.endswith(x)) or host
             common.HOST_MAP[host] = hostname
+        if hostport in common.HOSTPORT_MAP:
+            hostname = common.HOSTPORT_MAP[hostport] or host
+        elif hostport.endswith(common.HOSTPORT_POSTFIX_ENDSWITH):
+            hostname = next(common.HOSTPORT_POSTFIX_MAP[x] for x in common.HOSTPORT_POSTFIX_MAP if hostport.endswith(x)) or host
+            common.HOSTPORT_MAP[hostport] = hostname
+        if handler.command != 'CONNECT' and common.URLRE_MAP:
+            try:
+                hostname = next(common.URLRE_MAP[x] for x in common.URLRE_MAP if x(handler.path)) or host
+            except StopIteration:
+                pass
         if not hostname:
             return None
         elif hostname in common.IPLIST_MAP:
@@ -2009,7 +2037,7 @@ class GAEFetchFilter(BaseProxyHandlerFilter):
     """force https filter"""
     def filter(self, handler):
         if handler.command == 'CONNECT':
-            return [handler.STRIPSSL, None]
+            return [handler.STRIPSSL, self if not common.URLRE_MAP else None]
         else:
             kwargs = {}
             if common.GAE_PASSWORD:
@@ -2793,6 +2821,8 @@ def pre_start():
         logging.error('dnslib not found, please put dnslib-0.8.3.egg to %r!', os.path.dirname(os.path.abspath(__file__)))
         sys.exit(-1)
     if not common.DNS_ENABLE:
+        if not common.HTTP_DNS:
+            common.HTTP_DNS = common.DNS_SERVERS[:]
         for dnsservers_ref in (common.HTTP_DNS, common.DNS_SERVERS):
             any(dnsservers_ref.insert(0, x) for x in [y for y in get_dnsserver_list() if y not in dnsservers_ref])
         AdvancedProxyHandler.dns_servers = common.HTTP_DNS
