@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 # Copyright (c) 2012 clowwindy
+# Copyright (c) 2013 - 2014 v3aqb
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -20,16 +21,22 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import os
 import sys
 import hashlib
 import string
 import struct
 import logging
-
-
-def random_string(length):
+try:
+    from M2Crypto.EVP import Cipher
     import M2Crypto.Rand
-    return M2Crypto.Rand.rand_bytes(length)
+    random_string = M2Crypto.Rand.rand_bytes
+except ImportError:
+    random_string = os.urandom
+    try:
+        from streamcipher import StreamCipher as Cipher
+    except ImportError:
+        Cipher = None
 
 
 def get_table(key):
@@ -41,22 +48,6 @@ def get_table(key):
     for i in xrange(1, 1024):
         table.sort(lambda x, y: int(a % (ord(x) + i) - a % (ord(y) + i)))
     return table
-
-
-def init_table(key, method=None):
-    if method == 'table':
-        method = None
-    if method:
-        try:
-            __import__('M2Crypto')
-        except ImportError:
-            logging.error('M2Crypto is required to use encryption other than default method')
-            sys.exit(1)
-        try:
-            Encryptor(key, method)  # make an Encryptor to test if the settings if OK
-        except Exception as e:
-            logging.error(e)
-            sys.exit(1)
 
 
 def EVP_BytesToKey(password, key_len, iv_len):
@@ -123,7 +114,6 @@ class Encryptor(object):
         return len(self.cipher_iv)
 
     def get_cipher(self, password, method, op, iv=None):
-        import M2Crypto.EVP
         password = password.encode('utf-8')
         method = method.lower()
         m = self.get_cipher_len(method)
@@ -133,7 +123,7 @@ class Encryptor(object):
                 iv = iv_[:m[1]]
             if op == 1:
                 self.cipher_iv = iv[:m[1]]  # this iv is for cipher, not decipher
-            return M2Crypto.EVP.Cipher(method.replace('-', '_'), key, iv, op, key_as_bytes=0, d='md5', salt=None, i=1, padding=1)
+            return Cipher(method.replace('-', '_'), key, iv, op, key_as_bytes=0, d='md5', salt=None, i=1, padding=1)
 
         logging.error('method %s not supported' % method)
         sys.exit(1)

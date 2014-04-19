@@ -3,7 +3,7 @@
 #
 # FGFW_Lite.py A Proxy Server help go around the Great Firewall
 #
-# Copyright (C) 2012-2013 Jiang Chao <sgzz.cj@gmail.com>
+# Copyright (C) 2012-2014 Jiang Chao <sgzz.cj@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the
