@@ -447,7 +447,7 @@ class ProxyHandler(HTTPRequestHandler):
             remotesoc.close()
 
     def on_GET_Error(self, e):
-        logging.warning('{} {} failed! {}'.format(self.command, self.path, repr(e)))
+        logging.warning('{} {} via {} failed! {}'.format(self.command, self.path, self.ppname, repr(e)))
         return self._do_GET(True)
 
     do_OPTIONS = do_POST = do_DELETE = do_TRACE = do_HEAD = do_PUT = do_GET
