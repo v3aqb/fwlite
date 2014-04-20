@@ -11,12 +11,13 @@ FGFW-Lite是一个辅助突破网络审查的HTTP代理服务器。它能自动�
   - 连接超时
   - 读操作超时
   - 连接被重置
+- 自动避免使用HTTPS假证书
 - 多种自定义规则
 - 默认设置即可无障碍访问部分Google服务(GoAgent FORWARD)
 - 支持的二级代理
-  - HTTP
-  - HTTP over SSL (SSL Proxy, SSLEdge)
-  - Socks5
+  - HTTP代理
+  - HTTPS代理
+  - Socks5代理
   - GoAgent
   - Shadowsocks
   - Snova
@@ -25,12 +26,6 @@ FGFW-Lite是一个辅助突破网络审查的HTTP代理服务器。它能自动�
 
 FGFW-Lite是便携软件，直接[下载](https://github.com/v3aqb/fgfw-lite/archive/0.4.zip)，解压即用。注意，**路径只支持英文，不能有空格**。
 
-配置文件userconf.ini，参考userconf.sample.ini，添加二级代理。
-
-windows系统：运行FGFW_Lite.exe
-
-Linux系统：运行fgfwlite-gtk.pyw
-
 requirements under openSUSE:
 
     zypper install python-repoze.lru python-gevent # for better performance
@@ -38,6 +33,14 @@ requirements under openSUSE:
     zypper install python-gtk python-vte python-notify  # gui
     zypper install python-M2Crypto  # advanced encryption for shadowsocks
     zypper install python-pyOpenSSL  # goagent fake https
+
+##使用
+
+配置文件userconf.ini，参考userconf.sample.ini，添加二级代理。
+
+windows系统：运行FGFW_Lite.exe
+
+Linux系统：运行fgfwlite-gtk.pyw
 
 ##自定义规则(./fgfw-lite/local.txt)
 
