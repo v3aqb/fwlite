@@ -455,6 +455,8 @@ class ProxyHandler(HTTPRequestHandler):
     def do_CONNECT(self):
         self.close_connection = 1
         self.request_body_read = True  # no request body should to be there in CONNECT method
+        if isinstance(self.path, bytes):
+            self.path = self.path.decode('latin1')
         if self.path.rsplit(':', 1)[0].lower() in self.LOCALHOST:
             return self.send_error(403)
         if 'Host' not in self.headers:
