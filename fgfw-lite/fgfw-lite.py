@@ -313,6 +313,7 @@ class ProxyHandler(HTTPRequestHandler):
             return self.on_GET_Error(e)
         self.wbuffer = deque()
         self.wbuffer_size = 0
+        # send request header
         logging.debug('sending request header')
         s = []
         if self.pproxy.startswith('http'):
@@ -366,6 +367,7 @@ class ProxyHandler(HTTPRequestHandler):
         protocol_version, _, response_status = response_line.rstrip(b'\r\n').partition(b' ')
         response_status, _, response_reason = response_status.partition(b' ')
         response_status = int(response_status)
+        # read response headers
         logging.debug('reading response header')
         header_data = []
         try:
@@ -399,6 +401,7 @@ class ProxyHandler(HTTPRequestHandler):
             content_length = None
         self.wfile_write(s)
         self.wfile_write(header_data)
+        # read response body
         if self.command == 'HEAD' or 100 <= response_status < 200 or response_status in (204, 304):
             pass
         elif response_header.get("Transfer-Encoding") and response_header.get("Transfer-Encoding") != "identity":
