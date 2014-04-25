@@ -269,8 +269,8 @@ class ProxyHandler(HTTPRequestHandler):
         new_url = REDIRECTOR.get(self.path)
         if new_url:
             logging.info('redirecting to %s' % new_url)
-            if new_url.startswith('403'):
-                return self.send_error(403)
+            if new_url.isdigit() and 400 <= int(new_url) < 600:
+                return self.send_error(int(new_url))
             elif new_url in conf.parentdict.keys():
                 self._proxylist = [new_url]
             else:
