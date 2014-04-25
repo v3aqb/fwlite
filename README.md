@@ -14,6 +14,7 @@ FGFW-Lite是一个辅助突破网络审查的HTTP代理服务器。它能自动�
 - 自动避免使用HTTPS假证书
 - 多种自定义规则
 - 默认设置即可无障碍访问部分Google服务(GoAgent FORWARD)
+- 支持FTP(仅限直接连接)
 - 支持的二级代理
   - HTTP代理
   - HTTPS代理
