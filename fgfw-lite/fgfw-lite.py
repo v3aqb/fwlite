@@ -476,7 +476,7 @@ class ProxyHandler(HTTPRequestHandler):
         try:
             remotesoc = self._connect_via_proxy(self.path)
         except NetWorkIOError as e:
-            logging.warning('{} {} failed! {}'.format(self.command, self.path, e))
+            logging.warning('%s %s failed! %r' % (self.command, self.path, e))
             return self._do_CONNECT()
 
         if self.pproxy.startswith('http'):
@@ -1045,7 +1045,7 @@ def update(auto=False):
         try:
             r = urllib2.urlopen(req)
         except Exception as e:
-            logging.info('{} NOT updated. Reason: {}'.format(path, e))
+            logging.info('%s NOT updated. Reason: %r' % (path, e))
         else:
             data = r.read()
             if r.getcode() == 200 and data:
