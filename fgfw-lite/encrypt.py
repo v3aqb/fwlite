@@ -28,6 +28,13 @@ import string
 import struct
 import logging
 try:
+    from repoze.lru import lru_cache
+except ImportError:
+    def lru_cache(size=0, timeout=0):
+        def decorator(func):
+            return func
+        return decorator
+try:
     from M2Crypto.EVP import Cipher
     import M2Crypto.Rand
     random_string = M2Crypto.Rand.rand_bytes
@@ -50,10 +57,17 @@ def get_table(key):
     return table
 
 
+@lru_cache(128)
+def init_table(key):
+    encrypt_table = ''.join(get_table(key))
+    decrypt_table = string.maketrans(encrypt_table, string.maketrans('', ''))
+    return (encrypt_table, decrypt_table)
+
+
+@lru_cache(128)
 def EVP_BytesToKey(password, key_len, iv_len):
     # equivalent to OpenSSL's EVP_BytesToKey() with count 1
     # so that we make the same key and iv as nodejs version
-    # TODO: cache the results
     m = []
     i = 0
     while len(''.join(m)) < (key_len + iv_len):
@@ -102,8 +116,7 @@ class Encryptor(object):
         else:
             self.cipher = None
             self.decipher = 0
-            self.encrypt_table = ''.join(get_table(key))
-            self.decrypt_table = string.maketrans(self.encrypt_table, string.maketrans('', ''))
+            self.encrypt_table, self.decrypt_table = init_table(key)
 
     def get_cipher_len(self, method):
         method = method.lower()
