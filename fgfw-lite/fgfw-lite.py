@@ -712,6 +712,11 @@ class ProxyHandler(HTTPRequestHandler):
             self.end_trunk()
 
 
+class ForceProxyHandler(ProxyHandler):
+    def getparent(self, level=3):
+        return self._getparent(level)
+
+
 class sssocket(object):
     def __init__(self, ssServer, timeout=10):
         p = urlparse.urlparse(ssServer)
@@ -1419,7 +1424,11 @@ def main():
     updatedaemon.daemon = True
     updatedaemon.start()
     server = ThreadingHTTPServer(conf.listen, ProxyHandler)
-    server.serve_forever()
+    Thread(target=server.serve_forever).start()
+    server2 = ThreadingHTTPServer((conf.listen[0], conf.listen[1] + 1), ForceProxyHandler)
+    t = Thread(target=server2.serve_forever)
+    t.start()
+    t.join()  # required by gevent
 
 if __name__ == "__main__":
     try:
