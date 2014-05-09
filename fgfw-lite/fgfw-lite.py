@@ -1426,9 +1426,7 @@ def main():
     server = ThreadingHTTPServer(conf.listen, ProxyHandler)
     Thread(target=server.serve_forever).start()
     server2 = ThreadingHTTPServer((conf.listen[0], conf.listen[1] + 1), ForceProxyHandler)
-    t = Thread(target=server2.serve_forever)
-    t.start()
-    t.join()  # required by gevent
+    server2.serve_forever()
 
 if __name__ == "__main__":
     try:
