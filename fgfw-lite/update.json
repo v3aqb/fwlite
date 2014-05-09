@@ -4,6 +4,7 @@
     "./fgfw-lite/cloud.txt": "5327b44c5af8c8a0da83bebd129bff4faee91817c4708a3777823c3b2680f220",
     "./fgfw-lite/encrypt.py": "e91651a43c8321876af8b40d5d3b8c3599ccbbc13f4d8d67dcdf550ebd84fc50",
     "./fgfw-lite/fgfw-lite.py": "5062281aac3ca9caf7ff5348334fd9e1a4d7d4acdad8db89797ce1ac62147a93",
+    "./goagent/GeoIP.dat": "642680a7c98da514dfbd1b4921cf590fca9a913141843fd773e7330145579d3c",
     "./goagent/cacert.pem": "eb1288b800cb2fdf7c5d8d14fb79a5c00a8b05722c7f2a08763919ef6df11dc3",
     "./goagent/proxy.py": "261028058d9927e9e5dc3046380c6545ebde81cdf9a8a24192232f0fdeed87cf",
     "./goagent/proxy.sample.ini": "8139a5422327c066b33a856db6343b873f3a64c80fce62b630640bbfd1698bac",

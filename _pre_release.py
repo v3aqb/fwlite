@@ -14,6 +14,7 @@ if raw_input('update? y/n: ').lower().startswith('y'):
     updatelst = [('https://github.com/goagent/goagent/raw/3.0/local/proxy.py', './goagent/proxy.py'),
                  ('https://github.com/goagent/goagent/raw/3.0/local/proxy.ini', './goagent/proxy.sample.ini'),
                  ('https://github.com/goagent/goagent/raw/3.0/local/cacert.pem', './goagent/cacert.pem'),
+                 ('https://github.com/goagent/goagent/raw/3.0/local/GeoIP.dat', './goagent/GeoIP.dat'),
                  ('https://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt', './fgfw-lite/gfwlist.txt'),
                  ]
     try:
@@ -49,6 +50,7 @@ flist = ['./fgfw-lite/fgfw-lite.py',
          './goagent/proxy.py',
          './goagent/proxy.sample.ini',
          './goagent/cacert.pem',
+         './goagent/GeoIP.dat',
          ]
 
 version = configparser.ConfigParser()
