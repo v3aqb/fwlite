@@ -1170,6 +1170,7 @@ class goagentHandler(FGFWProxyHandler):
 
         goagent.set('pac', 'enable', '0')
 
+        goagent.set('proxy', 'autodetect', '0')
         if conf.userconf.dget('goagent', 'proxy'):
             goagent.set('proxy', 'enable', '1')
             host, port = conf.userconf.dget('goagent', 'proxy').rsplit(':')
