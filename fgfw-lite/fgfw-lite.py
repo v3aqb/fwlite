@@ -247,6 +247,8 @@ class ProxyHandler(HTTPRequestHandler):
             return 1
         self.ppname = self._proxylist.pop(0)
         self.pproxy = conf.parentdict.get(self.ppname)[0]
+        if self.pproxy and not '//' in self.pproxy:
+            self.pproxy = 'http://%s' % self.pproxy
         self.pproxyparse = urlparse.urlparse(self.pproxy)
         logging.info('{} {} via {}'.format(self.command, self.path, self.ppname))
 
