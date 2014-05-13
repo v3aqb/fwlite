@@ -3,7 +3,7 @@
     "./README.md": "a6df696697fe43b1f4756939d71b8ab61db851645be1ff497670851d3680b5b1",
     "./fgfw-lite/cloud.txt": "5327b44c5af8c8a0da83bebd129bff4faee91817c4708a3777823c3b2680f220",
     "./fgfw-lite/encrypt.py": "e91651a43c8321876af8b40d5d3b8c3599ccbbc13f4d8d67dcdf550ebd84fc50",
-    "./fgfw-lite/fgfw-lite.py": "62789da7534b38da15e671d7efbb16ca52dec8e0e010a75a6fb3064d331bbc93",
+    "./fgfw-lite/fgfw-lite.py": "a2dd778d49f35104e4176db4d45aaf6a012818fe92102e3d2444e035b80cd34d",
     "./goagent/GeoIP.dat": "642680a7c98da514dfbd1b4921cf590fca9a913141843fd773e7330145579d3c",
     "./goagent/cacert.pem": "eb1288b800cb2fdf7c5d8d14fb79a5c00a8b05722c7f2a08763919ef6df11dc3",
     "./goagent/proxy.py": "261028058d9927e9e5dc3046380c6545ebde81cdf9a8a24192232f0fdeed87cf",
