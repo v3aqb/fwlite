@@ -1349,7 +1349,7 @@ class Config(object):
         self.userconf = SConfigParser()
         self.reload()
         self.UPDATE_INTV = 6
-        self.parentdict = {}
+        self.parentdict = {'direct': ('', 0), }
         self.FAKEHTTPS = set()
         self.WITHGAE = set()
         self.HOST = tuple()
@@ -1422,7 +1422,6 @@ def main():
     snovaHandler()
     for k, v in conf.userconf.items('parents'):
         conf.addparentproxy(k, v)
-    conf.addparentproxy('direct', 'direct 0')
     updatedaemon = Thread(target=updater)
     updatedaemon.daemon = True
     updatedaemon.start()
