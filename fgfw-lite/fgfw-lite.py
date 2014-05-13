@@ -580,18 +580,18 @@ class ProxyHandler(HTTPRequestHandler):
         if not self.pproxy:
             return socket.create_connection((host, port), timeout or 5)
         elif self.pproxy.startswith('http://'):
-            return socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), timeout or 10)
+            return socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port or 80), timeout or 10)
         elif self.pproxy.startswith('https://'):
-            s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), timeout or 10)
+            s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port or 443), timeout or 10)
             s = ssl.wrap_socket(s)
             s.do_handshake()
             return s
         elif self.pproxy.startswith('ss://'):
-            s = sssocket(self.pproxy, timeout or 10)
+            s = sssocket(self.pproxy, timeout)
             s.connect((host, port))
             return s
         elif self.pproxy.startswith('socks5://'):
-            s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port), timeout or 10)
+            s = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port or 1080), timeout or 10)
             s.sendall(b"\x05\x02\x00\x02" if self.pproxyparse.username else b"\x05\x01\x00")
             data = s.recv(2)
             if data == b'\x05\x02':  # basic auth
