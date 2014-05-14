@@ -318,6 +318,9 @@ class ProxyHandler(HTTPRequestHandler):
         s = []
         if self.pproxy.startswith('http'):
             s.append('%s %s %s\r\n' % (self.command, self.path, self.request_version))
+            if self.pproxyparse.username and 'Proxy-Authorization' not in self.headers:
+                a = '%s:%s' % (self.pproxyparse.username, self.pproxyparse.password)
+                self.headers['Proxy-Authorization'] = 'Basic %s' % base64.b64encode(a.encode())
         else:
             s.append('%s /%s %s\r\n' % (self.command, '/'.join(self.path.split('/')[3:]), self.request_version))
         del self.headers['Proxy-Connection']
@@ -481,6 +484,9 @@ class ProxyHandler(HTTPRequestHandler):
 
         if self.pproxy.startswith('http'):
             s = ['%s %s %s\r\n' % (self.command, self.path, self.request_version), ]
+            if self.pproxyparse.username and 'Proxy-Authorization' not in self.headers:
+                a = '%s:%s' % (self.pproxyparse.username, self.pproxyparse.password)
+                self.headers['Proxy-Authorization'] = 'Basic %s' % base64.b64encode(a.encode())
             s.append('\r\n'.join(['%s: %s' % (key, value) for key, value in self.headers.items()]))
             s.append('\r\n\r\n')
             remotesoc.sendall(''.join(s).encode())
@@ -734,7 +740,12 @@ class sssocket(object):
             self._sock = socket.create_connection((sshost, ssport), self.timeout)
         elif self.parentproxy.startswith('http://'):
             self._sock = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port or 80), self.timeout)
-            self._sock.sendall('CONNECT %s:%s HTTP/1.1\r\nHost: %s\r\n\r\n' % (sshost, ssport, sshost))
+            s = 'CONNECT %s:%s HTTP/1.1\r\nHost: %s\r\n' % (sshost, ssport, sshost)
+            if self.pproxyparse.username:
+                a = '%s:%s' % (self.pproxyparse.username, self.pproxyparse.password)
+                s += 'Proxy-Authorization: %s\r\n' % base64.b64encode(a.encode())
+            s += '\r\n'
+            self._sock.sendall(s.encode())
             remoterfile = self._sock.makefile('rb', 0)
             data = remoterfile.readline()
             if b'200' not in data:
