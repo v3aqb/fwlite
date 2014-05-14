@@ -1202,11 +1202,13 @@ class goagentHandler(FGFWProxyHandler):
         goagent.set('pac', 'enable', '0')
 
         goagent.set('proxy', 'autodetect', '0')
-        if conf.userconf.dget('goagent', 'proxy'):
+        if conf.parentdict.get('direct')[0].startswith('http://'):
+            p = urlparse.urlparse(conf.parentdict.get('direct')[0])
             goagent.set('proxy', 'enable', '1')
-            host, port = conf.userconf.dget('goagent', 'proxy').rsplit(':')
-            goagent.set('proxy', 'host', host)
-            goagent.set('proxy', 'port', port)
+            goagent.set('proxy', 'host', p.hostname)
+            goagent.set('proxy', 'port', p.port)
+            goagent.set('proxy', 'username', p.username or '')
+            goagent.set('proxy', 'password', p.password or '')
         if '-hide' in sys.argv[1:]:
             goagent.set('listen', 'visible', '0')
         else:
@@ -1450,10 +1452,10 @@ def main():
     if os.name == 'nt':
         import ctypes
         ctypes.windll.kernel32.SetConsoleTitleW(u'FGFW-Lite v%s' % __version__)
-    goagentHandler()
-    snovaHandler()
     for k, v in conf.userconf.items('parents'):
         conf.addparentproxy(k, v)
+    goagentHandler()
+    snovaHandler()
     updatedaemon = Thread(target=updater)
     updatedaemon.daemon = True
     updatedaemon.start()
