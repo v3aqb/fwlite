@@ -1397,6 +1397,9 @@ class Config(object):
 
         self.region = set(x.upper() for x in self.userconf.dget('fgfwproxy', 'region', 'cn').split('|') if x.strip())
 
+        if self.userconf.dget('fgfwproxy', 'parentproxy', ''):
+            self.addparentproxy('direct', '%s 0' % self.userconf.dget('fgfwproxy', 'parentproxy', ''))
+
         for host, ip in self.userconf.items('hosts'):
             if ip not in HOSTS.get(host, []):
                 HOSTS[host].append(ip)
