@@ -8,6 +8,7 @@ FGFW-Lite是一个辅助突破网络审查的HTTP代理服务器。它能自动�
 - 自动设置系统代理(仅限Windows)
 - 使用多种方法检测网站是否被墙，并转发到二级代理
   - autoproxy-gfwlist
+  - 自定义规则
   - 连接超时
   - 读操作超时
   - 连接被重置
@@ -21,7 +22,7 @@ FGFW-Lite是一个辅助突破网络审查的HTTP代理服务器。它能自动�
   - Socks5代理
   - GoAgent
   - Shadowsocks
-  - Snova
+  - Snova(不支持GAE模式)
 
 ##快速开始
 
