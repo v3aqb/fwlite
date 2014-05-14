@@ -718,14 +718,19 @@ class ForceProxyHandler(ProxyHandler):
 
 
 class sssocket(object):
-    def __init__(self, ssServer, timeout=10):
-        p = urlparse.urlparse(ssServer)
-        _, sshost, ssport, ssmethod, sspassword = (p.scheme, p.hostname, p.port, p.username, p.password)
-        self._sock = socket.create_connection((sshost, ssport), timeout)
-        self.crypto = encrypt.Encryptor(sspassword, ssmethod)
+    def __init__(self, ssServer, timeout=10, parentproxy=''):
+        self.ssServer = ssServer
+        self.timeout = timeout
+        self.parentproxy = parentproxy
+        self._sock = None
+        self.crypto = None
         self.__rbuffer = b''
 
     def connect(self, address):
+        p = urlparse.urlparse(self.ssServer)
+        _, sshost, ssport, ssmethod, sspassword = (p.scheme, p.hostname, p.port, p.username, p.password)
+        self._sock = socket.create_connection((sshost, ssport), self.timeout)
+        self.crypto = encrypt.Encryptor(sspassword, ssmethod)
         host, port = address
         data = b''.join([b'\x03',
                         chr(len(host)).encode(),
