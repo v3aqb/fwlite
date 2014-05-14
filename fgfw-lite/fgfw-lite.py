@@ -722,6 +722,7 @@ class sssocket(object):
         self.ssServer = ssServer
         self.timeout = timeout
         self.parentproxy = parentproxy
+        self.pproxyparse = urlparse.urlparse(parentproxy)
         self._sock = None
         self.crypto = None
         self.__rbuffer = b''
@@ -729,7 +730,21 @@ class sssocket(object):
     def connect(self, address):
         p = urlparse.urlparse(self.ssServer)
         _, sshost, ssport, ssmethod, sspassword = (p.scheme, p.hostname, p.port, p.username, p.password)
-        self._sock = socket.create_connection((sshost, ssport), self.timeout)
+        if not self.parentproxy:
+            self._sock = socket.create_connection((sshost, ssport), self.timeout)
+        elif self.parentproxy.startswith('http://'):
+            self._sock = socket.create_connection((self.pproxyparse.hostname, self.pproxyparse.port or 80), self.timeout)
+            self._sock.sendall('CONNECT %s:%s HTTP/1.1\r\nHost: %s\r\n\r\n' % (sshost, ssport, sshost))
+            remoterfile = self._sock.makefile('rb', 0)
+            data = remoterfile.readline()
+            if b'200' not in data:
+                logging.warning('connect to ssServer {} via proxy {} failed! 200 not in response'.format(self.ssServer, self.parentproxy))
+                return 1
+            while not data in (b'\r\n', b'\n', b''):
+                data = remoterfile.readline()
+        else:
+            logging.error('sssocket does not support parent proxy server: %s for now' % self.parentproxy)
+            return 1
         self.crypto = encrypt.Encryptor(sspassword, ssmethod)
         host, port = address
         data = b''.join([b'\x03',
