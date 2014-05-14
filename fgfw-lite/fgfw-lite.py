@@ -585,7 +585,7 @@ class ProxyHandler(HTTPRequestHandler):
             s.do_handshake()
             return s
         elif self.pproxy.startswith('ss://'):
-            s = sssocket(self.pproxy, timeout)
+            s = sssocket(self.pproxy, timeout, conf.parentdict.get('direct')[0])
             s.connect((host, port))
             return s
         elif self.pproxy.startswith('socks5://'):
