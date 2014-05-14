@@ -743,14 +743,13 @@ class sssocket(object):
             s = 'CONNECT %s:%s HTTP/1.1\r\nHost: %s\r\n' % (sshost, ssport, sshost)
             if self.pproxyparse.username:
                 a = '%s:%s' % (self.pproxyparse.username, self.pproxyparse.password)
-                s += 'Proxy-Authorization: %s\r\n' % base64.b64encode(a.encode())
+                s += 'Proxy-Authorization: Basic %s\r\n' % base64.b64encode(a.encode())
             s += '\r\n'
             self._sock.sendall(s.encode())
             remoterfile = self._sock.makefile('rb', 0)
             data = remoterfile.readline()
             if b'200' not in data:
-                logging.warning('connect to ssServer {} via proxy {} failed! 200 not in response'.format(self.ssServer, self.parentproxy))
-                return 1
+                logging.warning('connect to ssServer {} via proxy {} failed! {}'.format(self.ssServer, self.parentproxy, data))
             while not data in (b'\r\n', b'\n', b''):
                 data = remoterfile.readline()
         else:
