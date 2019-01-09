@@ -6,6 +6,8 @@ Portable package of fwlite-cli and fwlite-gui for windows.
 
 Executables of supported plugins included.
 
+v5.0-beta2
+
 ####Features
 
 - System proxy configuration (windows)
