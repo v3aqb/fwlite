@@ -1,0 +1,21 @@
+2019.1.19 v5-beta5
+adjust timeout, prevent unnecessary retry
+edit proxy with GUI, keeping proxy chain
+
+2019.1.16 v5-beta4
+update python
+update gfwlist
+fix crash on empty header request
+fix hxsocks2 big file download
+
+2019.1.15 v5-beta3
+edit proxy with GUI
+
+2019.1.9 v5-beta2
+fix GUI connection problem
+fix ZeroDivisionError
+fix socks5 support
+prevent frequent proxy change
+
+2018.12.30 v5-beta1
+init release
