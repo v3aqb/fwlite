@@ -6,9 +6,9 @@ Portable package of fwlite-cli and fwlite-gui for windows.
 
 Executables of supported plugins included.
 
-v5.0-beta6
+v5.0-beta7
 
-####Features
+#### Features
 
 - System proxy configuration (windows)
 - Detect blocked sites automatically
@@ -29,6 +29,7 @@ v5.0-beta6
   - simple-obfs
   - kcptun
   - GoQuiet
+- Port Forwarding
 - Prioritize proxy by response time
 - User-defined redirector
 - Simple PAC for WPAD
