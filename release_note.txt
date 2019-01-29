@@ -1,3 +1,7 @@
+2019.1.30 v5-beta8
+update to python 3.7.2 amd64
+trim pyqt5
+
 2019.1.29 v5-beta7
 ADD port forward
 use ipip china-ip-list instead of apnic-latest
