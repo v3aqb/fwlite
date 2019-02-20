@@ -1,3 +1,8 @@
+2019.2.21 v5-beta9
+update GUI
+update SIP003 support
+add v2ray-plugin
+
 2019.1.30 v5-beta8
 update to python 3.7.2 amd64
 trim pyqt5

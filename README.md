@@ -6,7 +6,7 @@ Portable package of fwlite-cli and fwlite-gui for windows.
 
 Executables of supported plugins included.
 
-v5.0-beta8
+v5.0-beta9
 
 #### Features
 
@@ -25,10 +25,7 @@ v5.0-beta8
   - Socks5 Proxy
   - [hxsocks2]
   - [Shadowsocks] by @clowwindy
-- Supported SIP003 plugins
-  - simple-obfs
-  - kcptun
-  - GoQuiet
+- Support SIP003 plugin
 - Port Forwarding
 - Prioritize proxy by response time
 - User-defined redirector
