@@ -1,3 +1,8 @@
+2019.2.27 v5-beta10
+support plugin over proxy(TCP only)
+update GUI: add resolver
+fix gfwlist toggle
+
 2019.2.21 v5-beta9
 update GUI
 update SIP003 support
