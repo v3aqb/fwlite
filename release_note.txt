@@ -1,3 +1,9 @@
+2019.5.13 v5-beta12
+update gfwlist.txt, adblock.txt and china_ip_list.txt
+download gfwlist.txt when missing
+update config sample
+update GUI
+
 2019.4.2 v5-beta11
 pack in gfwlist.txt, adblock.txt and china_ip_list.txt
 reduce sensitivity

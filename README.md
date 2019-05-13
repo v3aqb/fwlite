@@ -6,7 +6,7 @@ Portable package of fwlite-cli and fwlite-gui for windows.
 
 Executables of supported plugins included.
 
-v5.0-beta11
+v5.0-beta12
 
 #### Features
 
@@ -17,15 +17,21 @@ v5.0-beta11
   - connect timeout
   - read timeout
   - connection reset
-- Multiple work mode
-- Support Network which require a proxy ([issue #39](https://github.com/v3aqb/fwlite/issues/39))
-- Supprot proxy chain
+- Multiple work profile
+  - 0: direct
+  - 1: auto (gfwlist)
+  - 3: bypass ip in china
+  - 4: bypass ip in LAN
+  - 5: bypass localhost
+- Support Network require a proxy ([fwlite #39](https://github.com/v3aqb/fwlite/issues/39))
 - Supported proxy protocol
   - HTTP Proxy
   - Socks5 Proxy
   - [hxsocks2]
   - [Shadowsocks] by @clowwindy
-- Support SIP003 plugin
+- SIP003 plugin ([fwlite-cli #1](https://github.com/v3aqb/fwlite-cli/issues/1))
+- Supprot proxy chain
+- Hosts based AdBlock
 - Port Forwarding
 - Prioritize proxy by response time
 - User-defined redirector
@@ -37,7 +43,7 @@ Download the latest release from [release page].
 
 #### Requirements
 
-Windows 7 or higher. If you are running Windows XP, check the [old version].
+Windows 7 or higher.
 
 #### License
 
