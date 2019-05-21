@@ -1,3 +1,8 @@
+2019.5.22 v5-beta14
+fix plugin support
+fix resolver
+adjust timeout
+
 2019.5.14 v5-beta13
 fix #67: ipv6 problem
 
