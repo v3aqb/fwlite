@@ -1,3 +1,8 @@
+2019.6.8 v5-beta15
+fix http proxy basic auth
+add auto system proxy setting toggle
+update gfwlist
+
 2019.5.22 v5-beta14
 fix plugin support
 fix resolver
