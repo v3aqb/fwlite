@@ -1,3 +1,6 @@
+2019.7.20 v5-beta16
+disable HOSTS on chnroute mode
+
 2019.6.8 v5-beta15
 fix http proxy basic auth
 add auto system proxy setting toggle
