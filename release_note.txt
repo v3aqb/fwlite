@@ -1,3 +1,6 @@
+2019.7.24 v5-beta17
+fix hxsocks file upload problem
+
 2019.7.20 v5-beta16
 disable HOSTS on chnroute mode
 

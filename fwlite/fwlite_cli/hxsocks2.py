@@ -131,6 +131,7 @@ class Hxs2Connection:
         self.timeout = timeout
         self._manager = manager
         self._last_ping = 0
+        self._last_ping_time = 0
         self.connected = False
         self.connection_lost = False
 
@@ -306,10 +307,12 @@ class Hxs2Connection:
             else:
                 if type_ == 0 and self._last_count > 10 and random.random() < 0.01:
                     asyncio.ensure_future(self.send_ping())
+                    self._last_ping = 0
 
     async def send_ping(self):
-        if self._last_ping == 0:
+        if self._last_ping_time == 0:
             self._last_ping = time.time()
+            self._last_ping_time = time.time()
             await self.send_frame(6, 0, 0, b'\x00' * random.randint(64, 256))
 
     async def read_from_connection(self):
@@ -317,7 +320,7 @@ class Hxs2Connection:
         while not self.connection_lost:
             try:
                 # read frame_len
-                intv = 2 if self._last_ping else 6
+                intv = 3 if self._last_ping else 6
 
                 try:
                     frame_len = await self._rfile_read(2, timeout=intv)
@@ -432,9 +435,10 @@ class Hxs2Connection:
                 elif frame_type == 6:
                     # PING
                     if frame_flags == 1:
-                        resp_time = time.time() - self._last_ping
+                        resp_time = time.time() - self._last_ping_time
                         self.logger.info('server response time: %.3f %s', resp_time, self.proxy.name)
                         self._last_ping = 0
+                        self._last_ping_time = 0
                     else:
                         await self.send_frame(6, 1, 0, b'\x00' * random.randint(64, 256))
                 elif frame_type == 7:
