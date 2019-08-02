@@ -17,6 +17,7 @@
 # along with fwlite-cli.  If not, see <https://www.gnu.org/licenses/>.
 
 import asyncio
+import socket
 import logging
 from ipaddress import ip_address
 
@@ -51,11 +52,10 @@ class Resolver:
     def __init__(self, get_proxy, bad_ip):
         self.get_proxy = get_proxy
         self.bad_ip = bad_ip
-        self.dummy_ip = ip_address('0.0.0.0')
 
     def is_poisoned(self, domain):
         url = 'http://%s/' % domain
-        if self.get_proxy and self.get_proxy.ifgfwed(url, domain, 0, self.dummy_ip, 1):
+        if self.get_proxy and self.get_proxy.ifgfwed_resolver(url, domain):
             return True
         return False
 
@@ -65,7 +65,7 @@ class Resolver:
         logger.debug('entering %s.resolve(%s)', self.__class__.__name__, host)
         try:
             ip = ip_address(host)
-            return [(2 if ip.version == 4 else 10, host), ]
+            return [(socket.AF_INET if ip.version == 4 else socket.AF_INET6, host), ]
         except ValueError:
             pass
         if self.is_poisoned(host):
@@ -91,7 +91,7 @@ class Resolver:
 
         try:
             result = await self.resolve(host, 0, dirty=True)
-            result = [ip for ip in result if ip[0] == 4]
+            result = [ip for ip in result if ip[0] == socket.AF_INET]
             return ip_address(result[0][1])
         except IndexError:
             return ip_address(u'0.0.0.0')

@@ -101,11 +101,11 @@ class get_proxy:
     @lru_cache(1024)
     def ip_in_china(self, host, ip):
         def binary_search(arr, hkey):
-            start = 0
-            end = len(arr)
-            if end == 0:
+            if not arr:
                 return -1
-            while start <= end:
+            start = 0
+            end = len(arr) - 1
+            while start < end:
                 mid = start + (end - start) // 2
 
                 if arr[mid].network_address < hkey:
@@ -114,21 +114,35 @@ class get_proxy:
                     end = mid - 1
                 else:
                     return mid
-            return end
+            return start
 
         if ip.version == 6:
             # TODO: ipv6 support
             return None
 
         index = binary_search(self.china_ip_list, ip)
-
         if index == -1:
             return False
         ipn = self.china_ip_list[index]
         if ip in ipn:
             self.logger.info('%s in china', host)
             return True
+        if ip in self.china_ip_list[index - 1]:
+            self.logger.info('%s in china', host)
+            return True
         return False
+
+    def ifgfwed_resolver(self, uri, host):
+        result = self.local.match(uri, host)
+        if result is not None:
+            return result
+
+        if self.ignore.match(uri, host):
+            return None
+
+        if self.conf.gfwlist_enable and self.gfwlist.match(uri, host):
+            return True
+        return None
 
     def ifgfwed(self, uri, host, port, ip, level=1):
         if level == 0:
@@ -137,8 +151,8 @@ class get_proxy:
         if self.conf.rproxy:
             return None
 
-        # if int(ip) == 0:
-        #     return True
+        if int(ip) == 0:
+            return True
 
         if ip.is_loopback:
             return False
@@ -178,6 +192,7 @@ class get_proxy:
 
         if self.conf.gfwlist_enable and self.gfwlist.match(uri, host):
             return True
+        return None
 
     def get_proxy(self, uri, host, command, ip, level=1):
         '''

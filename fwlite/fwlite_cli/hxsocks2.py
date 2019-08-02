@@ -130,8 +130,8 @@ class Hxs2Connection:
         self.name = self.proxy.name
         self.timeout = timeout
         self._manager = manager
-        self._last_ping = 0
-        self._last_ping_time = 0
+        self._ping_test = False
+        self._ping_time = 0
         self.connected = False
         self.connection_lost = False
 
@@ -306,13 +306,12 @@ class Hxs2Connection:
                 self._manager.remove(self)
             else:
                 if type_ == 0 and self._last_count > 10 and random.random() < 0.01:
-                    asyncio.ensure_future(self.send_ping())
-                    self._last_ping = 0
+                    asyncio.ensure_future(self.send_ping(False))
 
-    async def send_ping(self):
-        if self._last_ping_time == 0:
-            self._last_ping = time.time()
-            self._last_ping_time = time.time()
+    async def send_ping(self, test=True):
+        if self._ping_time == 0:
+            self._ping_test = test
+            self._ping_time = time.time()
             await self.send_frame(6, 0, 0, b'\x00' * random.randint(64, 256))
 
     async def read_from_connection(self):
@@ -320,13 +319,13 @@ class Hxs2Connection:
         while not self.connection_lost:
             try:
                 # read frame_len
-                intv = 3 if self._last_ping else 6
+                intv = 3 if self._ping_test else 6
 
                 try:
                     frame_len = await self._rfile_read(2, timeout=intv)
                     frame_len, = struct.unpack('>H', frame_len)
                 except asyncio.TimeoutError:
-                    if self._last_ping:
+                    if self._ping_test:
                         self.logger.warning('server no response %s', self.proxy.name)
                         break
                     if time.time() - self._last_active_c > 120:
@@ -435,10 +434,10 @@ class Hxs2Connection:
                 elif frame_type == 6:
                     # PING
                     if frame_flags == 1:
-                        resp_time = time.time() - self._last_ping_time
+                        resp_time = time.time() - self._ping_time
                         self.logger.info('server response time: %.3f %s', resp_time, self.proxy.name)
-                        self._last_ping = 0
-                        self._last_ping_time = 0
+                        self._ping_test = False
+                        self._ping_time = 0
                     else:
                         await self.send_frame(6, 1, 0, b'\x00' * random.randint(64, 256))
                 elif frame_type == 7:
