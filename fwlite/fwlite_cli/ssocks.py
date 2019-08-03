@@ -20,6 +20,7 @@
 
 from builtins import chr
 
+import sys
 import struct
 import socket
 import time
@@ -55,6 +56,9 @@ async def ss_connect(proxy, timeout, addr, port):
     assert proxy.scheme == 'ss'
     # create socket_pair
     sock_a, sock_b = socket.socketpair()
+    if sys.platform == 'win32':
+        sock_a.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
+        sock_b.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
 
     # connect to ss server
     context = SSConn(proxy, sock_b)
@@ -65,6 +69,7 @@ async def ss_connect(proxy, timeout, addr, port):
 
     # return reader, writer
     reader, writer = await asyncio.open_connection(sock=sock_a)
+    writer.transport.set_write_buffer_limits(0, 0)
     return reader, writer
 
 
@@ -102,6 +107,7 @@ class SSConn:
         self._address = addr
         self._port = port
         self.client_reader, self.client_writer = await asyncio.open_connection(sock=self.sock_b)
+        self.client_writer.transport.set_write_buffer_limits(0, 0)
 
         from .connection import open_connection
         self.remote_reader, self.remote_writer, _ = await open_connection(

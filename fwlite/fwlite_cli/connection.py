@@ -20,6 +20,7 @@
 
 import base64
 import struct
+import socket
 import logging
 
 import asyncio
@@ -52,6 +53,8 @@ async def _open_connection(addr, port, timeout, iplist):
                 fut = asyncio.open_connection(addr, port)
                 remote_reader, remote_writer = await asyncio.wait_for(fut, timeout=timeout)
                 remote_writer.transport.set_write_buffer_limits(0, 0)
+                soc = remote_writer.get_extra_info('socket', default=None)
+                soc.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
                 return remote_reader, remote_writer
             except Exception as exc:
                 err = exc
@@ -60,6 +63,8 @@ async def _open_connection(addr, port, timeout, iplist):
     fut = asyncio.open_connection(addr, port)
     remote_reader, remote_writer = await asyncio.wait_for(fut, timeout=timeout)
     remote_writer.transport.set_write_buffer_limits(0, 0)
+    soc = remote_writer.get_extra_info('socket', default=None)
+    soc.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
     return remote_reader, remote_writer
 
 

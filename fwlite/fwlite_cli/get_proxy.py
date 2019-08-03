@@ -102,10 +102,10 @@ class get_proxy:
     def ip_in_china(self, host, ip):
         def binary_search(arr, hkey):
             if not arr:
-                return -1
+                return 0
             start = 0
             end = len(arr) - 1
-            while start < end:
+            while start <= end:
                 mid = start + (end - start) // 2
 
                 if arr[mid].network_address < hkey:
@@ -121,12 +121,8 @@ class get_proxy:
             return None
 
         index = binary_search(self.china_ip_list, ip)
-        if index == -1:
+        if index == 0:
             return False
-        ipn = self.china_ip_list[index]
-        if ip in ipn:
-            self.logger.info('%s in china', host)
-            return True
         if ip in self.china_ip_list[index - 1]:
             self.logger.info('%s in china', host)
             return True

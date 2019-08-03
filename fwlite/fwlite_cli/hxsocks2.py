@@ -21,6 +21,7 @@
 
 from builtins import chr
 
+import sys
 import os
 import struct
 import socket
@@ -116,6 +117,7 @@ async def hxs2_connect(proxy, timeout, addr, port):
     soc = await conn.connect(addr, port, timeout)
 
     reader, writer = await asyncio.open_connection(sock=soc)
+    writer.transport.set_write_buffer_limits(0, 0)
     return reader, writer, conn.name
 
 
@@ -215,8 +217,13 @@ class Hxs2Connection:
 
         if self._stream_status[stream_id] == OPEN:
             socketpair_a, socketpair_b = socket.socketpair()
+            if sys.platform == 'win32':
+                socketpair_a.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
+                socketpair_b.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
 
             reader, writer = await asyncio.open_connection(sock=socketpair_b)
+            writer.transport.set_write_buffer_limits(0, 0)
+
             self._client_reader[stream_id] = reader
             self._client_writer[stream_id] = writer
             self._last_active[stream_id] = time.time()
@@ -499,7 +506,6 @@ class Hxs2Connection:
             timeout=self.timeout,
             tunnel=True)
 
-        self.remote_writer.transport.set_write_buffer_limits(0, 0)
         # prep key exchange request
         self.__pskcipher = Encryptor(self._psk, self.method)
         ecc = ECC(self.__pskcipher._key_len)
