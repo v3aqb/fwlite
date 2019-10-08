@@ -1,3 +1,8 @@
+2019.10.8 v5-beta20
+hxsocks2 multi connection
+increase bufsize
+other bug fix
+
 2019.8.3 v5-beta19
 fix big file upload
 

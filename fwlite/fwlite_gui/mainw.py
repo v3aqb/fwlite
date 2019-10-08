@@ -739,7 +739,7 @@ class LocalRule(QWidget):
     def delrule(self):
         try:
             rule = base64.urlsafe_b64encode(self.rule.encode()).decode()
-            req = Request('http://127.0.0.1:%d//api/localrule/%s' % (self.window.port, rule), headers=self.window.api_auth, method='DELETE')
+            req = Request('http://127.0.0.1:%d/api/localrule/%s' % (self.window.port, rule), headers=self.window.api_auth, method='DELETE')
             urlopen(req, timeout=1).read()
         except Exception:
             pass

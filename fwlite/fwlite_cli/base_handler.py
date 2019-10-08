@@ -58,7 +58,7 @@ async def read_headers(reader, timeout=1):
 
 
 class BaseHandler(BaseHTTPRequestHandler):
-    bufsize = 8192
+    bufsize = 32768
     server_version = "BaseHTTPServer/" + __version__
     default_request_version = "HTTP/1.1"
 

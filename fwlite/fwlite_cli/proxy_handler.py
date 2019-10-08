@@ -40,7 +40,9 @@ WELCOME = '''<!DOCTYPE html>
 <html>
 <body>
 <p>fwlite running...</p>
-<p><a href="http://%s:%d/api/log">Check Log</a></p>
+<p><a href="http://{host}:{port}/api/log">Check Log</a></p>
+<p><a href="http://{host}:{port}/api/localrule">Local Rule</a></p>
+<p><a href="http://{host}:{port}/api/proxy">Proxy</a></p>
 </body>
 </html>'''
 
@@ -53,7 +55,7 @@ class ClientError(Exception):
 
 class ForwardContext:
     def __init__(self):
-        self.last_active = time.time()
+        self.last_active = time.monotonic()
         self.first_send = 0
         # eof recieved
         self.remote_eof = False
@@ -337,7 +339,7 @@ class http_handler(BaseProxyHandler):
                 if self.request_host[1] in range(self.conf.listen[1],
                                                  self.conf.listen[1] + len(self.conf.profile)):
                     if parse.path == '/' and self.command == 'GET':
-                        self.write(200, data=WELCOME % ('127.0.0.1', self.request_host[1]),
+                        self.write(200, data=WELCOME.format(host=self.request_host[0], port=self.request_host[1]),
                                    ctype='text/html; charset=utf-8')
                         return
                     await self.api(parse)
@@ -350,7 +352,7 @@ class http_handler(BaseProxyHandler):
             if self.request_host[1] in range(self.conf.listen[1],
                                              self.conf.listen[1] + len(self.conf.profile)):
                 if parse.path == '/' and self.command == 'GET':
-                    self.write(200, data=WELCOME % (self.request_host[0], self.request_host[1]),
+                    self.write(200, data=WELCOME.format(host=self.request_host[0], port=self.request_host[1]),
                                ctype='text/html; charset=utf-8')
                     return
                 if not self.conf.remoteapi:
@@ -518,9 +520,9 @@ class http_handler(BaseProxyHandler):
                             self.rbuffer.append(data)
                         self.remote_writer.write(data)
                 # read response line
-                timelog = time.clock()
+                timelog = time.monotonic()
                 response_line, protocol_version, response_status, _ = await self.read_resp_line()
-                rtime = time.clock() - timelog
+                rtime = time.monotonic() - timelog
             # read response headers
             while response_status == 100:
                 hdata = await read_header_data(self.remote_reader, timeout=self.timeout)
@@ -624,7 +626,7 @@ class http_handler(BaseProxyHandler):
             if self.remote_writer:
                 try:
                     self.remote_writer.write_eof()
-                except ConnectionResetError:
+                except OSError:
                     pass
                 self.remote_writer.close()
                 self.remote_writer = None
@@ -723,6 +725,7 @@ class http_handler(BaseProxyHandler):
                 return
 
         if self.getparent():
+            self.logger.error('no more proxy available.')
             self.conf.GET_PROXY.notify(self.command, self.path, self.path, False,
                                        self.failed_parents, self.ppname)
             return
@@ -786,14 +789,14 @@ class http_handler(BaseProxyHandler):
             # send self.rbuffer
             if self.rbuffer:
                 self.remote_writer.write(b''.join(self.rbuffer))
-                context.first_send = time.clock()
+                context.first_send = time.monotonic()
         while True:
             intv = 1 if context.retryable else 5
             try:
                 fut = self.client_reader.read(self.bufsize)
                 data = await asyncio.wait_for(fut, timeout=intv)
             except asyncio.TimeoutError:
-                if time.time() - context.last_active > timeout or context.remote_eof:
+                if time.monotonic() - context.last_active > timeout or context.remote_eof:
                     data = b''
                 else:
                     continue
@@ -803,11 +806,11 @@ class http_handler(BaseProxyHandler):
             if not data:
                 break
             try:
-                context.last_active = time.time()
+                context.last_active = time.monotonic()
                 if context.retryable:
                     self.rbuffer.append(data)
                 if not context.first_send:
-                    context.first_send = time.clock()
+                    context.first_send = time.monotonic()
                 write_to.write(data)
                 await write_to.drain()
             except ConnectionResetError:
@@ -817,7 +820,7 @@ class http_handler(BaseProxyHandler):
         # client closed, tell remote
         try:
             write_to.write_eof()
-        except ConnectionResetError:
+        except OSError:
             pass
 
     async def forward_from_remote(self, read_from, write_to, context, timeout=60):
@@ -828,12 +831,12 @@ class http_handler(BaseProxyHandler):
                 fut = read_from.read(self.bufsize)
                 data = await asyncio.wait_for(fut, intv)
                 count += 1
-            except ConnectionResetError:
+            except (ConnectionResetError, OSError):
                 data = b''
-            except (asyncio.TimeoutError, OSError):
-                if time.time() - context.last_active > timeout or context.local_eof:
+            except asyncio.TimeoutError:
+                if time.monotonic() - context.last_active > timeout or context.local_eof:
                     data = b''
-                elif context.retryable and time.time() - context.last_active > self.timeout:
+                elif context.retryable and time.monotonic() - context.last_active > self.timeout:
                     data = b''
                 else:
                     continue
@@ -841,9 +844,9 @@ class http_handler(BaseProxyHandler):
             if not data:
                 break
             try:
-                context.last_active = time.time()
+                context.last_active = time.monotonic()
                 if count == 1:
-                    rtime = time.clock() - context.first_send
+                    rtime = time.monotonic() - context.first_send
                 if count == 3 and self.command == 'CONNECT':
                     # log server response time
                     self.pproxy.log(self.request_host[0], rtime)
@@ -863,7 +866,7 @@ class http_handler(BaseProxyHandler):
         # DO NOT CLOSE Client Connection, for possible retry
         # try:
         #     write_to.write_eof()
-        # except (ConnectionResetError, OSError):
+        # except OSError:
         #     pass
 
     def getparent(self):
@@ -925,7 +928,8 @@ class http_handler(BaseProxyHandler):
 
         if parse.path == '/api/localrule' and self.command == 'GET':
             data = json.dumps([(rule, self.conf.GET_PROXY.local.expire[rule])
-                               for rule in self.conf.GET_PROXY.local.rules])
+                               for rule in self.conf.GET_PROXY.local.rules],
+                              indent=4)
             self.write(code=200, data=data, ctype='application/json')
             return
         if parse.path == '/api/localrule' and self.command == 'POST':
@@ -947,7 +951,7 @@ class http_handler(BaseProxyHandler):
                 self.send_error(404, repr(err))
                 return
         if parse.path == '/api/redirector' and self.command == 'GET':
-            data = json.dumps(self.conf.REDIRECTOR.list())
+            data = json.dumps(self.conf.REDIRECTOR.list(), indent=4)
             self.write(200, data=data, ctype='application/json')
             return
         if parse.path == '/api/redirector' and self.command == 'POST':
@@ -972,7 +976,7 @@ class http_handler(BaseProxyHandler):
             data = [(p.name, p.short, p.priority, p.get_avg_resp_time())
                     for _, p in self.conf.parentlist.dict.items()]
             data = sorted(data, key=lambda item: item[0])
-            data = json.dumps(sorted(data, key=lambda item: item[2]))
+            data = json.dumps(sorted(data, key=lambda item: item[2]), indent=4)
             self.write(200, data=data, ctype='application/json')
             return
         if parse.path == '/api/proxy' and self.command == 'POST':
@@ -1018,7 +1022,7 @@ class http_handler(BaseProxyHandler):
         if parse.path == '/api/forward' and self.command == 'GET':
             data = [('%s:%s' % target, proxy, port)
                     for target, proxy, port in self.conf.port_forward.list()]
-            data = json.dumps(data)
+            data = json.dumps(data, indent=4)
             self.write(200, data=data, ctype='application/json')
             return
         if parse.path == '/api/forward' and self.command == 'POST':

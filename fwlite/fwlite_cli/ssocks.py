@@ -74,7 +74,7 @@ async def ss_connect(proxy, timeout, addr, port):
 
 
 class SSConn:
-    bufsize = 8192
+    bufsize = 32768
 
     def __init__(self, proxy, sock_b):
         self.logger = logging.getLogger('ss')

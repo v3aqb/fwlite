@@ -26,10 +26,6 @@ with zipfile.ZipFile('org.zip') as z:
         with open(_to, 'wb') as f:
             f.write(data)
 
-    data = z.open('fwlite-cli-master/config/config.ini').read()
-    with open('conf/sample.ini', 'wb') as f:
-        f.write(data)
-
 os.remove('org.zip')
 
 print('download fwlite-gui')

@@ -6,7 +6,7 @@ Portable package of fwlite-cli and fwlite-gui for windows.
 
 Executables of supported plugins included.
 
-v5.0-beta19
+v5.0-beta20
 
 #### Features
 
@@ -54,7 +54,7 @@ Windows 7 or higher.
 ```
 fwlite-cli (GPLv3)     https://github.com/v3aqb/fwlite-cli
 fwlite-gui (GPLv3)     https://github.com/v3aqb/fwlite-gui
-hxcrypto (LGPL)      https://github.com/v3aqb/hxcrypto
+hxcrypto (LGPL)        https://github.com/v3aqb/hxcrypto
 asn1crypto (MIT)       https://pypi.org/project/asn1crypto/
 cffi (MIT)             https://pypi.org/project/cffi/
 chardet (LGPL)         https://pypi.org/project/chardet/
@@ -68,8 +68,8 @@ python (PSFL)          https://python.org/
 simple-obfs (GPLv3)    https://github.com/shadowsocks/simple-obfs
 kcptun (MIT)           https://github.com/xtaci/kcptun
 GoQuiet (GPLv3)        https://github.com/cbeuw/GoQuiet
+Cloak (GPLv3)          https://github.com/cbeuw/Cloak
 ```
 
 [release page]: https://github.com/v3aqb/fwlite/releases
-[old version]: https://github.com/v3aqb/fwlite/tree/0.4
 [GPLv3]: https://www.gnu.org/licenses/gpl-3.0.txt
