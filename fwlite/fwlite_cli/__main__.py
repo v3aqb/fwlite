@@ -25,7 +25,6 @@ import argparse
 import asyncio
 
 from .config import Config
-from .proxy_handler import handler_factory, http_handler
 from . import __version__
 
 
@@ -54,18 +53,11 @@ def main():
 
     conf = Config(args.c, args.gui)
 
-    for i, profile in enumerate(conf.profile):
-        profile = int(profile)
-        handler = handler_factory(conf.listen[0], conf.listen[1] + i, http_handler, profile, conf)
-        loop = asyncio.get_event_loop()
-        server = asyncio.start_server(handler.handle, handler.addr, handler.port, loop=loop)
-        loop.run_until_complete(server)
+    conf.start_server()
 
-    loop.run_until_complete(conf.post_start())
-    try:
-        loop.run_forever()
-    finally:
-        sys.exit()
+    conf.start_dns_server()
+
+    conf.start()
 
 
 if __name__ == '__main__':

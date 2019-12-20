@@ -3,6 +3,7 @@ import asyncio
 import socket
 import time
 import logging
+import traceback
 
 logger = logging.getLogger('tunnel')
 
@@ -112,30 +113,32 @@ class ForwardHandler:
         self.ctimeout = ctimeout
 
     async def handle(self, client_reader, client_writer):
-        # connect to target
-        from .connection import open_connection
-        remote_reader, remote_writer, _ = await open_connection(self.addr,
-                                                                self.port,
-                                                                proxy=self.proxy,
-                                                                timeout=self.ctimeout,
-                                                                tunnel=True)
-
-        # forward
-        context = ForwardContext()
-
-        tasks = [forward_from_client(client_reader, remote_writer, context, self.timeout),
-                 forward_from_remote(remote_reader, client_writer, context, self.timeout),
-                 ]
+        remote_writer = None
         try:
+            # connect to target
+            from .connection import open_connection
+            remote_reader, remote_writer, _ = await open_connection(self.addr,
+                                                                    self.port,
+                                                                    proxy=self.proxy,
+                                                                    timeout=self.ctimeout,
+                                                                    tunnel=True)
+
+            # forward
+            context = ForwardContext()
+
+            tasks = [forward_from_client(client_reader, remote_writer, context, self.timeout),
+                     forward_from_remote(remote_reader, client_writer, context, self.timeout),
+                     ]
             await asyncio.wait(tasks)
         except asyncio.CancelledError:
             raise
         except Exception as err:
-            context.err = err
+            logger.error(repr(err))
+            logger.error(traceback.format_exc())
         for writer in (remote_writer, client_writer):
             try:
                 writer.close()
-            except OSError:
+            except (OSError, AttributeError):
                 pass
 
 

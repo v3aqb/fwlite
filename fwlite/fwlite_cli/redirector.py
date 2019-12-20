@@ -91,9 +91,13 @@ class redirector:
         except ValueError as err:
             logger.error('add redirect rule failed: %s', err)
 
-    def load(self):
+    def load(self, adblock=None):
         logger.info('loading adblock.txt')
-        for line in open(self.conf.adblock_path):
+        if adblock is not None:
+            iter_ = adblock
+        else:
+            iter_ = open(self.conf.adblock_path)
+        for line in iter_:
             if not line.strip():
                 continue
             if line.startswith('#'):

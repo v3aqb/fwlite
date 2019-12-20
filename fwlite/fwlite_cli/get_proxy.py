@@ -34,7 +34,7 @@ class get_proxy:
     hdr.setFormatter(formatter)
     logger.addHandler(hdr)
 
-    def __init__(self, conf):
+    def __init__(self, conf, load_local=None):
         self.conf = conf
         from .apfilter import ap_filter
         self.gfwlist = ap_filter()
@@ -42,20 +42,34 @@ class get_proxy:
         self.ignore = ap_filter()  # used by rules like "||twimg.com auto"
         self.china_ip_list = []
 
-        for line in open(self.conf.local_path):
+        if load_local is not None:
+            iter_ = load_local
+        else:
+            iter_ = open(self.conf.local_path)
+        for line in iter_:
             if line.startswith('!'):
                 continue
             rule, _, dest = line.strip().partition(' ')
             if dest:  # |http://www.google.com/url forcehttps
                 self.add_redirect(rule, dest)
             else:
-                self.add_rule(line, local=True)
+                self.add_temp(line)
 
-    def load(self):
+    def load(self, gfwlist=None, china_ip_list=None):
+        if self.conf.rproxy:
+            return
+
+        self.load_gfwlist(gfwlist)
+        self.load_china_ip_list(china_ip_list)
+
+    def load_gfwlist(self, gfwlist):
+        self.logger.info('loading gfwlist...')
         from .apfilter import ap_filter
-        if self.conf.rproxy is False:
-            self.logger.info('loading gfwlist...')
-            self.gfwlist = ap_filter()
+        self.gfwlist = ap_filter()
+        if gfwlist is not None:
+            for line in gfwlist:
+                self.gfwlist.add(line)
+        else:
             try:
                 with open(self.conf.gfwlist_path) as f:
                     data = f.read()
@@ -63,19 +77,51 @@ class get_proxy:
                         data = ''.join(data.split())
                         data = base64.b64decode(data).decode()
                     for line in data.splitlines():
-                        self.add_rule(line)
+                        self.gfwlist.add(line)
             except Exception as e:
                 self.logger.warning('gfwlist is corrupted! %r', e)
 
-            self.logger.info('loading china_ip_list.txt...')
-            self.china_ip_list = []
+        dns_list = [
+            # google
+            '8.8.8.8',
+            '8.8.4.4',
+            # OpenDNS
+            '208.67.222.222',
+            '208.67.220.220',
+            '208.67.222.123',
+            '208.67.220.123',
+            # Norton DNS
+            '198.153.192.1',
+            '198.153.194.1',
+            # Verisign
+            '64.6.64.6',
+            '64.6.65.6',
+            # Comodo
+            '8.26.56.26',
+            '8.20.247.20',
+            # Cloudflare
+            '1.1.1.1',
+            '1.0.0.1',
+        ]
+
+        for dns in dns_list:
+            self.gfwlist.add('||' + dns)
+
+    def load_china_ip_list(self, china_ip_list):
+        self.logger.info('loading china_ip_list.txt...')
+        self.china_ip_list = []
+        from ipaddress import ip_network
+        if china_ip_list is not None:
+            for ipn_ in china_ip_list:
+                ipn = ip_network(ipn_)
+                self.china_ip_list.append(ipn)
+        else:
             with open(self.conf.china_ip_path) as f:
-                from ipaddress import ip_network
                 for line in f:
                     if line:
                         ipn = ip_network(line.strip())
                         self.china_ip_list.append(ipn)
-                self.china_ip_list = sorted(self.china_ip_list, key=lambda ipn: ipn.network_address)
+        self.china_ip_list = sorted(self.china_ip_list, key=lambda ipn: ipn.network_address)
 
     def redirect(self, hdlr):
         return self.conf.REDIRECTOR.redirect(hdlr)
@@ -90,13 +136,6 @@ class get_proxy:
         '''called by redirector'''
         from .apfilter import ap_rule
         self.ignore.add(ap_rule(rule))
-
-    def add_rule(self, line, local=False):
-        try:
-            apfilter = self.local if local else self.gfwlist
-            apfilter.add(line)
-        except ValueError as err:
-            self.logger.debug('create autoproxy rule failed: %s', err)
 
     @lru_cache(1024)
     def ip_in_china(self, host, ip):
@@ -128,7 +167,9 @@ class get_proxy:
             return True
         return False
 
-    def ifgfwed_resolver(self, uri, host):
+    def isgfwed_resolver(self, host, uri=None):
+        if not uri:
+            uri = 'http://%s/' % host
         result = self.local.match(uri, host)
         if result is not None:
             return result
@@ -140,7 +181,7 @@ class get_proxy:
             return True
         return None
 
-    def ifgfwed(self, uri, host, port, ip, level=1):
+    def isgfwed(self, uri, host, port, ip, level=1):
         if level == 0:
             return False
 
@@ -205,9 +246,9 @@ class get_proxy:
         '''
         host, port = host
 
-        ifgfwed = self.ifgfwed(uri, host, port, ip, level)
+        gfwed = self.isgfwed(uri, host, port, ip, level)
 
-        if ifgfwed is False:
+        if gfwed is False:
             if ip and ip.is_private:
                 return [self.conf.parentlist.local or self.conf.parentlist.direct]
             return [self.conf.parentlist.direct]
@@ -221,15 +262,15 @@ class get_proxy:
             # random.shuffle(parentlist)
             parentlist = sorted(parentlist, key=priority)
 
-        if ifgfwed:
+        if gfwed:
             if not parentlist:
-                self.logger.warning('No parent proxy available, direct connection is used')
-                return [self.conf.parentlist.direct]
+                self.logger.warning('No parent proxy available.')
+                return []
         else:
             parentlist.insert(0, self.conf.parentlist.direct)
 
-        if len(parentlist) > self.conf.maxretry:
-            parentlist = parentlist[:self.conf.maxretry]
+        if len(parentlist) > self.conf.maxretry + 1:
+            parentlist = parentlist[:self.conf.maxretry + 1]
         return parentlist
 
     def notify(self, command, url, requesthost, success, failed_parents, current_parent):
@@ -242,7 +283,6 @@ class get_proxy:
                     resp_time = self.conf.parentlist.direct.get_avg_resp_time(requesthost[0])
                     exp = pow(resp_time, 2.5) if resp_time > 1 else 1
                     self.add_temp(rule, min(exp, 60))
-                    self.conf.stdout('local')
 
     def add_temp(self, rule, exp=None):
         # add temp rule for &exp minutes
@@ -250,3 +290,4 @@ class get_proxy:
         if rule not in self.local.rules:
             self.local.add(rule, (exp * 60) if exp else None)
             self.logger.info('add autoproxy rule: %s%s', rule, (' expire in %.1f min' % exp) if exp else '')
+            self.conf.stdout('local')

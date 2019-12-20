@@ -30,7 +30,7 @@ from ipaddress import IPv4Address, ip_address
 from .parent_proxy import ParentProxyList, ParentProxy
 from .get_proxy import get_proxy
 from .redirector import redirector
-from .util import SConfigParser
+from .util import SConfigParser, parse_hostport
 from .resolver import Resolver
 from .plugin_manager import plugin_register
 from .port_forward import ForwardManager
@@ -160,17 +160,21 @@ def url_retreive(url, path, proxy):
 class _stderr:
     # replace stderr
 
-    def __init__(self, maxlen=100):
+    def __init__(self, callback=None, maxlen=100):
         self.store = deque(maxlen=maxlen)
+        self.callback = callback
 
     def write(self, data):
-        sys.__stderr__.write(data)
+        if self.callback:
+            self.callback(data)
+        else:
+            sys.__stderr__.write(data)
         lines = data.strip().splitlines()
         self.store.extend(lines)
 
-    @staticmethod
-    def flush():
-        sys.__stderr__.flush()
+    def flush(self):
+        if self.callback is None:
+            sys.__stderr__.flush()
 
     def getvalue(self):
         data = '\r\n'.join(self.store)
@@ -252,7 +256,7 @@ class Config:
                 self.logger.error('proxy name %s is protected!', key)
                 continue
             try:
-                self.addparentproxy(key, val)
+                self.add_proxy(key, val)
             except Exception as err:
                 self.logger.error('add proxy failed! %r', err)
 
@@ -342,7 +346,7 @@ class Config:
     async def download(self):
         proxy = self.parentlist.get('FWLITE:' + self.profile[0])
 
-        file_list = {self.gfwlist_path: self.userconf.dget('FWLite', 'gfwlist_url', 'https://raw.githubusercontent.com/v3aqb/gfwlist/master/gfwlist.txt'),
+        file_list = {self.gfwlist_path: self.userconf.dget('FWLite', 'gfwlist_url', 'https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt'),
                      self.china_ip_path: 'https://github.com/17mon/china_ip_list/raw/master/china_ip_list.txt',
                      self.adblock_path: self.userconf.dget('FWLite', 'adblock_url', 'https://raw.githubusercontent.com/v3aqb/gfwlist/master/adblock_hosts.txt')
                      }
@@ -384,6 +388,7 @@ class Config:
     def adblock_enable(self, val):
         self.userconf.set('FWLite', 'adblock', '1' if val else '0')
         self.confsave()
+        self.stdout('setting')
 
     @property
     def gfwlist_enable(self):
@@ -393,6 +398,7 @@ class Config:
     def gfwlist_enable(self, val):
         self.userconf.set('FWLite', 'gfwlist', '1' if val else '0')
         self.confsave()
+        self.stdout('setting')
 
     def patch_stderr(self):
         self.stderr = _stderr()
@@ -400,3 +406,95 @@ class Config:
 
     def get_log(self):
         return self.stderr.getvalue()
+
+    def list_localrule(self):
+        return [(rule, self.GET_PROXY.local.expire[rule]) for rule in self.GET_PROXY.local.rules]
+
+    def add_localrule(self, rule, expire):
+        self.GET_PROXY.add_temp(rule, expire)
+
+    def del_localrule(self, rule):
+        self.GET_PROXY.local.remove(rule)
+        self.stdout('local')
+
+    def list_redir(self):
+        return self.REDIRECTOR.list()
+
+    def add_redir(self, rule, dest):
+        self.GET_PROXY.add_redirect(rule, dest)
+        self.stdout('redir')
+
+    def del_redir(self, rule):
+        self.REDIRECTOR.remove(rule)
+        self.stdout('redir')
+
+    def list_proxy(self):
+        data = [(p.name, p.short, p.priority, p.get_avg_resp_time())
+                for _, p in self.parentlist.dict.items()]
+        data = sorted(data, key=lambda item: item[0])
+        data = sorted(data, key=lambda item: item[2])
+        return data
+
+    def add_proxy(self, name, proxy):
+        if 'FWLITE:' in name:
+            raise ValueError
+        if name == '_L0C4L_':
+            raise ValueError
+        self.addparentproxy(name, proxy)
+        if name not in ('_D1R3CT_', '_L0C4L_'):
+            self.userconf.set('parents', name, proxy)
+            self.confsave()
+
+    def del_proxy(self, name):
+        self.parentlist.remove(name)
+        if self.userconf.has_option('parents', name):
+            self.userconf.remove_option('parents', name)
+            self.confsave()
+
+    def get_proxy(self, name):
+        proxy = self.parentlist.get(name)
+        return proxy.proxy
+
+    def list_forward(self):
+        return [('%s:%s' % target, proxy, port)
+                for target, proxy, port in self.port_forward.list()]
+
+    def add_forward(self, target, proxy, port):
+        target = parse_hostport(target)
+        self.port_forward.add(target, proxy, port)
+
+    def del_forward(self, port):
+        self.port_forward.stop(port)
+
+    def on_exit(self):
+        self.plugin_manager.cleanup()
+
+    def start_dns_server(self):
+        if self.userconf.dgetbool('dns', 'enable', False):
+            import asyncio
+            from .dns_server import TcpDnsHandler
+            dns_server = parse_hostport(self.userconf.dget('dns', 'server', '8.8.8.8:53'), 53)
+            listen = parse_hostport(self.userconf.dget('dns', 'listen', '127.0.0.1:53'), 53)
+            proxy = self.parentlist.get('FWLITE:1')
+            handler = TcpDnsHandler(dns_server, proxy, self)
+            loop = asyncio.get_event_loop()
+            server = asyncio.start_server(handler.handle, listen[0], listen[1], loop=loop)
+            loop.run_until_complete(server)
+
+    def start_server(self):
+        import asyncio
+        from .proxy_handler import handler_factory, http_handler
+        addr, port = self.listen
+        loop = asyncio.get_event_loop()
+        for i, profile in enumerate(self.profile):
+            profile = int(profile)
+            handler = handler_factory(addr, port + i, http_handler, profile, self)
+            server = asyncio.start_server(handler.handle, handler.addr, handler.port, loop=loop)
+            loop.run_until_complete(server)
+        loop.run_until_complete(self.post_start())
+
+    @staticmethod
+    def start():
+        import asyncio
+        loop = asyncio.get_event_loop()
+        loop.run_forever()

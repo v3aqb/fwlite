@@ -19,7 +19,7 @@ import chardet
 from PyQt5 import QtGui, QtCore, QtWidgets
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QSpacerItem, QSizePolicy, QMessageBox
-from PyQt5.QtCore import QProcess
+from PyQt5.QtCore import QProcess, Qt
 
 from .ui_mainwindow import Ui_MainWindow
 from .systray import SystemTrayIcon, setIEproxy
@@ -56,6 +56,7 @@ class MainWindow(QMainWindow):
 
         # local rules
         self.ui.AddLocalRuleButton.clicked.connect(self.addLocalRule)
+        self.ui.isgfwedTestButton.clicked.connect(self.isgfwedTest)
         self.spacer_LR = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
         self.ui.LocalRulesLayout.addItem(self.spacer_LR)
         self.local_rule_list = []
@@ -73,6 +74,7 @@ class MainWindow(QMainWindow):
         self.ui.proxyDisableButton.clicked.connect(self.disableProxy)
         self.ui.proxyActivateButton.clicked.connect(self.activateProxy)
         self.ui.exclusiveProxyAddButton.clicked.connect(self.exclusiveProxyAdd)
+        self.ui.hostnameEdit.textChanged.connect(self.proxy_hostname_changed)
         header = [_tr("MainWindow", "name"),
                   _tr("MainWindow", "address"),
                   _tr("MainWindow", "priority"),
@@ -82,7 +84,7 @@ class MainWindow(QMainWindow):
         self.PL_table_model = MyTableModel(self, data, header)
 
         self.ui.proxyListView.setModel(self.PL_table_model)
-        self.ui.proxyListView.clicked.connect(self.on_proxy_select)
+        self.ui.proxyListView.pressed.connect(self.on_proxy_select)
         import hxcrypto
         method_list = ['']
         method_list.extend(sorted(hxcrypto.method_supported.keys()))
@@ -293,7 +295,7 @@ class MainWindow(QMainWindow):
             req = Request('http://127.0.0.1:%d/api/proxy' % self.port, data, headers=self.api_auth)
             urlopen(req, timeout=1).read()
         except Exception:
-            self.tray.showMessage_('add proxy %s failed!' % name)
+            self.statusBar().showMessage('add proxy %s failed!' % name, 3000)
         else:
             self.ui.nameEdit.clear()
             self.ui.hostnameEdit.clear()
@@ -359,20 +361,43 @@ class MainWindow(QMainWindow):
             return
 
     def on_proxy_select(self):
+        button = QApplication.mouseButtons()
         index = self.ui.proxyListView.currentIndex().row()
         name = self.PL_table_model.mylist[index][0]
         piority = self.PL_table_model.mylist[index][2]
         self.load_proxy_by_name(name)
         self.ui.priorityEdit.setText(str(piority))
+        if button == Qt.RightButton:
+            proxy = self.get_proxy_by_name(name)
+            QApplication.instance().clipboard().setText(proxy)
+            self.statusBar().showMessage('proxy copied to clipboard', 3000)
 
-    def load_proxy_by_name(self, name):
+    def get_proxy_by_name(self, name):
         _name = base64.urlsafe_b64encode(name.encode()).decode()
         try:
             req = Request(
                 'http://127.0.0.1:%d/api/proxy/%s' % (self.port, _name),
                 headers=self.api_auth)
             proxy = urlopen(req, timeout=1).read().decode()
+            return proxy
         except Exception:
+            return
+
+    def load_proxy_by_name(self, name):
+        self.ui.nameEdit.setText(name)
+        proxy = self.get_proxy_by_name(name)
+        self.set_ui_by_proxy_uri(proxy)
+
+    def proxy_hostname_changed(self):
+        hostname = self.ui.hostnameEdit.text()
+        if '//' in hostname and len(hostname) > 20:
+            try:
+                self.set_ui_by_proxy_uri(hostname)
+            finally:
+                pass
+
+    def set_ui_by_proxy_uri(self, proxy):
+        if not proxy:
             return
         if '|' in proxy:
             proxy_list = proxy.split('|')
@@ -414,7 +439,6 @@ class MainWindow(QMainWindow):
             self.ui.usernameEdit.setText(parse.username)
             self.ui.passwordEdit.setText(parse.password)
 
-        self.ui.nameEdit.setText(name)
         self.ui.hostnameEdit.setText(parse.hostname)
         self.ui.portEdit.setText(str(parse.port))
         self.ui.viaEdit.setText(via)
@@ -474,7 +498,7 @@ class MainWindow(QMainWindow):
         elif sys.platform.startswith('darwin'):
             cmd = 'open'
         else:
-            return self.showMessage_('OS not recognised')
+            return self.statusBar().showMessage('OS not recognised', 3000)
         subprocess.Popen('%s %s' % (cmd, path), shell=True)
         self.tray.showMessage_(_tr("MainWindow", "reload_notice"))
 
@@ -512,7 +536,7 @@ class MainWindow(QMainWindow):
                 headers=self.api_auth)
             urlopen(req, timeout=1)
         except Exception:
-            self.tray.showMessage_('add redirrule %s %s failed!' % (rule, dest))
+            self.statusBar().showMessage('add redirrule %s %s failed!' % (rule, dest), 3000)
         else:
             self.ui.RuleEdit.clear()
             self.ui.DestEdit.clear()
@@ -553,6 +577,15 @@ class MainWindow(QMainWindow):
         else:
             self.ui.LocalRuleEdit.clear()
             self.ui.ExpireEdit.clear()
+
+    def isgfwedTest(self):
+        uri = self.ui.uriEdit.text()
+        try:
+            req = Request('http://127.0.0.1:%d/api/isgfwed' % self.port, uri.encode('utf8'), headers=self.api_auth)
+            result = urlopen(req, timeout=1).read()
+            self.statusBar().showMessage(result.decode('utf8'), 3000)
+        except Exception as e:
+            self.statusBar().showMessage(repr(e), 3000)
 
     def killProcess(self):
         self.runner.readyReadStandardError.connect(lambda: None)

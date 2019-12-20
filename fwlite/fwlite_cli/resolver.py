@@ -55,7 +55,7 @@ class Resolver:
 
     def is_poisoned(self, domain):
         url = 'http://%s/' % domain
-        if self.get_proxy and self.get_proxy.ifgfwed_resolver(url, domain):
+        if self.get_proxy and self.get_proxy.isgfwed_resolver(url, domain):
             return True
         return False
 
@@ -78,7 +78,7 @@ class Resolver:
             if result[0][1] in self.bad_ip:
                 return []
             return result
-        except (OSError, asyncio.TimeoutError) as err:
+        except (OSError, asyncio.TimeoutError, LookupError) as err:
             logger.warning('resolving %s failed: %r', host, err)
             return []
 

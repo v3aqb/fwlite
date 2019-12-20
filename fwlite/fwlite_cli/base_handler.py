@@ -17,6 +17,8 @@
 # along with fwlite-cli.  If not, see <https://www.gnu.org/licenses/>.
 
 import email
+import struct
+import socket
 from http.client import HTTPMessage
 from http.server import BaseHTTPRequestHandler
 from http import HTTPStatus
@@ -27,11 +29,12 @@ import asyncio
 __version__ = '0'
 
 
-async def read_response_line(reader, timeout=1):
+async def read_response_line(reader, timeout=1, first_byte=b''):
     # GET / HTTP/1.1\r\n
     # HTTP/1.1 200 OK\r\n
     fut = reader.readline()
     request_line = await asyncio.wait_for(fut, timeout=timeout)
+    request_line = first_byte + request_line
 
     if not request_line.endswith(b'\n'):
         raise asyncio.TimeoutError()
@@ -72,6 +75,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.close_connection = True
         self.req_count = 0
         self.path = ''
+        self.socks5 = False
         self.headers = None
 
     async def handle(self, client_reader, client_writer):  # pylint: disable=W0221
@@ -99,9 +103,18 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.client_writer.close()
 
     async def _handle(self):
-        await self.handle_one_request()
-        while not self.close_connection:
-            await self.handle_one_request()
+        fut = self.client_reader.readexactly(1)
+        try:
+            first_byte = await asyncio.wait_for(fut, timeout=10)
+        except (asyncio.TimeoutError, asyncio.IncompleteReadError):
+            return
+        if first_byte == b'\x05':
+            self.close_connection = True
+            await self.handle_socks5()
+        else:
+            await self.handle_one_request(first_byte)
+            while not self.close_connection:
+                await self.handle_one_request()
         if self.remote_writer:
             self.remote_writer.close()
 
@@ -112,13 +125,59 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.command = ''
         self.close_connection = True
 
-    async def handle_one_request(self):
+    async def handle_socks5(self):
+        self.pre_request_init()
+        self.socks5 = True
+        self.command = 'CONNECT'
+        fut = self.client_reader.readexactly(1)
+        auth_len = await asyncio.wait_for(fut, timeout=1)
+        fut = self.client_reader.readexactly(auth_len[0])
+        auth = await asyncio.wait_for(fut, timeout=1)
+        if b'\x00' not in auth:
+            raise ValueError('socks5 auth not supported yet')
+        self.client_writer.write(b'\x05\x00')
+        fut = self.client_reader.readexactly(4)
+        request = await asyncio.wait_for(fut, timeout=1)
+        assert request[1] == 1
+        addrtype = request[3]
+        if addrtype == 1:  # ipv4
+            fut = self.client_reader.readexactly(4)
+            addr = await asyncio.wait_for(fut, timeout=1)
+            addr = socket.inet_ntoa(addr).decode()
+        elif addrtype == 3:  # hostname
+            fut = self.client_reader.readexactly(1)
+            addrlen = await asyncio.wait_for(fut, timeout=1)
+            fut = self.client_reader.readexactly(addrlen[0])
+            addr = await asyncio.wait_for(fut, timeout=1)
+            addr = addr.decode()
+        elif addrtype == 4:  # ipv6
+            fut = self.client_reader.readexactly(16)
+            addr = await asyncio.wait_for(fut, timeout=1)
+            addr = socket.inet_ntop(socket.AF_INET6, addr).decode()
+            addr = '[' + addr + ']'
+        fut = self.client_reader.readexactly(2)
+        port = await asyncio.wait_for(fut, timeout=1)
+        port = struct.unpack(b">H", port)[0]
+
+        # gather request info for CONNECT method...
+        self.path = '%s:%s' % (addr, port)
+
+        # tell client connected
+        self.client_writer.write(b'\x05\x00\x00\x01\x00\x00\x00\x00\x01\x01')
+
+        await self.do_CONNECT()  # pylint: disable=E1101
+        try:
+            await self.client_writer.drain()
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            self.close_connection = True
+
+    async def handle_one_request(self, first_byte=b''):  # pylint: disable=W0221
         self.pre_request_init()
 
         try:
             # read request line
             self.requestline, command, path, request_version = \
-                await read_response_line(self.client_reader, 60)
+                await read_response_line(self.client_reader, 60, first_byte)
 
             # read headers
             _, self.headers = await read_headers(self.client_reader)

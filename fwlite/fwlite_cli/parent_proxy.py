@@ -171,6 +171,7 @@ class ParentProxyList:
 
     def addstr(self, name, proxy):
         self.add(ParentProxy(name, proxy))
+        self.conf.stdout('proxy')
 
     def add(self, parentproxy):
         assert isinstance(parentproxy, ParentProxy)
@@ -206,6 +207,7 @@ class ParentProxyList:
         pxy = self.dict.get(name)
         del self.dict[name]
         self._parents.discard(pxy)
+        self.conf.stdout('proxy')
 
     def parents(self):
         return list(self._parents)

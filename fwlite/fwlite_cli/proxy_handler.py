@@ -248,16 +248,19 @@ class http_handler(BaseProxyHandler):
         if isinstance(self.path, bytes):
             self.path = self.path.decode('latin1')
         if self.path.lower().startswith('ftp://'):
-            return self.send_error(400)
+            self.send_error(400, explain='GET ftp:// not supported')
+            return
 
         if self.path == '/pac':
             if self.headers['Host'].startswith(self.conf.local_ip):
-                return self.write(msg=self.conf.PAC, ctype='application/x-ns-proxy-autoconfig')
+                self.write(msg=self.conf.PAC, ctype='application/x-ns-proxy-autoconfig')
+                return
 
         # transparent proxy
         if self.path.startswith('/'):
             if 'Host' not in self.headers:
-                return self.send_error(403)
+                self.send_error(400, explain='Host not in headers')
+                return
             self.path = 'http://%s%s' % (self.headers['Host'], self.path)
 
         # fix request
@@ -272,14 +275,14 @@ class http_handler(BaseProxyHandler):
                                           '?' if parse.query else '')
 
         if 'Host' not in self.headers:
-            self.logger.warning('"Host" not in self.headers')
             request_host = parse_hostport(parse.netloc, 80)
         else:
             host = parse_hostport(self.headers['Host'], 80)
             netloc = parse_hostport(parse.netloc, 80)
             if host != netloc:
                 self.logger.warning('Host and URI mismatch! %s %s', self.path, self.headers['Host'])
-                # self.headers['Host'] = parse.netloc
+                self.send_error(400, explain='Host and URI mismatch!')
+                return
             request_host = parse_hostport(self.headers['Host'], 80)
 
         self.request_host = request_host
@@ -305,7 +308,7 @@ class http_handler(BaseProxyHandler):
                 return
             if all(u in self.conf.parentlist.dict.keys() for u in new_url.split()):
                 self._proxylist = [self.conf.parentlist.get(u) for u in new_url.split()]
-                # TODO: sort by priority?
+                # sort by priority?
                 # random.shuffle(self._proxylist)
             else:
                 self.logger.info('redirect %s %s', self.shortpath, new_url)
@@ -314,7 +317,7 @@ class http_handler(BaseProxyHandler):
 
         parse = urlparse.urlparse(self.path)
 
-        # gather info
+        # gather info (redirector may change this)
         if 'Host' not in self.headers:
             self.logger.warning('"Host" not in self.headers')
             request_host = parse_hostport(parse.netloc, 80)
@@ -323,7 +326,8 @@ class http_handler(BaseProxyHandler):
             netloc = parse_hostport(parse.netloc, 80)
             if host != netloc:
                 self.logger.warning('Host and URI mismatch! %s %s', self.path, self.headers['Host'])
-                # self.headers['Host'] = parse.netloc
+                self.send_error(400, explain='Host and URI mismatch! (post redirect)')
+                return
             request_host = parse_hostport(self.headers['Host'], 80)
 
         self.request_host = request_host
@@ -336,10 +340,10 @@ class http_handler(BaseProxyHandler):
 
         if self.request_ip.is_loopback:
             if ip_address(self.client_address[0]).is_loopback:
-                if self.request_host[1] in range(self.conf.listen[1],
-                                                 self.conf.listen[1] + len(self.conf.profile)):
+                if self.request_host[1] == self.conf.listen[1]:
                     if parse.path == '/' and self.command == 'GET':
-                        self.write(200, data=WELCOME.format(host=self.request_host[0], port=self.request_host[1]),
+                        self.write(200, data=WELCOME.format(host=self.request_host[0],
+                                                            port=self.request_host[1]),
                                    ctype='text/html; charset=utf-8')
                         return
                     await self.api(parse)
@@ -349,10 +353,10 @@ class http_handler(BaseProxyHandler):
                 return
 
         if str(self.request_ip) == self.client_writer.get_extra_info('sockname')[0]:
-            if self.request_host[1] in range(self.conf.listen[1],
-                                             self.conf.listen[1] + len(self.conf.profile)):
+            if self.request_host[1] == self.conf.listen[1]:
                 if parse.path == '/' and self.command == 'GET':
-                    self.write(200, data=WELCOME.format(host=self.request_host[0], port=self.request_host[1]),
+                    self.write(200, data=WELCOME.format(host=self.request_host[0],
+                                                        port=self.request_host[1]),
                                ctype='text/html; charset=utf-8')
                     return
                 if not self.conf.remoteapi:
@@ -391,7 +395,7 @@ class http_handler(BaseProxyHandler):
                 # if no more proxy available
                 self.conf.GET_PROXY.notify(self.command, self.shortpath, self.request_host, False,
                                            self.failed_parents, self.ppname)
-                return self.send_error(504)
+                return self.send_error(504, explain='no more proxy available')
 
             # try get from connection pool
             if not self.failed_parents:
@@ -657,7 +661,8 @@ class http_handler(BaseProxyHandler):
         if isinstance(self.path, bytes):
             self.path = self.path.decode('latin1')
 
-        self._wfile_write(self.protocol_version.encode() + b" 200 Connection established\r\n\r\n")
+        if not self.socks5:
+            self._wfile_write(self.protocol_version.encode() + b" 200 Connection established\r\n\r\n")
 
         self.rbuffer = []
 
@@ -670,14 +675,16 @@ class http_handler(BaseProxyHandler):
                 data += await self.client_reader_read(8196)
                 try:
                     server_name = extract_server_name(data)
-                    self.logger.debug('sni: %s', server_name)
-                    self.logger.debug('path: %s', self.path)
                     if server_name and server_name not in self.path:
-                        _, _, port = self.path.partition(':')
-                        self.path = '%s:%s' % (server_name, port)
-                        self.logger.info('CONNECT: SNI rewrite path: %s', self.path)
+                        self.shortpath = server_name
                 except Exception:
                     pass
+            elif data in (b'GET ', b'HEAD', b'POST', b'PUT ', b'DELE', b'OPTI', b'PATC', b'TRAC'):
+                data += await self.client_reader_read(8196)
+                for line in data.splitlines():
+                    if line.startswith(b'Host: '):
+                        self.shortpath = parse_hostport(line.strip().decode()[6:])[0]
+                        break
         except ClientError:
             return
 
@@ -685,6 +692,9 @@ class http_handler(BaseProxyHandler):
             self.rbuffer.append(data)
 
         self.request_host = parse_hostport(self.path)
+        if self.shortpath:
+            self.request_host = (self.shortpath, self.request_host[1])
+            self.shortpath = '%s:%d' % self.request_host
 
         # redirector
         new_url = self.conf.GET_PROXY.redirect(self)
@@ -704,6 +714,9 @@ class http_handler(BaseProxyHandler):
                 # random.shuffle(self._proxylist)
 
         self.request_ip = await self.conf.resolver.get_ip_address(self.request_host[0])
+
+        if int(self.request_ip) == 0 and self.shortpath:
+            self.path = self.shortpath
 
         if self.request_ip.is_loopback:
             if ip_address(self.client_address[0]).is_loopback:
@@ -725,9 +738,8 @@ class http_handler(BaseProxyHandler):
                 return
 
         if self.getparent():
-            self.logger.error('no more proxy available.')
-            self.conf.GET_PROXY.notify(self.command, self.path, self.path, False,
-                                       self.failed_parents, self.ppname)
+            self.conf.GET_PROXY.notify(self.command, self.shortpath or self.path, self.request_host,
+                                       False, self.failed_parents, self.ppname)
             return
 
         iplist = None
@@ -739,16 +751,16 @@ class http_handler(BaseProxyHandler):
         self.set_timeout()
 
         try:
-            self.logger.info('%s %s via %s. %s',
-                             self.command, self.path, self.pproxy.name, self.client_address[1])
+            self.logger.info('%s %s via %s. %s', self.command, self.shortpath or self.path,
+                             self.pproxy.name, self.client_address[1])
             addr, port = parse_hostport(self.path, 443)
             self.remote_reader, self.remote_writer, self.ppname = \
                 await open_connection(addr, port, self.pproxy, self.timeout, iplist, True)
         except (asyncio.TimeoutError, asyncio.IncompleteReadError, OSError) as err:
             self.logger.warning('%s %s via %s failed on connect! %r',
-                                self.command, self.path, self.ppname, err)
-            self.conf.GET_PROXY.notify(self.command, self.path, self.request_host, False,
-                                       self.failed_parents, self.ppname)
+                                self.command, self.shortpath or self.path, self.ppname, err)
+            self.conf.GET_PROXY.notify(self.command, self.shortpath or self.path, self.request_host,
+                                       False, self.failed_parents, self.ppname)
             await self._do_CONNECT(True)
             return
         self.logger.debug('%s connected', self.path)
@@ -761,8 +773,8 @@ class http_handler(BaseProxyHandler):
 
         # check, report, retry
         if context.retryable and not context.local_eof:
-            self.conf.GET_PROXY.notify(self.command, self.path, self.request_host, False,
-                                       self.failed_parents, self.ppname)
+            self.conf.GET_PROXY.notify(self.command, self.shortpath or self.path, self.request_host,
+                                       False, self.failed_parents, self.ppname)
             await self._do_CONNECT(True)
             return
 
@@ -847,11 +859,15 @@ class http_handler(BaseProxyHandler):
                 context.last_active = time.monotonic()
                 if count == 1:
                     rtime = time.monotonic() - context.first_send
-                if count == 3 and self.command == 'CONNECT':
-                    # log server response time
-                    self.pproxy.log(self.request_host[0], rtime)
-                    self.conf.GET_PROXY.notify(self.command, self.path, self.request_host, True,
-                                               self.failed_parents, self.ppname)
+                    if self.command == 'CONNECT':
+                        # log server response time
+                        self.pproxy.log(self.request_host[0], rtime)
+                        self.conf.GET_PROXY.notify(self.command,
+                                                   self.shortpath or self.path,
+                                                   self.request_host,
+                                                   True,
+                                                   self.failed_parents,
+                                                   self.ppname)
                 context.retryable = False
                 write_to.write(data)
                 await write_to.drain()
@@ -872,10 +888,13 @@ class http_handler(BaseProxyHandler):
     def getparent(self):
         if self._proxylist is None:
             self._proxylist = self.conf.GET_PROXY.get_proxy(
-                self.path, self.request_host, self.command, self.request_ip, self.server.profile)
+                self.shortpath or self.path, self.request_host, self.command,
+                self.request_ip, self.server.profile)
         if not self._proxylist:
             self.ppname = ''
             self.pproxy = None
+            if self.failed_parents:
+                self.logger.error('no more proxy available.')
             return 1
         self.pproxy = self._proxylist.pop(0)
         self.ppname = self.pproxy.name
@@ -927,56 +946,55 @@ class http_handler(BaseProxyHandler):
                 return
 
         if parse.path == '/api/localrule' and self.command == 'GET':
-            data = json.dumps([(rule, self.conf.GET_PROXY.local.expire[rule])
-                               for rule in self.conf.GET_PROXY.local.rules],
-                              indent=4)
+            data = json.dumps(self.conf.list_localrule(), indent=4)
             self.write(code=200, data=data, ctype='application/json')
             return
         if parse.path == '/api/localrule' and self.command == 'POST':
             # accept a json encoded tuple: (str rule, int exp)
             rule, exp = json.loads(body)
-            self.conf.GET_PROXY.add_temp(rule, exp)
+            self.conf.add_localrule(rule, exp)
             self.write(200)
-            self.conf.stdout('local')
             return
         if parse.path.startswith('/api/localrule/') and self.command == 'DELETE':
             try:
                 rule = base64.urlsafe_b64decode(parse.path[15:].encode('latin1')).decode()
-                expire = self.conf.GET_PROXY.local.remove(rule)
-                self.write(200, data=json.dumps([rule, expire]), ctype='application/json')
-                self.conf.stdout('local')
+                self.conf.del_localrule(rule)
+                self.write(200)
                 return
             except Exception as err:
                 self.logger.error(traceback.format_exc())
                 self.send_error(404, repr(err))
                 return
+        if parse.path == '/api/isgfwed':
+            uri = body.decode('utf8')
+            host = urlparse.urlparse(uri).netloc
+            host = parse_hostport(host, 80)[0]
+            result = self.conf.GET_PROXY.isgfwed_resolver(host, uri)
+            self.write(200, data=repr(result), ctype='text/plain')
+            return
         if parse.path == '/api/redirector' and self.command == 'GET':
-            data = json.dumps(self.conf.REDIRECTOR.list(), indent=4)
+            data = json.dumps(self.conf.list_redir(), indent=4)
             self.write(200, data=data, ctype='application/json')
             return
         if parse.path == '/api/redirector' and self.command == 'POST':
             # accept a json encoded tuple: (str rule, str dest)
             rule, dest = json.loads(body)
-            self.conf.GET_PROXY.add_redirect(rule, dest)
+            self.conf.add_redir(rule, dest)
             self.write(200)
-            self.conf.stdout('redir')
             return
         if parse.path.startswith('/api/redirector/') and self.command == 'DELETE':
             try:
                 rule = urlparse.parse_qs(parse.query).get('rule', [''])[0]
                 rule = base64.urlsafe_b64decode(rule).decode()
-                self.conf.REDIRECTOR.remove(rule)
-                self.write(200, data='done', ctype='text/plain')
-                self.conf.stdout('redir')
+                self.conf.del_redir(rule)
+                self.write(200)
                 return
             except Exception as err:
                 self.send_error(404, repr(err))
                 return
         if parse.path == '/api/proxy' and self.command == 'GET':
-            data = [(p.name, p.short, p.priority, p.get_avg_resp_time())
-                    for _, p in self.conf.parentlist.dict.items()]
-            data = sorted(data, key=lambda item: item[0])
-            data = json.dumps(sorted(data, key=lambda item: item[2]), indent=4)
+            data = self.conf.list_proxy()
+            data = json.dumps(data, indent=4)
             self.write(200, data=data, ctype='application/json')
             return
         if parse.path == '/api/proxy' and self.command == 'POST':
@@ -988,23 +1006,18 @@ class http_handler(BaseProxyHandler):
             if name == '_L0C4L_':
                 self.send_error(401)
                 return
-            self.conf.addparentproxy(name, proxy)
-            if name not in ('_D1R3CT_', '_L0C4L_'):
-                self.conf.userconf.set('parents', name, proxy)
-                self.conf.confsave()
-            self.write(200, data=data, ctype='application/json')
-            self.conf.stdout('proxy')
+            try:
+                self.conf.add_proxy(name, proxy)
+                self.write(200)
+            except ValueError:
+                self.write(401)
             return
         if parse.path.startswith('/api/proxy/') and self.command == 'DELETE':
             try:
                 proxy_name = parse.path[11:]
                 proxy_name = base64.urlsafe_b64decode(proxy_name).decode()
-                self.conf.parentlist.remove(proxy_name)
-                if self.conf.userconf.has_option('parents', proxy_name):
-                    self.conf.userconf.remove_option('parents', proxy_name)
-                    self.conf.confsave()
-                self.write(200, data=proxy_name, ctype='application/json')
-                self.conf.stdout('proxy')
+                self.conf.del_proxy(proxy_name)
+                self.write(200)
                 return
             except Exception as err:
                 self.send_error(404, repr(err))
@@ -1013,29 +1026,27 @@ class http_handler(BaseProxyHandler):
             try:
                 proxy_name = parse.path[11:]
                 proxy_name = base64.urlsafe_b64decode(proxy_name).decode()
-                proxy = self.conf.parentlist.get(proxy_name)
-                self.write(200, data=proxy.proxy, ctype='text/plain')
+                proxy = self.conf.get_proxy(proxy_name)
+                self.write(200, data=proxy, ctype='text/plain')
                 return
             except Exception as err:
                 self.send_error(404, repr(err))
                 return
         if parse.path == '/api/forward' and self.command == 'GET':
-            data = [('%s:%s' % target, proxy, port)
-                    for target, proxy, port in self.conf.port_forward.list()]
+            data = self.conf.list_forward()
             data = json.dumps(data, indent=4)
             self.write(200, data=data, ctype='application/json')
             return
         if parse.path == '/api/forward' and self.command == 'POST':
             # accept a json encoded tuple: (str target, str proxy, int port)
             target, proxy, port = json.loads(body)
-            target = parse_hostport(target)
-            self.conf.port_forward.add(target, proxy, port)
+            self.conf.add_forward(target, proxy, port)
             self.write(200, data=data, ctype='application/json')
             return
         if parse.path.startswith('/api/forward/') and self.command == 'DELETE':
             data = parse.path[13:]
             port = int(data)
-            self.conf.port_forward.stop(port)
+            self.conf.del_forward(port)
             self.write(200)
             return
         if parse.path == '/api/gfwlist' and self.command == 'GET':
@@ -1044,7 +1055,6 @@ class http_handler(BaseProxyHandler):
         if parse.path == '/api/gfwlist' and self.command == 'POST':
             self.conf.gfwlist_enable = json.loads(body)
             self.write(200, data=data, ctype='application/json')
-            self.conf.stdout('setting')
             return
         if parse.path == '/api/adblock' and self.command == 'GET':
             self.write(200, data=json.dumps(self.conf.adblock_enable), ctype='application/json')
@@ -1052,14 +1062,12 @@ class http_handler(BaseProxyHandler):
         if parse.path == '/api/adblock' and self.command == 'POST':
             self.conf.adblock_enable = json.loads(body)
             self.write(200, data=data, ctype='application/json')
-            self.conf.stdout('setting')
             return
         if parse.path == '/api/exit' and self.command == 'GET':
-            self.conf.plugin_manager.cleanup()
+            self.conf.on_exit()
             self.write(200, data='Done!', ctype='text/html')
-            import sys
-            sys.exit()
         if parse.path == '/api/log' and self.command == 'GET':
             self.write(200, data=self.conf.get_log(), ctype='text/plain; charset=utf-8')
             return
+        self.logger.error('api %s not exist.' % parse.path)
         self.send_error(404)

@@ -253,7 +253,7 @@ class RemoteResolve(QWidget):
                 s.append('Host: %s:%s\r\n\r\n' % server)
                 soc.sendall(''.join(s).encode())
                 rfile = soc.makefile('rb')
-                while True:
+                for _ in range(10):
                     data = rfile.readline()
                     if not data.strip():
                         break
@@ -263,7 +263,7 @@ class RemoteResolve(QWidget):
                 soc = socket.create_connection(server, 3)
                 rfile = soc.makefile('rb')
 
-            while True:
+            for _ in range(10):
                 # send request
                 query = dnslib.DNSRecord.question(hostname, qtype='ANY')
                 query_data = query.pack()

@@ -24,7 +24,7 @@
        <locale language="English" country="UnitedStates"/>
       </property>
       <property name="currentIndex">
-       <number>5</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="tab">
        <attribute name="title">
@@ -65,7 +65,7 @@
              <x>0</x>
              <y>0</y>
              <width>706</width>
-             <height>384</height>
+             <height>353</height>
             </rect>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_5">
@@ -151,6 +151,20 @@
           </item>
          </layout>
         </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_3">
+          <item>
+           <widget class="QLineEdit" name="uriEdit"/>
+          </item>
+          <item>
+           <widget class="QPushButton" name="isgfwedTestButton">
+            <property name="text">
+             <string>Test</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
        </layout>
       </widget>
       <widget class="QWidget" name="tab_3">
@@ -168,8 +182,8 @@
             <rect>
              <x>0</x>
              <y>0</y>
-             <width>706</width>
-             <height>384</height>
+             <width>98</width>
+             <height>28</height>
             </rect>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_7">
