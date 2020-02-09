@@ -22,10 +22,7 @@ import os
 import sys
 import argparse
 
-import asyncio
-
 from .config import Config
-from . import __version__
 
 
 def main():
@@ -38,24 +35,7 @@ def main():
         sys.stderr.write('config file {} not exist!\n'.format(args.c))
         sys.exit()
 
-    hello = 'FWLite %s with asyncio, ' % __version__
-    import platform
-    hello += 'python %s %s' % (platform.python_version(), platform.architecture()[0])
-
-    if args.gui:
-        hello += ' with GUI'
-
-    sys.stderr.write(hello + '\n')
-
-    if sys.platform == 'win32':
-        loop = asyncio.ProactorEventLoop()
-        asyncio.set_event_loop(loop)
-
     conf = Config(args.c, args.gui)
-
-    conf.start_server()
-
-    conf.start_dns_server()
 
     conf.start()
 

@@ -450,9 +450,6 @@ class http_handler(BaseProxyHandler):
                 self.close_connection = True
                 self.logger.warning('Upgrade header found! (%s)', self.headers['Upgrade'])
                 # del self.headers['Upgrade']
-            else:
-                # always try to keep connection alive
-                self.headers['Connection'] = 'keep_alive'
 
             for key, val in self.headers.items():
                 if isinstance(val, bytes):
@@ -541,7 +538,7 @@ class http_handler(BaseProxyHandler):
             if protocol_version >= b"HTTP/1.1":
                 remote_close = 'close' in conntype.lower()
             else:
-                remote_close = 'keep_alive' in conntype.lower()
+                remote_close = 'keep_alive' not in conntype.lower()
             if 'Upgrade' in response_header:
                 self.close_connection = remote_close = True
             if "Content-Length" in response_header:
@@ -587,6 +584,12 @@ class http_handler(BaseProxyHandler):
                         raise IOError(0, 'remote socket closed')
                     # self.logger.info('content_length data received %d %s', len(data), self.path)
                     content_length -= len(data)
+                    self.wfile_write(data)
+            elif content_length is None:
+                while True:
+                    data = await self.remote_reader.read(self.bufsize)
+                    if not data:
+                        break
                     self.wfile_write(data)
             else:
                 # http/1.0 response, content_lenth not in header
@@ -1066,6 +1069,7 @@ class http_handler(BaseProxyHandler):
         if parse.path == '/api/exit' and self.command == 'GET':
             self.conf.on_exit()
             self.write(200, data='Done!', ctype='text/html')
+            return
         if parse.path == '/api/log' and self.command == 'GET':
             self.write(200, data=self.conf.get_log(), ctype='text/plain; charset=utf-8')
             return

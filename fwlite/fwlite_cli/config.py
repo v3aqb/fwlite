@@ -159,22 +159,16 @@ def url_retreive(url, path, proxy):
 
 class _stderr:
     # replace stderr
-
-    def __init__(self, callback=None, maxlen=100):
+    def __init__(self, maxlen=100):
         self.store = deque(maxlen=maxlen)
-        self.callback = callback
 
     def write(self, data):
-        if self.callback:
-            self.callback(data)
-        else:
-            sys.__stderr__.write(data)
+        sys.__stderr__.write(data)
         lines = data.strip().splitlines()
         self.store.extend(lines)
 
     def flush(self):
-        if self.callback is None:
-            sys.__stderr__.flush()
+        sys.__stderr__.flush()
 
     def getvalue(self):
         data = '\r\n'.join(self.store)
@@ -198,7 +192,53 @@ class Config:
 
         self._started = False
         self.GUI = gui
-        self.conf_path = os.path.abspath(conf_path)
+        self.loop = None
+        self.conf_path = conf_path
+
+        self.userconf = SConfigParser(interpolation=None)
+
+        self.hello()
+        self.reload()
+
+    def init(self):
+        self.timeout = 4
+        self.profile = '134'
+        self.maxretry = 4
+        self.rproxy = False
+        self.remoteapi = False
+        self.remotepass = ''
+
+        self.listen = '8118'
+
+        self.gate = 2
+
+        self.plugin_manager = None  # PluginManager(self)
+        self.port_forward = None  # ForwardManager(self)
+        self.parentlist = None  # ParentProxyList(self)
+
+        self.HOSTS = defaultdict(list)
+        self.local_ip = '127.0.0.1'
+
+        self.PAC = b''
+
+        self.REDIRECTOR = None  # redirector(self)
+        self.GET_PROXY = None  # get_proxy(self)
+        self.resolver = None  # Resolver(self.GET_PROXY, bad_ip)
+
+    def addhost(self, host, ip):
+        try:
+            ipo = ip_address(ip)
+            if isinstance(ipo, IPv4Address):
+                self.HOSTS[host].append((2, ip))
+            else:
+                self.HOSTS[host].append((10, ip))
+        except Exception:
+            self.logger.error('unsupported host: %s', ip)
+            self.logger.error(traceback.format_exc())
+
+    def reload(self, conf_path=None):
+        self.init()
+        self.conf_path = os.path.abspath(conf_path or self.conf_path)
         self.conf_dir = os.path.dirname(self.conf_path)
         os.chdir(self.conf_dir)
         self.local_path = os.path.join(self.conf_dir, 'local.txt')
@@ -206,8 +246,7 @@ class Config:
         self.china_ip_path = os.path.join(self.conf_dir, 'china_ip_list.txt')
         self.adblock_path = os.path.join(self.conf_dir, 'adblock.txt')
 
-        self.userconf = SConfigParser(interpolation=None)
-        self.reload()
+        self.userconf.read(self.conf_path)
 
         self.timeout = self.userconf.dgetint('FWLite', 'timeout', 4)
         self.profile = self.userconf.dget('FWLite', 'profile', '134')
@@ -242,6 +281,49 @@ class Config:
         self.plugin_manager = PluginManager(self)
         self.port_forward = ForwardManager(self)
         self.parentlist = ParentProxyList(self)
+
+        self.HOSTS = defaultdict(list)
+
+        for host, ip_ in self.userconf.items('hosts'):
+            self.addhost(host, ip_)
+
+        if not os.path.exists(self.local_path):
+            self.logger.warning('"local.txt" not found! creating...')
+            with open(self.local_path, 'w') as f:
+                f.write('''\
+! local gfwlist config
+! rules: https://autoproxy.org/zh-CN/Rules
+! /^http://www.baidu.com/.*wd=([^&]*).*$/ /https://www.google.com/search?q=\1/
+''')
+
+        # prep PAC
+        try:
+            csock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            csock.connect(('8.8.8.8', 53))
+            (addr, _) = csock.getsockname()
+            csock.close()
+            self.local_ip = addr
+        except socket.error:
+            self.local_ip = '127.0.0.1'
+
+        self.PAC = PAC.replace('__PROXY__', 'PROXY %s:%s' % (self.local_ip, self.listen[1]))
+        if self.userconf.dget('FWLite', 'pac', ''):
+            if os.path.isfile(self.userconf.dget('FWLite', 'pac', '')):
+                self.PAC = open(self.userconf.dget('FWLite', 'pac', '')).read()
+
+        self.PAC = self.PAC.encode()
+
+        self.REDIRECTOR = redirector(self)
+        self.GET_PROXY = get_proxy(self)
+        bad_ip = set(self.userconf.dget('dns', 'bad_ip', '').split('|'))
+        apf = None if self.rproxy else self.GET_PROXY
+        self.resolver = Resolver(apf, bad_ip)
+
+    def confsave(self):
+        with open(self.conf_path, 'w') as conf_file:
+            self.userconf.write(conf_file)
+
+    def register_proxy_n_forward(self):
         # add proxy created my fwlite self
         for i, profile in enumerate(self.profile):
             self.addparentproxy('FWLITE:%s' % profile, 'http://127.0.0.1:%d' % (self.listen[1] + i))
@@ -274,62 +356,6 @@ class Config:
             except Exception as err:
                 self.logger.error(repr(err))
                 self.logger.error(traceback.format_exc())
-
-        self.HOSTS = defaultdict(list)
-
-        def addhost(host, ip):
-            try:
-                ipo = ip_address(ip)
-                if isinstance(ipo, IPv4Address):
-                    self.HOSTS[host].append((2, ip))
-                else:
-                    self.HOSTS[host].append((10, ip))
-            except Exception:
-                self.logger.error('unsupported host: %s', ip)
-                self.logger.error(traceback.format_exc())
-
-        for host, ip in self.userconf.items('hosts'):
-            addhost(host, ip)
-
-        if not os.path.exists(self.local_path):
-            self.logger.warning('"local.txt" not found! creating...')
-            with open(self.local_path, 'w') as f:
-                f.write('''\
-! local gfwlist config
-! rules: https://autoproxy.org/zh-CN/Rules
-! /^http://www.baidu.com/.*wd=([^&]*).*$/ /https://www.google.com/search?q=\1/
-''')
-
-        # prep PAC
-        try:
-            csock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            csock.connect(('8.8.8.8', 53))
-            (addr, port) = csock.getsockname()
-            csock.close()
-            self.local_ip = addr
-        except socket.error:
-            self.local_ip = '127.0.0.1'
-
-        ip = self.local_ip
-        self.PAC = PAC.replace('__PROXY__', 'PROXY %s:%s' % (ip, self.listen[1]))
-        if self.userconf.dget('FWLite', 'pac', ''):
-            if os.path.isfile(self.userconf.dget('FWLite', 'pac', '')):
-                self.PAC = open(self.userconf.dget('FWLite', 'pac', '')).read()
-
-        self.PAC = self.PAC.encode()
-
-        self.REDIRECTOR = redirector(self)
-        self.GET_PROXY = get_proxy(self)
-        bad_ip = set(self.userconf.dget('dns', 'bad_ip', '').split('|'))
-        apf = None if self.rproxy else self.GET_PROXY
-        self.resolver = Resolver(apf, bad_ip)
-
-    def reload(self):
-        self.userconf.read(self.conf_path)
-
-    def confsave(self):
-        with open(self.conf_path, 'w') as f:
-            self.userconf.write(f)
 
     def addparentproxy(self, name, proxy):
         self.parentlist.addstr(name, proxy)
@@ -468,33 +494,56 @@ class Config:
 
     def on_exit(self):
         self.plugin_manager.cleanup()
+        self.loop.stop()
 
     def start_dns_server(self):
         if self.userconf.dgetbool('dns', 'enable', False):
+            loop = self.loop
             import asyncio
             from .dns_server import TcpDnsHandler
             dns_server = parse_hostport(self.userconf.dget('dns', 'server', '8.8.8.8:53'), 53)
             listen = parse_hostport(self.userconf.dget('dns', 'listen', '127.0.0.1:53'), 53)
             proxy = self.parentlist.get('FWLITE:1')
             handler = TcpDnsHandler(dns_server, proxy, self)
-            loop = asyncio.get_event_loop()
             server = asyncio.start_server(handler.handle, listen[0], listen[1], loop=loop)
             loop.run_until_complete(server)
 
     def start_server(self):
         import asyncio
         from .proxy_handler import handler_factory, http_handler
+        loop = self.loop
         addr, port = self.listen
-        loop = asyncio.get_event_loop()
         for i, profile in enumerate(self.profile):
             profile = int(profile)
             handler = handler_factory(addr, port + i, http_handler, profile, self)
             server = asyncio.start_server(handler.handle, handler.addr, handler.port, loop=loop)
             loop.run_until_complete(server)
-        loop.run_until_complete(self.post_start())
 
-    @staticmethod
-    def start():
+    def set_loop(self):
         import asyncio
         loop = asyncio.get_event_loop()
-        loop.run_forever()
+        if sys.platform == 'win32' and not isinstance(loop, asyncio.ProactorEventLoop):
+            self.logger.info('set ProactorEventLoop for windows')
+            loop = asyncio.ProactorEventLoop()
+            asyncio.set_event_loop(loop)
+        self.loop = loop
+
+    def start(self):
+        self.set_loop()
+        self.register_proxy_n_forward()
+        self.start_dns_server()
+        self.start_server()
+        self.loop.run_until_complete(self.post_start())
+        self.loop.run_forever()
+        self.logger.info('start() ended')
+
+    def hello(self):
+        from . import __version__
+        hello = 'FWLite %s with asyncio, ' % __version__
+        import platform
+        hello += 'python %s %s' % (platform.python_version(), platform.architecture()[0])
+
+        if self.GUI:
+            hello += ' with GUI'
+
+        sys.stderr.write(hello + '\n')
