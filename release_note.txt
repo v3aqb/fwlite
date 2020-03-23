@@ -1,3 +1,11 @@
+2020.3.23 v5-beta23
+update hxsocks: enable ofb and ctr mode
+update fwlite-cli
+update fwlite-gui
+update kcptun to 20200226
+update v2ray-plugin to v1.3.0
+update cloak to 2.1.3
+
 2020.2.9 v5-beta22
 fix http/1.0
 

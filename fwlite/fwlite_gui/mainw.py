@@ -86,9 +86,10 @@ class MainWindow(QMainWindow):
         self.ui.proxyListView.setModel(self.PL_table_model)
         self.ui.proxyListView.pressed.connect(self.on_proxy_select)
         import hxcrypto
-        method_list = ['']
-        method_list.extend(sorted(hxcrypto.method_supported.keys()))
-        self.ui.encryptionBox.addItems(method_list)
+        self.method_list = ['']
+        self.method_list.extend(sorted(sorted(hxcrypto.method_supported.keys()),
+                                       key=lambda x: hxcrypto.is_aead(x)))
+        self.ui.encryptionBox.addItems(self.method_list)
 
         self.ui.protocolBox.addItems(SUPPORTED_PROTOCOL)
 
@@ -397,8 +398,12 @@ class MainWindow(QMainWindow):
                 pass
 
     def set_ui_by_proxy_uri(self, proxy):
-        if not proxy:
-            return
+        # clear
+        self.ui.encryptionBox.setCurrentIndex(0)
+        self.ui.pskEdit.setText('')
+        self.ui.usernameEdit.setText('')
+        self.ui.passwordEdit.setText('')
+
         if '|' in proxy:
             proxy_list = proxy.split('|')
             proxy = proxy_list[0]
@@ -409,23 +414,19 @@ class MainWindow(QMainWindow):
         parse = urllib.parse.urlparse(proxy)
         query = urllib.parse.parse_qs(parse.query)
 
-        import hxcrypto
-        method_list = sorted(hxcrypto.method_supported.keys())
         if parse.scheme == 'ss':
             self.ui.protocolBox.setCurrentIndex(SUPPORTED_PROTOCOL.index('shadowsocks'))
             method = parse.username
             password = parse.password
             if not password:
                 method, password = base64.b64decode(method).decode().split(':', 1)
-            method_index = method_list.index(method) + 1
+            method_index = self.method_list.index(method)
             self.ui.encryptionBox.setCurrentIndex(method_index)
             self.ui.pskEdit.setText(password)
-            self.ui.usernameEdit.setText('')
-            self.ui.passwordEdit.setText('')
         elif parse.scheme == 'hxs2':
             self.ui.protocolBox.setCurrentIndex(SUPPORTED_PROTOCOL.index('hxsocks2'))
             method = query.get('method', ['aes-128-cfb'])[0].lower()
-            method_index = method_list.index(method) + 1
+            method_index = self.method_list.index(method)
             self.ui.encryptionBox.setCurrentIndex(method_index)
             psk = query.get('PSK', [''])[0]
             self.ui.pskEdit.setText(psk)
@@ -434,8 +435,6 @@ class MainWindow(QMainWindow):
         else:
             # socks5 and http
             self.ui.protocolBox.setCurrentIndex(SUPPORTED_PROTOCOL.index(parse.scheme) if parse.scheme else 2)
-            self.ui.encryptionBox.setCurrentIndex(0)
-            self.ui.pskEdit.setText('')
             self.ui.usernameEdit.setText(parse.username)
             self.ui.passwordEdit.setText(parse.password)
 

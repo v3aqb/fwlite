@@ -102,11 +102,15 @@ class redirector:
                 continue
             if line.startswith('#'):
                 continue
-            if line.startswith('local'):
+            if 'loopback' in line:
                 continue
-            if line in ('broadcasthost', 'loopback'):
+            if 'localhost' in line:
                 continue
-            _, _, host = line.strip().partition(' ')
+            if " " in line:
+                # "127.0.0.1 114so.cn\r\n"
+                _, _, host = line.strip().partition(' ')
+            else:
+                host = line.strip()
             self.adblock.add(host)
 
     def list(self):

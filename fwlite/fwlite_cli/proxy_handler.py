@@ -482,8 +482,7 @@ class http_handler(BaseProxyHandler):
             # send request body
             if not skip:
                 content_length = int(self.headers.get('Content-Length', 0))
-                if self.headers.get("Transfer-Encoding") and \
-                        self.headers.get("Transfer-Encoding") != "identity":
+                if self.headers.get("Transfer-Encoding", "identity") != "identity":
                     if self.rbuffer:
                         self.remote_writer.write(b''.join(self.rbuffer))
                     flag = 1
@@ -564,8 +563,7 @@ class http_handler(BaseProxyHandler):
             # read response body
             if self.command == 'HEAD' or response_status in (204, 205, 304):
                 pass
-            elif response_header.get("Transfer-Encoding") and \
-                    response_header.get("Transfer-Encoding") != "identity":
+            elif response_header.get("Transfer-Encoding", "identity") != "identity":
                 flag = 1
                 while flag:
                     trunk_lenth = await self.remote_reader.readline()
@@ -585,19 +583,10 @@ class http_handler(BaseProxyHandler):
                     # self.logger.info('content_length data received %d %s', len(data), self.path)
                     content_length -= len(data)
                     self.wfile_write(data)
-            elif content_length is None:
-                while True:
-                    data = await self.remote_reader.read(self.bufsize)
-                    if not data:
-                        break
-                    self.wfile_write(data)
-            else:
-                # http/1.0 response, content_lenth not in header
-                #     read response body until connection closed
+            elif 'Upgrade' in response_header:
                 # if Upgrade in headers, websocket?
                 #     forward tcp
-                if 'Upgrade' in response_header:
-                    self.logger.info('Upgrade: %s', response_header['Upgrade'])
+                self.logger.info('Upgrade: %s', response_header['Upgrade'])
                 self.close_connection = True
                 self.retryable = False
                 # flush writer buf
@@ -608,6 +597,16 @@ class http_handler(BaseProxyHandler):
                 if context.timeout:
                     # no response from server
                     pass
+            elif content_length is None:
+                # http/1.0 response, content_lenth not in header
+                #     read response body until connection closed
+                while True:
+                    data = await self.remote_reader.read(self.bufsize)
+                    if not data:
+                        break
+                    self.wfile_write(data)
+            else:
+                self.logger.error('forward response body error.')
 
             self.wfile_write()
             self.conf.GET_PROXY.notify(self.command, self.shortpath, self.request_host, True,

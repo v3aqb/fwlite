@@ -184,14 +184,13 @@ class Hxs2Connection:
 
     async def connect(self, addr, port, timeout=3):
         self.logger.debug('hxsocks2 send connect request')
-        self.timeout = timeout
         async with self._lock:
             if self.connection_lost:
                 self._manager.remove(self)
                 raise ConnectionResetError(0, 'hxs connection lost')
             if not self.connected:
                 try:
-                    await self.get_key()
+                    await self.get_key(timeout)
                 except asyncio.CancelledError:
                     raise
                 except Exception as err:
@@ -351,14 +350,15 @@ class Hxs2Connection:
                     frame_len = await self._rfile_read(2, timeout=intv)
                     frame_len, = struct.unpack('>H', frame_len)
                 except asyncio.TimeoutError:
-                    if self._ping_test:
+                    if self._ping_test and time.monotonic() - self._ping_time > intv:
                         self.logger.warning('server no response %s', self.proxy.name)
                         break
                     if time.monotonic() - self._last_active_c > 120:
                         # no point keeping so long
                         break
                     if time.monotonic() - self._last_active_c > 10:
-                        await self.send_ping()
+                        if not self._ping_test:
+                            await self.send_ping()
                     continue
                 except Exception as err:
                     # destroy connection
@@ -378,7 +378,7 @@ class Hxs2Connection:
                     self._stat_recv_tp += frame_len + 2
                 except (asyncio.TimeoutError, InvalidTag) as err:
                     # destroy connection
-                    self.logger.error('read frame data error: %r', err)
+                    self.logger.error('read frame data error: %r, timeout %s', err, self.timeout)
                     break
                 else:
                     recv_time = time.monotonic() - last_recv
@@ -468,12 +468,13 @@ class Hxs2Connection:
                     # PING
                     if frame_flags == 1:
                         # pong
+                        resp_time = time.monotonic() - self._ping_time
                         if time.monotonic() - self._last_ping_log > 30:
-                            resp_time = time.monotonic() - self._ping_time
                             self.logger.info('server response time: %.3f %s', resp_time, self.proxy.name)
                             self._last_ping_log = time.monotonic()
                         self._ping_test = False
                         self._ping_time = 0
+                        self.proxy.log('', resp_time)
                     else:
                         await self.send_frame(6, 1, 0, b'\x00' * random.randint(64, 256))
                 elif frame_type == 7:
@@ -523,7 +524,7 @@ class Hxs2Connection:
             except ConnectionResetError:
                 pass
 
-    async def get_key(self):
+    async def get_key(self, timeout):
         self.logger.debug('hxsocks2 getKey')
         usn, psw = (self.proxy.username, self.proxy.password)
         self.logger.info('%s connect to server', self.name)
@@ -532,7 +533,7 @@ class Hxs2Connection:
             self.proxy.hostname,
             self.proxy.port,
             proxy=self.proxy.get_via(),
-            timeout=self.timeout,
+            timeout=timeout,
             tunnel=True)
 
         # prep key exchange request
@@ -555,19 +556,19 @@ class Hxs2Connection:
         await self.remote_writer.drain()
 
         # read iv
-        iv = await self._rfile_read(self.__pskcipher._iv_len, self.timeout)
+        iv = await self._rfile_read(self.__pskcipher._iv_len, timeout)
         self.__pskcipher.decrypt(iv)
 
         # read server response
         if is_aead(self.method):
-            ct_len = await self._rfile_read(18, self.timeout)
+            ct_len = await self._rfile_read(18, timeout)
             ct_len = self.__pskcipher.decrypt(ct_len)
             ct_len, = struct.unpack('!H', ct_len)
             ct = await self._rfile_read(ct_len + 16)
             ct = self.__pskcipher.decrypt(ct)
             data = ct[2:]
         else:
-            resp_len = await self._rfile_read(2, self.timeout)
+            resp_len = await self._rfile_read(2, timeout)
             resp_len = self.__pskcipher.decrypt(resp_len)
             resp_len, = struct.unpack('>H', resp_len)
             data = await self._rfile_read(resp_len)
