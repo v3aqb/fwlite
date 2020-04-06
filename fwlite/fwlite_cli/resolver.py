@@ -54,8 +54,7 @@ class Resolver:
         self.bad_ip = bad_ip
 
     def is_poisoned(self, domain):
-        url = 'http://%s/' % domain
-        if self.get_proxy and self.get_proxy.isgfwed_resolver(url, domain):
+        if self.get_proxy and self.get_proxy.isgfwed_resolver(domain):
             return True
         return False
 

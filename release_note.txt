@@ -1,3 +1,6 @@
+2020.4.6 v5-beta24
+fix resolver
+
 2020.3.23 v5-beta23
 update hxsocks: enable ofb and ctr mode
 update fwlite-cli

@@ -969,8 +969,12 @@ class http_handler(BaseProxyHandler):
                 return
         if parse.path == '/api/isgfwed':
             uri = body.decode('utf8')
-            host = urlparse.urlparse(uri).netloc
-            host = parse_hostport(host, 80)[0]
+            if '//' in uri:
+                host = urlparse.urlparse(uri).netloc
+                host = parse_hostport(host, 80)[0]
+            else:
+                host = uri
+                uri = None
             result = self.conf.GET_PROXY.isgfwed_resolver(host, uri)
             self.write(200, data=repr(result), ctype='text/plain')
             return
