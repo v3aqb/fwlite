@@ -2,11 +2,13 @@
 
 # Form implementation generated from reading ui file 'mainwindow.ui'
 #
-# Created by: PyQt5 UI code generator 5.11.3
+# Created by: PyQt5 UI code generator 5.13.2
 #
 # WARNING! All changes made in this file will be lost!
 
+
 from PyQt5 import QtCore, QtGui, QtWidgets
+
 
 from .translate import translate
 _tr = translate
@@ -44,7 +46,7 @@ class Ui_MainWindow(object):
         self.scrollArea.setWidgetResizable(True)
         self.scrollArea.setObjectName("scrollArea")
         self.scrollAreaWidgetContents = QtWidgets.QWidget()
-        self.scrollAreaWidgetContents.setGeometry(QtCore.QRect(0, 0, 706, 353))
+        self.scrollAreaWidgetContents.setGeometry(QtCore.QRect(0, 0, 80, 20))
         self.scrollAreaWidgetContents.setObjectName("scrollAreaWidgetContents")
         self.verticalLayout_5 = QtWidgets.QVBoxLayout(self.scrollAreaWidgetContents)
         self.verticalLayout_5.setObjectName("verticalLayout_5")
@@ -103,7 +105,7 @@ class Ui_MainWindow(object):
         self.scrollArea_2.setWidgetResizable(True)
         self.scrollArea_2.setObjectName("scrollArea_2")
         self.scrollAreaWidgetContents_2 = QtWidgets.QWidget()
-        self.scrollAreaWidgetContents_2.setGeometry(QtCore.QRect(0, 0, 98, 28))
+        self.scrollAreaWidgetContents_2.setGeometry(QtCore.QRect(0, 0, 80, 20))
         self.scrollAreaWidgetContents_2.setObjectName("scrollAreaWidgetContents_2")
         self.verticalLayout_7 = QtWidgets.QVBoxLayout(self.scrollAreaWidgetContents_2)
         self.verticalLayout_7.setObjectName("verticalLayout_7")
@@ -351,14 +353,17 @@ class Ui_MainWindow(object):
         self.formLayout_2.setObjectName("formLayout_2")
         self.gfwlistToggle = QtWidgets.QCheckBox(self.tab_6)
         self.gfwlistToggle.setObjectName("gfwlistToggle")
-        self.formLayout_2.setWidget(0, QtWidgets.QFormLayout.LabelRole, self.gfwlistToggle)
+        self.formLayout_2.setWidget(2, QtWidgets.QFormLayout.LabelRole, self.gfwlistToggle)
         self.adblockToggle = QtWidgets.QCheckBox(self.tab_6)
         self.adblockToggle.setLocale(QtCore.QLocale(QtCore.QLocale.English, QtCore.QLocale.UnitedStates))
         self.adblockToggle.setObjectName("adblockToggle")
-        self.formLayout_2.setWidget(1, QtWidgets.QFormLayout.LabelRole, self.adblockToggle)
+        self.formLayout_2.setWidget(3, QtWidgets.QFormLayout.LabelRole, self.adblockToggle)
+        self.startup_toggle = QtWidgets.QCheckBox(self.tab_6)
+        self.startup_toggle.setObjectName("startup_toggle")
+        self.formLayout_2.setWidget(0, QtWidgets.QFormLayout.LabelRole, self.startup_toggle)
         self.sys_proxy_toggle = QtWidgets.QCheckBox(self.tab_6)
         self.sys_proxy_toggle.setObjectName("sys_proxy_toggle")
-        self.formLayout_2.setWidget(2, QtWidgets.QFormLayout.LabelRole, self.sys_proxy_toggle)
+        self.formLayout_2.setWidget(1, QtWidgets.QFormLayout.LabelRole, self.sys_proxy_toggle)
         self.verticalLayout_15.addLayout(self.formLayout_2)
         self.editConfButton = QtWidgets.QPushButton(self.tab_6)
         self.editConfButton.setLocale(QtCore.QLocale(QtCore.QLocale.English, QtCore.QLocale.UnitedStates))
@@ -378,7 +383,7 @@ class Ui_MainWindow(object):
         MainWindow.setStatusBar(self.statusBar)
 
         self.retranslateUi(MainWindow)
-        self.tabWidget.setCurrentIndex(0)
+        self.tabWidget.setCurrentIndex(5)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
@@ -425,8 +430,8 @@ class Ui_MainWindow(object):
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_5), _tr("MainWindow", "Port Forward"))
         self.gfwlistToggle.setText(_tr("MainWindow", "GFWList"))
         self.adblockToggle.setText(_tr("MainWindow", "ADBlock"))
+        self.startup_toggle.setText(_tr("MainWindow", "Run at Startup"))
         self.sys_proxy_toggle.setText(_tr("MainWindow", "auto_system_proxy"))
         self.editConfButton.setText(_tr("MainWindow", "Edit userconf.ini"))
         self.editLocalButton.setText(_tr("MainWindow", "Edit local.txt"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_6), _tr("MainWindow", "Settings"))
-

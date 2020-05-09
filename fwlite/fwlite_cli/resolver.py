@@ -19,6 +19,7 @@
 import asyncio
 import socket
 import logging
+import itertools
 from ipaddress import ip_address
 
 logger = logging.getLogger('resolver')
@@ -36,6 +37,46 @@ def set_logger():
 set_logger()
 
 
+class DNSCache:
+    def __init__(self, timeout=60):
+        self.pool = {}  # {domain: result}
+        self.err_pool = {}  # {domain: Exception}
+        self.intv = 10
+        self.count = timeout // self.intv
+        self.timerwheel = [set() for _ in range(self.count)]  # a list of socket object
+        self.timerwheel_iter = itertools.cycle(range(self.count))
+        self.timerwheel_index = next(self.timerwheel_iter)
+
+        asyncio.ensure_future(self._purge())
+
+    def put(self, domain, result):
+        # soc: (reader, writer)
+        if isinstance(result, Exception):
+            self.err_pool[domain] = result
+        else:
+            self.pool[domain] = result
+            self.timerwheel[self.timerwheel_index].add(domain)
+
+    def get(self, domain):
+        result = self.pool.get(domain, None)
+        if result:
+            return result
+        return self.err_pool.get(domain, None)
+
+    async def _purge(self):
+        while 1:
+            await asyncio.sleep(self.intv)
+            self.err_pool.clear()
+            self.timerwheel_index = next(self.timerwheel_iter)
+            for domain in list(self.timerwheel[self.timerwheel_index]):
+                if domain in self.pool:
+                    del self.pool[domain]
+            self.timerwheel[self.timerwheel_index].clear()
+
+
+DC = DNSCache()
+
+
 async def getaddrinfo(host, port):
     loop = asyncio.get_event_loop()
     fut = loop.getaddrinfo(host, port)
@@ -43,9 +84,24 @@ async def getaddrinfo(host, port):
     return result
 
 
-async def resolve(host, port):
-    result = await getaddrinfo(host, port)
-    return [(i[0], i[4][0]) for i in result]
+async def resolve(host, port=0):
+    result = DC.get(host)
+    if result:
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    err = None
+    for _ in range(2):
+        try:
+            result = await getaddrinfo(host, port)
+            result = [(i[0], i[4][0]) for i in result]
+            DC.put(host, result)
+            return result
+        except (OSError, asyncio.TimeoutError, LookupError) as err_:
+            err = err_
+    DC.put(host, err)
+    raise err
 
 
 class Resolver:

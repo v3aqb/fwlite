@@ -6,7 +6,8 @@ import urllib.request
 from urllib.request import Request
 
 from PyQt5 import QtCore, QtWidgets
-from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QWidget, QMenu
+from PyQt5.QtCore import QProcess
+from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QWidget, QMenu, QAction
 
 from .translate import translate
 _tr = translate
@@ -65,12 +66,13 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.setContextMenu(self.menu)
 
     def create_actions(self):
-        self.showToggleAction = QtWidgets.QAction(_tr("SystemTrayIcon", "show_toggle"), self, triggered=self.window.showToggle)
-        self.reloadAction = QtWidgets.QAction(_tr("SystemTrayIcon", "reload"), self, triggered=self.window.reload)
-        self.flushDNSAction = QtWidgets.QAction(_tr("SystemTrayIcon", "clear_dns_cache"), self, triggered=self.flushDNS)
-        self.remoteDNSAction = QtWidgets.QAction(_tr("SystemTrayIcon", "remote_dns_resolve"), self, triggered=self.remoteDNS)
-        self.settingDNSAction = QtWidgets.QAction(_tr("SystemTrayIcon", "Settings"), self, triggered=self.window.openSetting)
-        self.quitAction = QtWidgets.QAction(_tr("SystemTrayIcon", "exit"), self, triggered=self.on_Quit)
+        self.showToggleAction = QAction(_tr("SystemTrayIcon", "show_toggle"), self, triggered=self.window.showToggle)
+        self.reloadAction = QAction(_tr("SystemTrayIcon", "reload"), self, triggered=self.window.reload)
+        self.flushDNSAction = QAction(_tr("SystemTrayIcon", "clear_dns_cache"), self, triggered=self.flushDNS)
+        self.remoteDNSAction = QAction(_tr("SystemTrayIcon", "remote_dns_resolve"), self, triggered=self.remoteDNS)
+        self.hxcryptoAction = QAction(_tr("SystemTrayIcon", "hxcrypto"), self, triggered=self.hxcrypto)
+        self.settingAction = QAction(_tr("SystemTrayIcon", "Settings"), self, triggered=self.window.openSetting)
+        self.quitAction = QAction(_tr("SystemTrayIcon", "exit"), self, triggered=self.on_Quit)
 
     def create_menu(self):
         self.create_actions()
@@ -93,15 +95,16 @@ class SystemTrayIcon(QSystemTrayIcon):
 
                 title = _tr("SystemTrayIcon", profile_label[p])
                 if i <= 5:
-                    self.settingIEproxyMenu.addAction(QtWidgets.QAction(title, self, triggered=getattr(self, 'set_ie_p%d' % i)))
-            act = QtWidgets.QAction(_tr("SystemTrayIcon", "No Proxy"), self, triggered=lambda: setIEproxy(0))
+                    self.settingIEproxyMenu.addAction(QAction(title, self, triggered=getattr(self, 'set_ie_p%d' % i)))
+            act = QAction(_tr("SystemTrayIcon", "No Proxy"), self, triggered=lambda: setIEproxy(0))
             self.settingIEproxyMenu.addAction(act)
 
         advancedMenu = self.menu.addMenu(_tr("SystemTrayIcon", "advanced"))
         advancedMenu.addAction(self.flushDNSAction)
         advancedMenu.addAction(self.remoteDNSAction)
+        advancedMenu.addAction(self.hxcryptoAction)
 
-        self.menu.addAction(self.settingDNSAction)
+        self.menu.addAction(self.settingAction)
         self.menu.addSeparator()
         self.menu.addAction(self.quitAction)
 
@@ -139,6 +142,18 @@ class SystemTrayIcon(QSystemTrayIcon):
 
     def remoteDNS(self):
         self.resolve.show()
+
+    def hxcrypto(self):
+        '''start hxcrypto GUI'''
+        if sys.platform.startswith('win'):
+            # find python
+            pdir = os.path.dirname(sys.executable)
+            python = os.path.join(pdir, 'python.exe')
+        else:
+            python = sys.executable
+
+        cmd = '"%s" -B -m hxcrypto' % (python)
+        QProcess(self).start(cmd)
 
     def on_Quit(self):
         if sys.platform.startswith('win') and self.window.ieproxy == 1:

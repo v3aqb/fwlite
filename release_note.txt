@@ -1,8 +1,14 @@
+2020.5.9 v5-beta25
+add DNS cache
+increase thread pool size
+add start on startup option
+update to python 3.8.2
+
 2020.4.6 v5-beta24
 fix resolver
 
 2020.3.23 v5-beta23
-update hxsocks: enable ofb and ctr mode
+update hxcrypto: enable ofb and ctr mode
 update fwlite-cli
 update fwlite-gui
 update kcptun to 20200226

@@ -87,7 +87,7 @@ def plugin_command(host_port, plugin_info, port):
 
     cmd = shlex.split(PLUGIN_PATH[plugin])
     if 'kcptun' in plugin.lower():
-        cmd.extend(['--localaddr', ':%d' % port])
+        cmd.extend(['--localaddr', '127.0.0.1:%d' % port])
         cmd.extend(['--remoteaddr', '%s:%d' % host_port])
         for args in plugin_args:
             if '=' in args:

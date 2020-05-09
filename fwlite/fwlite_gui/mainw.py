@@ -111,8 +111,14 @@ class MainWindow(QMainWindow):
         self.ui.editLocalButton.clicked.connect(self.openlocal)
         self.ui.sys_proxy_toggle.setCheckState(QtCore.Qt.Checked if self.ieproxy else QtCore.Qt.Unchecked)
         self.ui.sys_proxy_toggle.stateChanged.connect(self.sysProxyToggle)
+        self.ui.startup_toggle.stateChanged.connect(self.startup_toggle)
+
         if not sys.platform.startswith('win'):
-            self.ui.sys_proxy_toggle.setEnabled(False)
+            self.ui.sys_proxy_toggle.hide()
+            self.ui.startup_toggle.hide()
+        else:
+            from .startup import startup_status
+            self.ui.startup_toggle.setCheckState(QtCore.Qt.Checked if startup_status() else QtCore.Qt.Unchecked)
 
         self.createProcess()
 
@@ -482,6 +488,14 @@ class MainWindow(QMainWindow):
         self.conf.set('FWLite', 'ieproxy', '1' if sysproxy else '0')
         with open(self.path_to_conf, 'w') as f:
             self.conf.write(f)
+
+    def startup_toggle(self):
+        try:
+            startup = self.ui.startup_toggle.isChecked()
+            from .startup import set_startup
+            set_startup(startup)
+        except Exception as err:
+            self.statusBar().showMessage(repr(err), 5000)
 
     def openlocal(self):
         self.openfile(self.path_to_local)

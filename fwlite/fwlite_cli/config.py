@@ -526,6 +526,9 @@ class Config:
             self.logger.info('set ProactorEventLoop for windows')
             loop = asyncio.ProactorEventLoop()
             asyncio.set_event_loop(loop)
+        from concurrent.futures import ThreadPoolExecutor
+        executor = ThreadPoolExecutor(max_workers=32)
+        loop.set_default_executor(executor)
         self.loop = loop
 
     def start(self):

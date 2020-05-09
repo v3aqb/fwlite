@@ -24,7 +24,7 @@
        <locale language="English" country="UnitedStates"/>
       </property>
       <property name="currentIndex">
-       <number>0</number>
+       <number>5</number>
       </property>
       <widget class="QWidget" name="tab">
        <attribute name="title">
@@ -64,8 +64,8 @@
             <rect>
              <x>0</x>
              <y>0</y>
-             <width>706</width>
-             <height>353</height>
+             <width>80</width>
+             <height>20</height>
             </rect>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_5">
@@ -182,8 +182,8 @@
             <rect>
              <x>0</x>
              <y>0</y>
-             <width>98</width>
-             <height>28</height>
+             <width>80</width>
+             <height>20</height>
             </rect>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_7">
@@ -641,14 +641,14 @@
          <layout class="QVBoxLayout" name="verticalLayout_15">
           <item>
            <layout class="QFormLayout" name="formLayout_2">
-            <item row="0" column="0">
+            <item row="2" column="0">
              <widget class="QCheckBox" name="gfwlistToggle">
               <property name="text">
                <string>GFWList</string>
               </property>
              </widget>
             </item>
-            <item row="1" column="0">
+            <item row="3" column="0">
              <widget class="QCheckBox" name="adblockToggle">
               <property name="locale">
                <locale language="English" country="UnitedStates"/>
@@ -658,7 +658,14 @@
               </property>
              </widget>
             </item>
-            <item row="2" column="0">
+            <item row="0" column="0">
+             <widget class="QCheckBox" name="startup_toggle">
+              <property name="text">
+               <string>Run at Startup</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
              <widget class="QCheckBox" name="sys_proxy_toggle">
               <property name="text">
                <string>auto_system_proxy</string>
