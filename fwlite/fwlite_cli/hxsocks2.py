@@ -472,9 +472,10 @@ class Hxs2Connection:
                         if time.monotonic() - self._last_ping_log > 30:
                             self.logger.info('server response time: %.3f %s', resp_time, self.proxy.name)
                             self._last_ping_log = time.monotonic()
+                            if resp_time < 0.5:
+                                self.proxy.log('', resp_time)
                         self._ping_test = False
                         self._ping_time = 0
-                        self.proxy.log('', resp_time)
                     else:
                         await self.send_frame(6, 1, 0, b'\x00' * random.randint(64, 256))
                 elif frame_type == 7:

@@ -70,6 +70,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.reloadAction = QAction(_tr("SystemTrayIcon", "reload"), self, triggered=self.window.reload)
         self.flushDNSAction = QAction(_tr("SystemTrayIcon", "clear_dns_cache"), self, triggered=self.flushDNS)
         self.remoteDNSAction = QAction(_tr("SystemTrayIcon", "remote_dns_resolve"), self, triggered=self.remoteDNS)
+        self.clearIconCacheAction = QAction(_tr("SystemTrayIcon", "clear_icon_cache"), self, triggered=self.clear_icon_cache)
         self.hxcryptoAction = QAction(_tr("SystemTrayIcon", "hxcrypto"), self, triggered=self.hxcrypto)
         self.settingAction = QAction(_tr("SystemTrayIcon", "Settings"), self, triggered=self.window.openSetting)
         self.quitAction = QAction(_tr("SystemTrayIcon", "exit"), self, triggered=self.on_Quit)
@@ -103,6 +104,8 @@ class SystemTrayIcon(QSystemTrayIcon):
         advancedMenu.addAction(self.flushDNSAction)
         advancedMenu.addAction(self.remoteDNSAction)
         advancedMenu.addAction(self.hxcryptoAction)
+        if sys.platform.startswith('win'):
+            advancedMenu.addAction(self.clearIconCacheAction)
 
         self.menu.addAction(self.settingAction)
         self.menu.addSeparator()
@@ -142,6 +145,35 @@ class SystemTrayIcon(QSystemTrayIcon):
 
     def remoteDNS(self):
         self.resolve.show()
+
+    def clear_icon_cache(self):
+        try:
+            os.system('taskkill /f /im explorer.exe')
+            from .knownpaths import get_path_by_name
+            local = get_path_by_name('LocalAppData')
+            import platform
+            from distutils.version import StrictVersion
+            if StrictVersion(platform.version()) > StrictVersion('6.3'):
+                # windows 8.1+
+                import glob
+                dir_ = os.path.join(local, r'Microsoft\Windows\Explorer')
+                flist = glob.glob(dir_ + '/iconcache_*')
+                for cache in flist:
+                    try:
+                        os.remove(cache)
+                    except PermissionError:
+                        pass
+            else:
+                path = os.path.join(local, 'IconCache.db')
+                if os.path.exists(path):
+                    try:
+                        os.remove(path)
+                    except PermissionError:
+                        pass
+            import ctypes
+            ctypes.windll.shell32.ShellExecuteW(None, "runas", 'taskmgr.exe', '', None, 1)
+        except Exception as err:
+            self.window.statusBar().showMessage(repr(err), 30000)
 
     def hxcrypto(self):
         '''start hxcrypto GUI'''

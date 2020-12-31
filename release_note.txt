@@ -1,3 +1,9 @@
+2020.12.31 v5-beta26
+support shadowsocks subscription (test pending)
+mark esni1 as gfwed
+improve hxsocks2 efficiency
+update plugins to date
+
 2020.5.9 v5-beta25
 add DNS cache
 increase thread pool size
