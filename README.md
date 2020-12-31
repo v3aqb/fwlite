@@ -6,7 +6,7 @@ Portable package of fwlite-cli and fwlite-gui for windows.
 
 Executables of supported plugins included.
 
-v5.0-beta25
+2020.12.31 v5-beta26
 
 #### Features
 
@@ -30,6 +30,7 @@ v5.0-beta25
   - [hxsocks2]
   - [Shadowsocks] by @clowwindy
 - SIP003 plugin ([fwlite-cli #1](https://github.com/v3aqb/fwlite-cli/issues/1))
+- Support Shadowsocks Subscription (test pending)
 - Supprot proxy chain
 - Hosts based AdBlock
 - Port Forwarding

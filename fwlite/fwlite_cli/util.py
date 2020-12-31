@@ -80,8 +80,9 @@ def parse_hostport(host, default_port=80):
     return host.strip('[]'), default_port
 
 
-def extract_server_name(packet):
-    # https://github.com/phuslu/sniproxy/blob/master/sniproxy_py3.py
+def extract_tls_extension(packet):
+    # modified from https://github.com/phuslu/sniproxy/blob/master/sniproxy_py3.py
+    extensions = {}
     if packet.startswith(b'\x16\x03'):
         stream = io.BytesIO(packet)
         stream.read(0x2b)
@@ -97,10 +98,8 @@ def extract_server_name(packet):
             etype, = struct.unpack('>h', data)
             elen, = struct.unpack('>h', stream.read(2))
             edata = stream.read(elen)
-            if etype == 0:
-                server_name = edata[5:].decode()
-                return server_name
-    return None
+            extensions[etype] = edata
+    return extensions
 
 
 def sizeof_fmt(num):

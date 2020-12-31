@@ -81,7 +81,7 @@ class get_proxy:
             except Exception as e:
                 self.logger.warning('gfwlist is corrupted! %r', e)
 
-        dns_list = [
+        dns_server_list = [
             # google
             '8.8.8.8',
             '8.8.4.4',
@@ -104,8 +104,8 @@ class get_proxy:
             '1.0.0.1',
         ]
 
-        for dns in dns_list:
-            self.gfwlist.add('||' + dns)
+        for dns_server in dns_server_list:
+            self.gfwlist.add('||' + dns_server)
 
     def load_china_ip_list(self, china_ip_list):
         self.logger.info('loading china_ip_list.txt...')

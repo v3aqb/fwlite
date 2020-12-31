@@ -20,9 +20,13 @@
 import os
 import sys
 import socket
+import json
+import base64
 import logging
 import logging.handlers
 import traceback
+import urllib.request
+import urllib.parse
 from collections import defaultdict, deque
 
 from ipaddress import IPv4Address, ip_address
@@ -134,7 +138,6 @@ function FindProxyForURL(url, host) {
 
 
 def url_retreive(url, path, proxy):
-    import urllib.request
     if proxy.proxy:
         if proxy.scheme == 'http' and '|' not in proxy.proxy:
             proxy_handler = urllib.request.ProxyHandler(
@@ -342,6 +345,10 @@ class Config:
             except Exception as err:
                 self.logger.error('add proxy failed! %r', err)
 
+        subscription = self.userconf.dget('FWLite', 'subscription', '')
+        if subscription:
+            self.load_subscription(subscription)
+
         if not self.rproxy and not [parent for parent in self.parentlist.parents() if parent.priority < 100]:
             self.logger.warning('No parent proxy available!')
 
@@ -356,6 +363,43 @@ class Config:
             except Exception as err:
                 self.logger.error(repr(err))
                 self.logger.error(traceback.format_exc())
+
+    def load_subscription(self, subscription):
+        proxy = self.parentlist.get('_D1R3CT_')
+        if proxy.proxy:
+            if proxy.scheme == 'http' and '|' not in proxy.proxy:
+                proxy_handler = urllib.request.ProxyHandler(
+                    {'http': proxy.proxy,
+                     'https': proxy.proxy})
+            else:
+                # proxy not supported
+                self.logger.error('proxy not supported.')
+                return
+        else:
+            proxy_handler = urllib.request.ProxyHandler({})
+        opener = urllib.request.build_opener(proxy_handler)
+        urlopen = opener.open
+        urlquote = urllib.parse.quote
+
+        try:
+            req = urlopen(subscription)
+            data = req.read()
+            if req.getcode() == 200 and data:
+                data = json.loads(data)
+                for ss_ in data:
+                    userinfo = '%s:%s' % (ss_['method'], ss_['password'])
+                    userinfo = base64.b64encode(userinfo.encode()).decode()
+                    url = 'ss://%s@%s:%d/' % (userinfo, ss_['server'], ss_['server_port'])
+                    if ss_.get('plugin', ''):
+                        if ss_.get('plugin_opts', ''):
+                            plugin_info = urlquote(ss_['plugin'] + ';' + ss_['plugin_opts'])
+                        else:
+                            plugin_info = urlquote(ss_['plugin'])
+                        url += '?plugin=%s' % plugin_info
+                    name = ss_['remarks']
+                    self.add_proxy(name, url)
+        except Exception as err:
+            self.logger.error('load subscription failed. %r', err)
 
     def addparentproxy(self, name, proxy):
         self.parentlist.addstr(name, proxy)
@@ -496,18 +540,6 @@ class Config:
         self.plugin_manager.cleanup()
         self.loop.stop()
 
-    def start_dns_server(self):
-        if self.userconf.dgetbool('dns', 'enable', False):
-            loop = self.loop
-            import asyncio
-            from .dns_server import TcpDnsHandler
-            dns_server = parse_hostport(self.userconf.dget('dns', 'server', '8.8.8.8:53'), 53)
-            listen = parse_hostport(self.userconf.dget('dns', 'listen', '127.0.0.1:53'), 53)
-            proxy = self.parentlist.get('FWLITE:1')
-            handler = TcpDnsHandler(dns_server, proxy, self)
-            server = asyncio.start_server(handler.handle, listen[0], listen[1], loop=loop)
-            loop.run_until_complete(server)
-
     def start_server(self):
         import asyncio
         from .proxy_handler import handler_factory, http_handler
@@ -534,7 +566,6 @@ class Config:
     def start(self):
         self.set_loop()
         self.register_proxy_n_forward()
-        self.start_dns_server()
         self.start_server()
         self.loop.run_until_complete(self.post_start())
         self.loop.run_forever()
