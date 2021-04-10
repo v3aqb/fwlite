@@ -6,7 +6,7 @@ Portable package of fwlite-cli and fwlite-gui for windows.
 
 Executables of supported plugins included.
 
-2020.12.31 v5-beta26
+2021.4.10 v5.0
 
 #### Features
 
@@ -38,13 +38,15 @@ Executables of supported plugins included.
 - User-defined redirector
 - Simple PAC for WPAD
 
-#### Download
-
-Download the latest release from [release page].
-
 #### Requirements
 
 Windows 7 or higher.
+
+[Microsoft Visual C++ 2015 Redistributable] (x86) installed.
+
+#### Download
+
+Download the latest release from [release page].
 
 #### License
 
@@ -75,3 +77,4 @@ Cloak (GPLv3)          https://github.com/cbeuw/Cloak
 
 [release page]: https://github.com/v3aqb/fwlite/releases
 [GPLv3]: https://www.gnu.org/licenses/gpl-3.0.txt
+[Microsoft Visual C++ 2015 Redistributable]: https://www.microsoft.com/en-us/download/details.aspx?id=52685

@@ -65,10 +65,24 @@ OPEN = 0
 EOF_SENT = 1   # SENT END_STREAM
 EOF_RECV = 2  # RECV END_STREAM
 CLOSED = 3
-END_STREAM_FLAG = 1
+
 KNOWN_HOSTS = {}
 RECV = 0
 SEND = 1
+
+DATA = 0
+HEADERS = 1
+# PRIORITY = 2
+RST_STREAM = 3
+# SETTINGS = 4
+# PUSH_PROMISE = 5
+PING = 6
+GOAWAY = 7
+# WINDOW_UPDATE = 8
+# CONTINUATION = 9
+
+PONG = 1
+END_STREAM_FLAG = 1
 
 # load known certs
 if not os.path.exists('./.hxs_known_hosts'):
@@ -97,10 +111,7 @@ class ConnectionManager:
             if len(self.connection_list) < MAX_CONNECTION and\
                     not [conn for conn in self.connection_list if not conn.is_busy()]:
                 self.connection_list.append(Hxs2Connection(proxy, self.timeout, self))
-        free_list = [conn for conn in self.connection_list if not conn.is_busy()]
-        if free_list:
-            return free_list[0]
-        list_ = sorted(self.connection_list, key=lambda item: item.count())
+        list_ = sorted(self.connection_list, key=lambda item: item.busy())
         return list_[0]
 
     def remove(self, conn):
@@ -213,7 +224,7 @@ class Hxs2Connection:
             self.logger.error('MAX_STREAM_ID reached')
             self._manager.remove(self)
 
-        await self.send_frame(1, 0, stream_id, payload)
+        await self.send_frame(HEADERS, OPEN, stream_id, payload)
 
         # wait for server response
         event = Event()
@@ -261,30 +272,30 @@ class Hxs2Connection:
                 except asyncio.TimeoutError:
                     if time.monotonic() - self._last_active[stream_id] > 60 or\
                             self._stream_status[stream_id] & EOF_RECV:
-                        await self.send_frame(3, 0, stream_id, b'\x00' * random.randint(8, 256))
+                        await self.send_frame(RST_STREAM, 0, stream_id, bytes(random.randint(8, 256)))
                         self._stream_status[stream_id] = CLOSED
                         break
                     continue
                 except ConnectionResetError:
-                    await self.send_frame(3, 0, stream_id, b'\x00' * random.randint(8, 256))
+                    await self.send_frame(RST_STREAM, 0, stream_id, bytes(random.randint(8, 256)))
                     self._stream_status[stream_id] = CLOSED
                     break
 
                 if not data:
                     # close stream(LOCAL)
                     self._stream_status[stream_id] |= EOF_SENT
-                    await self.send_frame(1, 1, stream_id, b'\x00' * random.randint(8, 256))
+                    await self.send_frame(HEADERS, END_STREAM_FLAG, stream_id, bytes(random.randint(8, 256)))
                     break
 
                 elif self._stream_status[stream_id] & EOF_SENT:
                     self.logger.error('data recv from client, while stream is closed!')
 
-                    await self.send_frame(3, 0, stream_id, b'\x00' * random.randint(8, 256))
+                    await self.send_frame(RST_STREAM, 0, stream_id, bytes(random.randint(8, 256)))
                     self._stream_status[stream_id] = CLOSED
                     self._client_writer[stream_id].close()
                     return
-                payload = struct.pack('>H', len(data)) + data + b'\x00' * random.randint(8, 256)
-                await self.send_frame(0, 0, stream_id, payload)
+                payload = struct.pack('>H', len(data)) + data + bytes(random.randint(8, 256))
+                await self.send_frame(DATA, 0, stream_id, payload)
                 self._stat_data_sent += len(data)
             except asyncio.CancelledError:
                 raise
@@ -296,7 +307,7 @@ class Hxs2Connection:
         await asyncio.sleep(5)
         if self._stream_status[stream_id] != CLOSED:
             self._stream_status[stream_id] = CLOSED
-            await self.send_frame(3, 0, stream_id, b'\x00' * random.randint(8, 256))
+            await self.send_frame(RST_STREAM, 0, stream_id, bytes(random.randint(8, 256)))
         if stream_id in self._client_writer:
             try:
                 self._client_writer[stream_id].close()
@@ -329,14 +340,14 @@ class Hxs2Connection:
                 self.connection_lost = True
                 self._manager.remove(self)
             else:
-                if type_ == 0 and self._last_count > 10 and random.random() < 0.01:
+                if type_ == DATA and self._last_count > 10 and random.random() < 0.01:
                     asyncio.ensure_future(self.send_ping(False))
 
     async def send_ping(self, test=True):
         if self._ping_time == 0:
             self._ping_test = test
             self._ping_time = time.monotonic()
-            await self.send_frame(6, 0, 0, b'\x00' * random.randint(64, 256))
+            await self.send_frame(PING, 0, 0, bytes(random.randint(64, 256)))
 
     async def read_from_connection(self):
         self.logger.debug('start read from connection')
@@ -402,10 +413,9 @@ class Hxs2Connection:
                 self._last_count += 1
 
                 if self._last_count > 10 and random.random() < 0.01:
-                    await self.send_frame(6, 1, 0, b'\x00' * random.randint(64, 256))
+                    await self.send_frame(PING, PONG, 0, bytes(random.randint(64, 256)))
 
-                if frame_type == 0:
-                    # DATA
+                if frame_type == DATA:  # 0
                     # first 2 bytes of payload indicates data_len, the rest would be padding
                     self._last_active_c = time.monotonic()
                     data_len, = struct.unpack('>H', payload.read(2))
@@ -424,18 +434,17 @@ class Hxs2Connection:
                         # client error, reset stream
                         self._client_writer[stream_id].close()
                         self._stream_status[stream_id] = CLOSED
-                        await self.send_frame(3, 0, stream_id, b'\x00' * random.randint(8, 256))
+                        await self.send_frame(RST_STREAM, 0, stream_id, bytes(random.randint(8, 256)))
                     except KeyError:
                         self._stream_status[stream_id] = CLOSED
-                        await self.send_frame(3, 0, stream_id, b'\x00' * random.randint(8, 256))
-                elif frame_type == 1:
-                    # HEADER
+                        await self.send_frame(RST_STREAM, 0, stream_id, bytes(random.randint(8, 256)))
+                elif frame_type == HEADERS:  # 1
                     self._last_active_c = time.monotonic()
                     if self._next_stream_id == stream_id:
                         # server is not supposed to open a new stream
                         # send connection error?
                         break
-                    elif stream_id < self._next_stream_id:
+                    if stream_id < self._next_stream_id:
                         if frame_flags == END_STREAM_FLAG:
                             self._stream_status[stream_id] |= EOF_RECV
                             try:
@@ -454,20 +463,17 @@ class Hxs2Connection:
                             else:
                                 self.logger.info('%s stream open, client closed', self.name)
                                 self._stream_status[stream_id] = CLOSED
-                                await self.send_frame(3, 0, stream_id,
-                                                      b'\x00' * random.randint(8, 256))
-                elif frame_type == 3:
-                    # RST_STREAM
+                                await self.send_frame(RST_STREAM, 0, stream_id,
+                                                      bytes(random.randint(8, 256)))
+                elif frame_type == RST_STREAM:  # 3
                     self._last_active_c = time.monotonic()
                     self._stream_status[stream_id] = CLOSED
                     if stream_id in self._client_writer:
                         self._client_writer[stream_id].close()
                         del self._client_writer[stream_id]
 
-                elif frame_type == 6:
-                    # PING
-                    if frame_flags == 1:
-                        # pong
+                elif frame_type == PING:  # 6
+                    if frame_flags == PONG:
                         resp_time = time.monotonic() - self._ping_time
                         if time.monotonic() - self._last_ping_log > 30:
                             self.logger.info('server response time: %.3f %s', resp_time, self.proxy.name)
@@ -477,9 +483,8 @@ class Hxs2Connection:
                         self._ping_test = False
                         self._ping_time = 0
                     else:
-                        await self.send_frame(6, 1, 0, b'\x00' * random.randint(64, 256))
-                elif frame_type == 7:
-                    # GOAWAY
+                        await self.send_frame(PING, PONG, 0, bytes(random.randint(64, 256)))
+                elif frame_type == GOAWAY:  # 7
                     # no more new stream
                     max_stream_id = payload.read(2)
                     self._manager.remove(self)
@@ -547,7 +552,7 @@ class Hxs2Connection:
         data = b''.join([chr(len(pubk)).encode('latin1'),
                          pubk,
                          hmac.new(psw.encode(), ts + pubk + usn.encode(), hashlib.sha256).digest(),
-                         b'\x00' * padding_len])
+                         bytes(padding_len)])
         data = chr(20).encode() + struct.pack('>H', len(data)) + data
 
         ct = self.__pskcipher.encrypt(data)
@@ -636,8 +641,11 @@ class Hxs2Connection:
             self.recv_tp_ewma = self.recv_tp_ewma * 0.87 + self._stat_recv_tp * 0.13
             self._stat_recv_tp = 0
 
+    def busy(self):
+        return self.recv_time / self.recv_intv
+
     def is_busy(self):
-        if self.recv_time > self.recv_intv * 0.8:
+        if self.busy() > 0.8:
             return True
         return False
 

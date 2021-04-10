@@ -211,7 +211,7 @@ class Config:
         self.remoteapi = False
         self.remotepass = ''
 
-        self.listen = '8118'
+        self.listen = ('127.0.0.1', 8118)
 
         self.gate = 2
 
@@ -277,6 +277,9 @@ class Config:
             self.logger.warning('gate < 0, set to 0')
             self.gate = 0
         ParentProxy.GATE = self.gate
+
+        self.udp_enable = self.userconf.dgetbool('udp', 'enable', False)
+        self.udp_proxy = self.userconf.dget('udp', 'proxy', '_D1R3CT_')
 
         for key, val in self.userconf.items('plugin'):
             plugin_register(key, val)
@@ -407,6 +410,8 @@ class Config:
     def stdout(self, text=''):
         if text == 'all':
             self._started = True
+            sys.stdout.write('Fwlite port: %s\n' % self.listen[1])
+            sys.stdout.flush()
         if not self._started:
             return
         if self.GUI:
@@ -418,7 +423,7 @@ class Config:
 
         file_list = {self.gfwlist_path: self.userconf.dget('FWLite', 'gfwlist_url', 'https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt'),
                      self.china_ip_path: 'https://github.com/17mon/china_ip_list/raw/master/china_ip_list.txt',
-                     self.adblock_path: self.userconf.dget('FWLite', 'adblock_url', 'https://raw.githubusercontent.com/v3aqb/gfwlist/master/adblock_hosts.txt')
+                     self.adblock_path: self.userconf.dget('FWLite', 'adblock_url', 'https://cdn.jsdelivr.net/gh/neoFelhz/neohosts@gh-pages/basic/hosts')
                      }
 
         def _dl(path, url, proxy):
@@ -541,20 +546,45 @@ class Config:
         self.loop.stop()
 
     def start_server(self):
-        import asyncio
         from .proxy_handler import handler_factory, http_handler
         loop = self.loop
         addr, port = self.listen
+        while port == 0:
+            # find proper port
+            from .util import get_port
+            port_0 = get_port(addr)
+            fail = False
+            for i in range(len(self.profile) - 1):
+                if get_port(addr, port_0 + 1 + i) == 0:
+                    fail = True
+            if not fail:
+                port = port_0
+                self.listen = (addr, port)
+                break
+
+        self.logger.info('Fwlite port: %s', port)
+
+        if not self.userconf.dget('FWLite', 'pac', ''):
+            self.PAC = PAC.replace('__PROXY__', 'PROXY %s:%s' % (self.local_ip, self.listen[1])).encode()
+
         for i, profile in enumerate(self.profile):
             profile = int(profile)
-            handler = handler_factory(addr, port + i, http_handler, profile, self)
-            server = asyncio.start_server(handler.handle, handler.addr, handler.port, loop=loop)
-            loop.run_until_complete(server)
+            server = handler_factory(addr, port + i, http_handler, profile, self)
+            server.start()
+
+        if os.path.exists(os.path.join(self.conf_dir, 'hxsocks.yaml')):
+            try:
+                from hxsocks.start_server import start_hxs_server
+                start_hxs_server('hxsocks.yaml')
+            except Exception as err:
+                self.logger.error(repr(err))
+                self.logger.error(traceback.format_exc())
 
     def set_loop(self):
         import asyncio
         loop = asyncio.get_event_loop()
         if sys.platform == 'win32' and not isinstance(loop, asyncio.ProactorEventLoop):
+            # since python 3.8, ProactorEventLoop is default loop
             self.logger.info('set ProactorEventLoop for windows')
             loop = asyncio.ProactorEventLoop()
             asyncio.set_event_loop(loop)
@@ -565,8 +595,8 @@ class Config:
 
     def start(self):
         self.set_loop()
-        self.register_proxy_n_forward()
         self.start_server()
+        self.register_proxy_n_forward()
         self.loop.run_until_complete(self.post_start())
         self.loop.run_forever()
         self.logger.info('start() ended')

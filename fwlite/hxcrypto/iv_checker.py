@@ -17,9 +17,26 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
 # 02110-1301  USA
 
-from collections import OrderedDict, defaultdict
-import time
 import random
+import time
+from collections import defaultdict
+from dmfrbloom.bloomfilter import BloomFilter as _BloomFilter
+
+
+class BloomFilter(_BloomFilter):
+    def __init__(self, expected_items, fp_rate):
+        super().__init__(expected_items, fp_rate)
+        self.count = 0
+
+    def add(self, item):
+        super().add(item)
+        self.count += 1
+
+    def __contains__(self, item):
+        return self.lookup(item)
+
+    def __len__(self):
+        return self.count
 
 
 class IVError(ValueError):
@@ -28,58 +45,36 @@ class IVError(ValueError):
 
 class IVStore(object):
 
-    def __init__(self, maxlen, timeout):
+    def __init__(self, maxlen):
         self.maxlen = maxlen
-        self.timeout = timeout
-        self.store = OrderedDict()
-        self.last_time_used = time.time()
+        self.store_0 = BloomFilter(self.maxlen, 0.001)
+        self.store_1 = BloomFilter(10, 0.001)
+        self.last_time_used = 0
 
     def add(self, item):
         self.last_time_used = time.time()
-        if random.random() < 0.01:
-            self._clean()
         if item in self:
             raise IVError
-        self.store[item] = self.last_time_used
-        while len(self.store) > self.maxlen:
-            self.store.popitem()
+        if len(self.store_0) > self.maxlen:
+            self.store_1 = self.store_0
+            self.store_0 = BloomFilter(self.maxlen, 0.001)
+        self.store_0.add(item)
 
     def __contains__(self, item):
-        try:
-            if self.store[item] < time.time() - self.timeout:
-                while True:
-                    a, _ = self.store.popitem()
-                    if a == item:
-                        break
-                return False
+        if item in self.store_0:
             return True
-        except KeyError:
-            return False
-
-    def _clean(self):
-        garbage = []
-        for k in self.store:
-            if self.store[k] < time.time() - self.timeout:
-                garbage.append(k)
-            else:
-                break
-        for k in garbage:
-            del self.store[k]
-
-    def __str__(self):
-        return str([k for k in self.store])
-
-    def __repr__(self):
-        return str([k for k in self.store])
+        if item in self.store_1:
+            return True
+        return False
 
 
 class IVChecker(object):
     # check reused iv, removing out-dated data automatically
 
-    def __init__(self, maxlen, timeout):
-        self.timeout = timeout * 10
+    def __init__(self, maxlen=50000, timeout=3600):
         # create a IVStore for each key
-        self.store = defaultdict(lambda: IVStore(maxlen, timeout * 2))
+        self.timeout = timeout
+        self.store = defaultdict(lambda: IVStore(maxlen))
 
     def check(self, key, iv):
         if random.random() < 0.01:

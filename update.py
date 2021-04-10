@@ -73,3 +73,31 @@ with zipfile.ZipFile('org.zip') as z:
             f.write(data)
 
 os.remove('org.zip')
+
+
+print('download hxsocks')
+
+urllib.request.urlretrieve('https://github.com/v3aqb/hxsocks/archive/master.zip', 'org.zip')
+
+if not os.path.isdir('fwlite/hxsocks'):
+    if os.path.exists('fwlite/hxsocks'):
+        os.remove('fwlite/hxsocks')
+    os.mkdir('fwlite/hxsocks')
+
+flist = glob.glob('fwlite/hxsocks/*.py')
+for f in flist:
+    os.remove(f)
+
+with zipfile.ZipFile('org.zip') as z:
+    namelist = z.namelist()
+    namelist = [name for name in namelist if '/hxsocks/' in name]
+    namelist = [name for name in namelist if not name.endswith('/')]
+
+    for name in namelist:
+        data = z.open(name).read()
+        _to = name.replace('hxsocks-master/', 'fwlite/')
+        print(_to)
+        with open(_to, 'wb') as f:
+            f.write(data)
+
+os.remove('org.zip')

@@ -134,7 +134,7 @@ def is_aead(method_):
 #         return buf
 
 
-IV_CHECKER = IVChecker(1048576, 3600)
+IV_CHECKER = IVChecker()
 
 
 class Chacha20IETF(object):
@@ -226,6 +226,7 @@ class EncryptorStream(object):
 
         self._encryptor = None
         self._decryptor = None
+        self.encrypt_once = self.encrypt
 
     def encrypt(self, data):
         if not data:
@@ -315,6 +316,7 @@ class AEncryptorAEAD(object):
             self.__key = EVP_BytesToKey(key, self._key_len)
         else:
             self.encrypt = self._encrypt
+        self.encrypt_once = self._encrypt
 
         self._encryptor = None
         self._encryptor_nonce = 0
@@ -338,7 +340,7 @@ class AEncryptorAEAD(object):
             okm += output_block
         return okm[:self._key_len]
 
-    def _encrypt(self, data, associated_data=None, data_len=None):
+    def _encrypt(self, data, associated_data=None, data_len=0):
         '''
         TCP Chunk (after encryption, *ciphertext*)
         +--------------+------------+

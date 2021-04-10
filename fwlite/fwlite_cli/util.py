@@ -22,6 +22,7 @@
 import re
 import io
 import struct
+import socket
 import configparser
 
 
@@ -110,3 +111,14 @@ def sizeof_fmt(num):
             return "%.1f%s" % (num, x)
         num /= 1024.0
     return "%.1f%s" % (num, 'TB')
+
+
+def get_port(addr, port=0):
+    try:
+        soc = socket.socket()
+        soc.bind((addr, port))
+        _, port = soc.getsockname()
+        soc.close()
+        return port
+    except OSError:
+        return 0

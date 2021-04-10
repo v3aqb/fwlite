@@ -95,6 +95,7 @@ class handler_factory:
         self.addr = addr
         self.port = port
         self.conf = conf
+        self.udp_enable = self.conf.udp_enable
 
         self.logger = logging.getLogger('fwlite_%d' % port)
         self.logger.setLevel(logging.INFO)
@@ -109,6 +110,16 @@ class handler_factory:
     async def handle(self, reader, writer):
         _handler = self._class(self)
         await _handler.handle(reader, writer)
+
+    def start(self):
+        server = asyncio.start_server(self.handle, self.addr, self.port)
+        asyncio.ensure_future(server)
+
+    def get_udp_proxy(self):
+        proxy = self.conf.parentlist.get(self.conf.udp_proxy)
+        if proxy is None:
+            self.logger.error('self.conf.udp_proxy %s is None', self.conf.udp_proxy)
+        return proxy
 
 
 class BaseProxyHandler(BaseHandler):
@@ -615,7 +626,8 @@ class http_handler(BaseProxyHandler):
                 self.wfile_write()
 
                 # start forwarding...
-                context = await self.forward()
+                context = ForwardContext(self.path)
+                context = await self.forward(context)
                 if context.timeout:
                     # no response from server
                     pass
@@ -680,12 +692,14 @@ class http_handler(BaseProxyHandler):
 
     do_HEAD = do_POST = do_PUT = do_DELETE = do_OPTIONS = do_PATCH = do_TRACE = do_GET
 
-    async def do_CONNECT(self):
+    async def do_CONNECT(self, socks5=False):
         self.close_connection = True
         if isinstance(self.path, bytes):
             self.path = self.path.decode('latin1')
 
-        if not self.socks5:
+        if socks5:
+            self.client_writer.write(b'\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00')
+        else:
             self._wfile_write(self.protocol_version.encode() + b" 200 Connection established\r\n\r\n")
 
         self.rbuffer = []

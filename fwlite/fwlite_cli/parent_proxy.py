@@ -49,10 +49,10 @@ class DefaultDict(dict):
 
 
 class ParentProxy:
-    VIA = None
     DIRECT = None
     DEFAULT_TIMEOUT = 8
     GATE = 0
+    via = None
     conf = None
 
     def __init__(self, name, proxy):
@@ -78,8 +78,8 @@ class ParentProxy:
         proxy_list = proxy.split('|')
         self.proxy = proxy
         if len(proxy_list) > 1:
-            self.VIA = ParentProxy('via', '|'.join(proxy_list[1:]))
-            self.VIA.name = '%s://%s:%s' % (self.VIA.scheme, self.VIA.hostname, self.VIA.port)
+            self.via = ParentProxy('via', '|'.join(proxy_list[1:]))
+            self.via.name = '%s://%s:%s' % (self.via.scheme, self.via.hostname, self.via.port)
         self.parse = urllib.parse.urlparse(proxy_list[0])
 
         self.scheme = self.parse.scheme
@@ -97,7 +97,7 @@ class ParentProxy:
         plugin = self.query.get('plugin', [None, ])[0]
         self.plugin_info = plugin.split(';') if plugin else None
         if self.plugin_info:
-            self.port = self.conf.plugin_manager.add(self._host_port, self.plugin_info, self.VIA)
+            self.port = self.conf.plugin_manager.add(self._host_port, self.plugin_info, self.via)
             self.hostname = '127.0.0.1'
 
         self.priority = int(float(priority))
@@ -144,15 +144,15 @@ class ParentProxy:
 
     @classmethod
     def set_via(cls, proxy):
-        cls.VIA = proxy
+        cls.via = proxy
         cls.DIRECT = cls('_DIRECT', 'direct -1')
 
     def get_via(self):
-        if self.VIA == self or self.plugin_info:
+        if self.via == self or self.plugin_info:
             return self.DIRECT
         if self.DIRECT == self:
             return None
-        return self.VIA
+        return self.via
 
     def __str__(self):
         return self.name or self.short

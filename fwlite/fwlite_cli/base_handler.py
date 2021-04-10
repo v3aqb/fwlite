@@ -16,9 +16,11 @@
 # You should have received a copy of the GNU General Public License
 # along with fwlite-cli.  If not, see <https://www.gnu.org/licenses/>.
 
+import sys
 import email
 import struct
 import socket
+import ipaddress
 from http.client import HTTPMessage
 from http.server import BaseHTTPRequestHandler
 from http import HTTPStatus
@@ -68,6 +70,12 @@ class BaseHandler(BaseHTTPRequestHandler):
     def __init__(self, server):  # pylint: disable=super-init-not-called
         # Not calling super-init, not for TCPServer
         self.server = server
+        self.server_addr = (self.server.addr, self.server.port)
+        response = b'\x05\x00\x00'
+        serverip = ipaddress.ip_address(self.server.addr)
+        response += b'\x01' if serverip.version == 4 else b'\x04'
+        response += serverip.packed
+        self.socks5_udp_response = response
         self.logger = server.logger
         self.requestline = ''
         self.request_version = ''
@@ -75,10 +83,9 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.close_connection = True
         self.req_count = 0
         self.path = ''
-        self.socks5 = False
         self.headers = None
 
-    async def handle(self, client_reader, client_writer):  # pylint: disable=W0221
+    async def handle(self, client_reader, client_writer):  # pylint: disable=W0221,W0236
         self.client_reader = client_reader
         self.client_writer = client_writer
         self.client_address = client_writer.get_extra_info('peername')
@@ -127,23 +134,25 @@ class BaseHandler(BaseHTTPRequestHandler):
 
     async def handle_socks5(self):
         self.pre_request_init()
-        self.socks5 = True
         self.command = 'CONNECT'
+        # Client greeting
         fut = self.client_reader.readexactly(1)
         auth_len = await asyncio.wait_for(fut, timeout=1)
         fut = self.client_reader.readexactly(auth_len[0])
         auth = await asyncio.wait_for(fut, timeout=1)
         if b'\x00' not in auth:
-            raise ValueError('socks5 auth not supported yet')
+            self.logger.error('socks5 auth not supported')
+            self.client_writer.write(b'\x05\xff')
+            return
         self.client_writer.write(b'\x05\x00')
+        # Client connection request
         fut = self.client_reader.readexactly(4)
         request = await asyncio.wait_for(fut, timeout=1)
-        assert request[1] == 1
         addrtype = request[3]
         if addrtype == 1:  # ipv4
             fut = self.client_reader.readexactly(4)
             addr = await asyncio.wait_for(fut, timeout=1)
-            addr = socket.inet_ntoa(addr).decode()
+            addr = socket.inet_ntoa(addr)
         elif addrtype == 3:  # hostname
             fut = self.client_reader.readexactly(1)
             addrlen = await asyncio.wait_for(fut, timeout=1)
@@ -153,25 +162,57 @@ class BaseHandler(BaseHTTPRequestHandler):
         elif addrtype == 4:  # ipv6
             fut = self.client_reader.readexactly(16)
             addr = await asyncio.wait_for(fut, timeout=1)
-            addr = socket.inet_ntop(socket.AF_INET6, addr).decode()
+            addr = socket.inet_ntop(socket.AF_INET6, addr)
             addr = '[' + addr + ']'
+        else:
+            self.logger.error('socks5 bad addr type')
+            self.client_writer.write(b'\x05\x08\x00\x01\x00\x00\x00\x00\x00\x00')
+            return
         fut = self.client_reader.readexactly(2)
         port = await asyncio.wait_for(fut, timeout=1)
         port = struct.unpack(b">H", port)[0]
 
+        if request[1] == 2:
+            self.logger.error('socks5 BIND not supported')
+            self.client_writer.write(b'\x05\x07\x00\x01\x00\x00\x00\x00\x00\x00')
+            return
+        if request[1] == 3:
+            if sys.platform == 'win32' and sys.version < '3.8':
+                self.logger.error('socks5 UDP ASSOCIATE not supported')
+                # self.client_writer.write(b'\x05\x07\x00\x01\x00\x00\x00\x00\x00\x00')
+                return
+            if not self.server.udp_enable:
+                self.logger.error('socks5 UDP ASSOCIATE not enable')
+                # self.client_writer.write(b'\x05\x07\x00\x01\x00\x00\x00\x00\x00\x00')
+                return
+            await self.relay_udp()
+            return
         # gather request info for CONNECT method...
         self.path = '%s:%s' % (addr, port)
 
-        # tell client connected
-        self.client_writer.write(b'\x05\x00\x00\x01\x00\x00\x00\x00\x01\x01')
-
-        await self.do_CONNECT()  # pylint: disable=E1101
+        await self.do_CONNECT(socks5=True)  # pylint: disable=E1101
         try:
             await self.client_writer.drain()
         except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
             self.close_connection = True
 
-    async def handle_one_request(self, first_byte=b''):  # pylint: disable=W0221
+    async def relay_udp(self):
+        from .socks5udp import socks5_udp
+        proxy = self.server.get_udp_proxy()
+        udp_server = socks5_udp(self, proxy, 60)
+        await udp_server.close_event.wait()
+
+    def write_udp_reply(self, port):
+        buf = self.socks5_udp_response + struct.pack(b'>H', port)
+        self.client_writer.write(buf)
+
+    async def wait_close(self):
+        while True:
+            data = await self.client_reader.read()
+            if not data:
+                break
+
+    async def handle_one_request(self, first_byte=b''):  # pylint: disable=W0221,W0236
         self.pre_request_init()
 
         try:

@@ -24,9 +24,9 @@
        <locale language="English" country="UnitedStates"/>
       </property>
       <property name="currentIndex">
-       <number>5</number>
+       <number>0</number>
       </property>
-      <widget class="QWidget" name="tab">
+      <widget class="QWidget" name="tab_log">
        <attribute name="title">
         <string>Log</string>
        </attribute>
@@ -49,7 +49,7 @@
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tab_2">
+      <widget class="QWidget" name="tab_localrules">
        <attribute name="title">
         <string>Local Rules</string>
        </attribute>
@@ -64,8 +64,8 @@
             <rect>
              <x>0</x>
              <y>0</y>
-             <width>80</width>
-             <height>20</height>
+             <width>706</width>
+             <height>353</height>
             </rect>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_5">
@@ -167,7 +167,7 @@
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tab_3">
+      <widget class="QWidget" name="tab_redirrules">
        <attribute name="title">
         <string>Redirector Rules</string>
        </attribute>
@@ -182,8 +182,8 @@
             <rect>
              <x>0</x>
              <y>0</y>
-             <width>80</width>
-             <height>20</height>
+             <width>706</width>
+             <height>384</height>
             </rect>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_7">
@@ -261,7 +261,7 @@
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tab_4">
+      <widget class="QWidget" name="tab_proxylist">
        <attribute name="title">
         <string>ProxyList</string>
        </attribute>
@@ -515,7 +515,7 @@
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tab_5">
+      <widget class="QWidget" name="tab_portforward">
        <property name="enabled">
         <bool>true</bool>
        </property>
@@ -632,7 +632,7 @@
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tab_6">
+      <widget class="QWidget" name="tab_settings">
        <attribute name="title">
         <string>Settings</string>
        </attribute>

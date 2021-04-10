@@ -50,6 +50,7 @@ class MainWindow(QMainWindow):
         self.tray.show()
         self.consoleText = deque(maxlen=300)
         self.runner = QProcess(self)
+        self.refresh_op = []
 
         # log
         self.ui.console.setWordWrapMode(3)
@@ -131,6 +132,8 @@ class MainWindow(QMainWindow):
         self.conf.optionxform = str
         self.conf.read(self.path_to_conf)
         listen = self.conf['FWLite'].get('listen', '8118')
+        if not listen:
+            listen = '8118'
         port = int(listen) if listen.isdigit() else int(listen.split(':')[1])
         self.ieproxy = self.conf['FWLite'].getboolean('ieproxy', True)
 
@@ -474,7 +477,7 @@ class MainWindow(QMainWindow):
     def adblockToggle(self):
         try:
             req = Request(
-                'http://127.0.0.1:%d/api/gfwlist' % self.port,
+                'http://127.0.0.1:%d/api/adblock' % self.port,
                 json.dumps(self.ui.adblockToggle.isChecked()).encode(),
                 headers=self.api_auth)
             urlopen(req, timeout=1).read()
@@ -649,8 +652,9 @@ class MainWindow(QMainWindow):
             elif '<DNS Question:' in line:
                 lines.remove(line)
         self.consoleText.extend(lines)
-        self.ui.console.setPlainText(u'\n'.join(self.consoleText))
-        self.ui.console.moveCursor(QtGui.QTextCursor.End)
+        if self.isVisible():
+            self.ui.console.setPlainText(u'\n'.join(self.consoleText))
+            self.ui.console.moveCursor(QtGui.QTextCursor.End)
         if freload:
             self.reload(clear=False)
 
@@ -660,28 +664,50 @@ class MainWindow(QMainWindow):
             return
         data = data.decode()
         data_list = data.splitlines(keepends=False)
-        if 'all' in data_list or '' in data_list:
-            self.refresh_LR()
-            self.refresh_RR()
-            self.refresh_proxyList()
-            self.refresh_forwardList()
-            self.refresh_Settings()
-            return
-        if 'local' in data_list:
-            self.refresh_LR()
-        if 'redir' in data_list:
-            self.refresh_RR()
-        if 'proxy' in data_list:
-            self.refresh_proxyList()
-        if 'forward' in data_list:
-            self.refresh_forwardList()
-        if 'settings' in data_list:
-            self.refresh_Settings()
+        for line in data_list:
+            if line.startswith('Fwlite port: '):
+                port = int(line[13:])
+                if port != self.port:
+                    self.port = port
+                    if sys.platform.startswith('win') and self.ieproxy:
+                        setIEproxy(1, u'127.0.0.1:%d' % self.port)
+            elif line == 'all':
+                for operation in [self.refresh_LR,
+                                  self.refresh_RR,
+                                  self.refresh_proxyList,
+                                  self.refresh_forwardList,
+                                  self.refresh_Settings]:
+                    if operation not in self.refresh_op:
+                        self.refresh_op.append(operation)
+            elif line == 'local':
+                if self.refresh_LR not in self.refresh_op:
+                    self.refresh_op.append(self.refresh_LR)
+            elif line == 'redir':
+                if self.refresh_RR not in self.refresh_op:
+                    self.refresh_op.append(self.refresh_RR)
+            elif line == 'proxy':
+                if self.refresh_proxyList not in self.refresh_op:
+                    self.refresh_op.append(self.refresh_proxyList)
+            elif line == 'forward':
+                if self.refresh_forwardList not in self.refresh_op:
+                    self.refresh_op.append(self.refresh_forwardList)
+            elif line == 'settings':
+                if self.refresh_Settings not in self.refresh_op:
+                    self.refresh_op.append(self.refresh_Settings)
+        if self.isVisible():
+            for operation in self.refresh_op:
+                operation()
+                self.refresh_op.remove(operation)
 
     def showToggle(self):
         if self.isVisible():
             self.hide()
         else:
+            for operation in self.refresh_op:
+                operation()
+                self.refresh_op.remove(operation)
+            self.ui.console.setPlainText(u'\n'.join(self.consoleText))
+            self.ui.console.moveCursor(QtGui.QTextCursor.End)
             self.ui.tabWidget.setCurrentIndex(0)
             self.show()
             if self.isMinimized():
