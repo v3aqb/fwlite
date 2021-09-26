@@ -22,7 +22,6 @@ import os
 import socket
 import struct
 import logging
-import re
 import io
 import time
 import traceback
@@ -30,83 +29,19 @@ import urllib.parse
 import random
 import hashlib
 import hmac
-from collections import defaultdict, deque
 
 import asyncio
 import asyncio.streams
 
-from hxcrypto import BufEmptyError, InvalidTag, IVError, is_aead, Encryptor, ECC, compare_digest
+from hxcrypto import BufEmptyError, InvalidTag, IVError, is_aead, Encryptor, ECC
 from .hxs2_conn import Hxs2Connection
-from .util import open_connection
+from .util import open_connection, parse_hostport
 
 
 DEFAULT_METHOD = 'aes-128-cfb'
 DEFAULT_HASH = 'SHA256'
 MAC_LEN = 16
 CTX = b'hxsocks'
-
-
-def parse_hostport(host, default_port=80):
-    m = re.match(r'(.+):(\d+)$', host)
-    if m:
-        return m.group(1).strip('[]'), int(m.group(2))
-    return host.strip('[]'), default_port
-
-
-class UserManager:
-    def __init__(self, server_cert, limit=10):
-        '''server_cert: path to server_cert'''
-        self.SERVER_CERT = ECC(from_file=server_cert)
-        self._limit = limit
-        self.user_pass = {}
-        self.userpkeys = defaultdict(deque)  # user name: client key
-        self.pkeyuser = {}  # user pubkey: user name
-        self.pkeykey = {}   # user pubkey: shared secret
-
-    def add_user(self, user, password):
-        self.user_pass[user] = password
-
-    def remove_user(self, user):
-        del self.user_pass[user]
-
-    def iter_user(self):
-        return self.user_pass.items()
-
-    def key_xchange(self, user, user_pkey, key_len):
-        # return public_key, passwd_of_user
-        if hashlib.md5(user_pkey).digest() in self.pkeyuser:
-            raise ValueError('public key already registered. user: %s' % user)
-        if len(self.userpkeys[user]) > self._limit:
-            raise ValueError('connection limit exceeded. user: %s' % user)
-        ecc = ECC(key_len)
-        shared_secret = ecc.get_dh_key(user_pkey)
-        user_pkey_md5 = hashlib.md5(user_pkey).digest()
-        self.userpkeys[user].append(user_pkey_md5)
-        self.pkeyuser[user_pkey_md5] = user
-        self.pkeykey[user_pkey_md5] = shared_secret
-        return ecc.get_pub_key(), self.user_pass[user]
-
-    def del_key(self, pkey):
-        user = self.pkeyuser[pkey]
-        del self.pkeyuser[pkey]
-        del self.pkeykey[pkey]
-        self.userpkeys[user].remove(pkey)
-
-    def get_skey_by_pubkey(self, pubkey):
-        return self.pkeykey[pubkey]
-
-    def user_access_ctrl(self, server_port, host, ipaddr, user='ss'):
-        # access control, called before each request
-        # int server_port
-        # str host: requested hostname
-        # str ipaddr: client ipaddress
-        # raise ValueError if denied
-        pass
-
-    def user_access_log(self, server_port, host, traffic, ipaddr, user='ss'):
-        # log user access, called after each request
-        # traffic: (upload, download) in bytes
-        pass
 
 
 class ForwardContext:
@@ -149,8 +84,7 @@ class HandlerFactory:
         self.logger = logging.getLogger('hxs_%d' % self.address[1])
         self.logger.setLevel(int(query.get('log_level', [log_level])[0]))
         hdr = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s %(name)s:%(levelname)s %(message)s',
-                                      datefmt='%H:%M:%S')
+        formatter = logging.Formatter('%(asctime)s %(name)s:%(levelname)s %(message)s')
         hdr.setFormatter(formatter)
         self.logger.addHandler(hdr)
 
@@ -171,6 +105,7 @@ class HXsocksHandler:
         self.address = self.server.address
 
         self.encryptor = Encryptor(self.server.psk, self.server.method)
+        self.__key = self.server.psk
         self._buf = b''
 
         self.client_address = None
@@ -214,7 +149,7 @@ class HXsocksHandler:
         client_writer.close()
 
     async def _handle(self, client_reader, client_writer):
-        self.client_address = client_writer.get_extra_info('peername')[0]
+        self.client_address = client_writer.get_extra_info('peername')
         self.client_reader = client_reader
         self.logger.debug('incoming connection %s', self.client_address)
 
@@ -260,7 +195,7 @@ class HXsocksHandler:
             req_len, = struct.unpack('>H', req_len)
             data = await self.read(req_len)
             data = io.BytesIO(data)
-            ts = int(time.time()) // 30
+            ts_ = int(time.time()) // 30
 
             pklen = data.read(1)[0]
             client_pkey = data.read(pklen)
@@ -269,23 +204,13 @@ class HXsocksHandler:
             def _send(data):
                 if self.encryptor._encryptor:
                     data = struct.pack('>H', len(data)) + data
-                    ct = self.encryptor.encrypt(data)
-                    client_writer.write(struct.pack('>H', len(ct)) + ct)
+                    ciphertext = self.encryptor.encrypt(data)
+                    client_writer.write(struct.pack('>H', len(ciphertext)) + ciphertext)
                 else:
                     data = struct.pack('>H', len(data)) + data
                     client_writer.write(self.encryptor.encrypt(data))
 
-            def auth():
-                for _ts in [ts, ts - 1, ts + 1]:
-                    for user, passwd in self.user_mgr.iter_user():
-                        h = hmac.new(passwd.encode(),
-                                     struct.pack('>I', _ts) + client_pkey + user.encode(),
-                                     hashlib.sha256).digest()
-                        if compare_digest(h, client_auth):
-                            return user
-                return None
-
-            client = auth()
+            client = self.user_mgr.hxs2_auth(ts_, client_pkey, client_auth)
             if not client:
                 self.logger.error('user not found. %s', self.client_address)
                 await self.play_dead()
@@ -293,10 +218,10 @@ class HXsocksHandler:
             try:
                 pkey, passwd = self.user_mgr.key_xchange(client, client_pkey, self.encryptor._key_len)
                 self.logger.info('new key exchange. client: %s %s', client, self.client_address)
-                h = hmac.new(passwd.encode(), client_pkey + pkey + client.encode(), hashlib.sha256).digest()
+                hash_ = hmac.new(passwd.encode(), client_pkey + pkey + client.encode(), hashlib.sha256).digest()
                 scert = self.user_mgr.SERVER_CERT.get_pub_key()
-                signature = self.user_mgr.SERVER_CERT.sign(h, DEFAULT_HASH)
-                data = bytes((0, len(pkey), len(scert), len(signature))) + pkey + h + scert + signature + os.urandom(rint)
+                signature = self.user_mgr.SERVER_CERT.sign(hash_, DEFAULT_HASH)
+                data = bytes((0, len(pkey), len(scert), len(signature))) + pkey + hash_ + scert + signature + os.urandom(rint)
                 _send(data)
 
                 client_pkey = hashlib.md5(client_pkey).digest()
@@ -355,7 +280,7 @@ class HXsocksHandler:
 
         # access control
         try:
-            self.user_mgr.user_access_ctrl(self.address[1], addr, self.client_address)
+            self.user_mgr.user_access_ctrl(self.address[1], addr, self.client_address, self.__key)
         except ValueError as err:
             self.logger.error('access denied! %s:%s, %s %s', addr, port, err)
             return
@@ -384,7 +309,7 @@ class HXsocksHandler:
 
         # access log
         traffic = (context.traffic_from_client, context.traffic_from_remote)
-        self.user_mgr.user_access_log(self.address[1], addr, traffic, self.client_address)
+        self.user_mgr.user_access_log(self.address[1], addr, traffic, self.client_address, self.__key)
 
     async def ss_forward_a(self, write_to, context, timeout=60):
         # data from ss client, decrypt, sent to remote

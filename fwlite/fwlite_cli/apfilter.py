@@ -305,7 +305,9 @@ def test():
     print('10000 query for %s, %fs' % (url, time.perf_counter() - t))
     print('O(1): %d' % (len(gfwlist.rules) - (len(gfwlist.excludes) + len(gfwlist.slow))))
     print('O(n): %d' % (len(gfwlist.excludes) + len(gfwlist.slow)))
+    print('domain rules: %d' % len(gfwlist.domains))
     print('total: %d' % len(gfwlist.rules))
+
     fast_key_list = gfwlist.fast.keys()
     fast_key_list = sorted(fast_key_list, key=lambda x: len(gfwlist.fast[x]))
     for key in fast_key_list[-10:]:

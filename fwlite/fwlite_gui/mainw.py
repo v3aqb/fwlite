@@ -5,6 +5,7 @@ import copy
 import json
 import base64
 import operator
+import re
 import subprocess
 import traceback
 import configparser
@@ -32,6 +33,15 @@ urlopen = opener.open
 
 SUPPORTED_PLUGIN = ['', ]
 SUPPORTED_PROTOCOL = ['shadowsocks', 'hxsocks2', 'http', 'socks5']
+
+
+def parse_hostport(host, default_port=0):
+    if isinstance(host, bytes):
+        host = host.decode()
+    match = re.match(r'(.+):(\d+)$', host)
+    if match:
+        return match.group(1).strip('[]'), int(match.group(2))
+    return host.strip('[]'), default_port
 
 
 class MainWindow(QMainWindow):
@@ -249,8 +259,8 @@ class MainWindow(QMainWindow):
         plugin_opt = self.ui.plugin_optEdit.text()
         via = self.ui.viaEdit.text()
 
-        if not port.isdigit():
-            return
+        if not port:
+            hostname, port = parse_hostport(hostname)
 
         if protocol == 'shadowsocks':
             protocol = 'ss'
@@ -272,7 +282,10 @@ class MainWindow(QMainWindow):
 
         qs = {}
         urlquote = urllib.parse.quote
-        if protocol == 'ss':
+
+        if not port:
+            url = hostname
+        elif protocol == 'ss':
             userinfo = '%s:%s' % (encryption, psk)
             userinfo = base64.b64encode(userinfo.encode()).decode()
             url = 'ss://%s@%s:%s/' % (userinfo, hostname, port)
@@ -412,6 +425,7 @@ class MainWindow(QMainWindow):
         self.ui.pskEdit.setText('')
         self.ui.usernameEdit.setText('')
         self.ui.passwordEdit.setText('')
+        self.ui.portEdit.setText('')
 
         if '|' in proxy:
             proxy_list = proxy.split('|')
@@ -447,8 +461,9 @@ class MainWindow(QMainWindow):
             self.ui.usernameEdit.setText(parse.username)
             self.ui.passwordEdit.setText(parse.password)
 
-        self.ui.hostnameEdit.setText(parse.hostname)
-        self.ui.portEdit.setText(str(parse.port))
+        self.ui.hostnameEdit.setText(parse.hostname or parse.path)
+        if parse.port:
+            self.ui.portEdit.setText(str(parse.port))
         self.ui.viaEdit.setText(via)
 
         # plugin

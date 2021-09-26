@@ -218,11 +218,12 @@ class EncryptorStream(object):
             password = password.encode('utf8')
 
         self.method = method
-        self._key_len, self._iv_len, _aead = METHOD_SUPPORTED.get(method)
+        self.key_len, self.iv_len, _aead = METHOD_SUPPORTED.get(method)
+        self._key_len, self._iv_len = self.key_len, self.iv_len  # for backword compatible
         if _aead:
             raise ValueError('AEAD method is not supported by Encryptor class!')
 
-        self.__key = EVP_BytesToKey(password, self._key_len)
+        self.__key = EVP_BytesToKey(password, self.key_len)
 
         self._encryptor = None
         self._decryptor = None
@@ -300,7 +301,8 @@ class AEncryptorAEAD(object):
         if method not in METHOD_SUPPORTED:
             raise ValueError('encryption method not supported')
 
-        self._key_len, self._iv_len, _aead = METHOD_SUPPORTED.get(method)
+        self.key_len, self.iv_len, _aead = METHOD_SUPPORTED.get(method)
+        self._key_len, self._iv_len = self.key_len, self.iv_len  # for backword compatible
         if not _aead:
             raise ValueError('non-AEAD method is not supported by AEncryptor_AEAD class!')
 
@@ -313,7 +315,7 @@ class AEncryptorAEAD(object):
             self.encrypt = self.encrypt_ss
             if not isinstance(key, bytes):
                 key = key.encode('utf8')
-            self.__key = EVP_BytesToKey(key, self._key_len)
+            self.__key = EVP_BytesToKey(key, self.key_len)
         else:
             self.encrypt = self._encrypt
         self.encrypt_once = self._encrypt
@@ -329,7 +331,7 @@ class AEncryptorAEAD(object):
         prk = hmac.new(iv, key, algo).digest()
 
         hash_len = algo().digest_size
-        blocks_needed = self._key_len // hash_len + (1 if self._key_len % hash_len else 0)  # ceil
+        blocks_needed = self.key_len // hash_len + (1 if self.key_len % hash_len else 0)  # ceil
         okm = b""
         output_block = b""
         for counter in range(blocks_needed):
@@ -338,7 +340,7 @@ class AEncryptorAEAD(object):
                                     algo
                                     ).digest()
             okm += output_block
-        return okm[:self._key_len]
+        return okm[:self.key_len]
 
     def _encrypt(self, data, associated_data=None, data_len=0):
         '''

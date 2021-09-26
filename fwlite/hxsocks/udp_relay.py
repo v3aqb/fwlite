@@ -97,8 +97,7 @@ class udp_relay_server:
         self.logger = logging.getLogger('ssudp_%d' % self.server_addr[1])
         self.logger.setLevel(logging.INFO)
         hdr = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s %(name)s:%(levelname)s %(message)s',
-                                      datefmt='%H:%M:%S')
+        formatter = logging.Formatter('%(asctime)s %(name)s:%(levelname)s %(message)s')
         hdr.setFormatter(formatter)
         self.logger.addHandler(hdr)
 

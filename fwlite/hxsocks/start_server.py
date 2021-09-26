@@ -7,7 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import yaml
 
-from .server import HandlerFactory, HXsocksHandler, UserManager, ECC
+from .server import HandlerFactory, HXsocksHandler, ECC
+from .user_manager import UserManager
 from .udp_relay import udp_relay_server
 
 

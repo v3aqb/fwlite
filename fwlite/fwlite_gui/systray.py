@@ -39,6 +39,7 @@ def setIEproxy(enable, proxy=u'', override=u'<local>'):
     winreg.SetValueEx(INTERNET_SETTINGS, 'ProxyServer', 0, winreg.REG_SZ, proxy)
     winreg.SetValueEx(INTERNET_SETTINGS, 'ProxyOverride', 0, winreg.REG_SZ, override)
 
+    ctypes.windll.Wininet.InternetSetOptionW(0, 37, 0, 0)
     ctypes.windll.Wininet.InternetSetOptionW(0, 39, 0, 0)
 
 
@@ -188,7 +189,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         QProcess(self).start(cmd)
 
     def on_Quit(self):
-        if sys.platform.startswith('win') and self.window.ieproxy == 1:
+        if sys.platform.startswith('win'):
             setIEproxy(0)
         self.window.killProcess()
         self.hide()

@@ -45,7 +45,7 @@ NON_SIP003 = ['kcptun']
 def is_udp(plugin_info):
     if plugin_info[0] == 'kcptun':
         return True
-    if plugin_info[0] == 'v2ray-plugin':
+    if 'ray-plugin' in plugin_info[0]:
         if 'mode=quic' in plugin_info:
             return True
     return False
@@ -57,10 +57,13 @@ def find_path(path):
             from ctypes.util import find_library
             if find_library(path):
                 return path
+        if os.path.exists(path):
+            return path
         new_path = '../' + path
         if os.path.exists(new_path):
             return new_path
-    logger.warning('%s not exist.', path)
+    if not os.path.exists(path):
+        logger.warning('%s not exist.', path)
     return path
 
 
@@ -70,6 +73,8 @@ def plugin_register(plugin, path):
         return
     if not os.path.exists(path):
         path = find_path(path)
+    if not os.path.isabs(path):
+        path = './' + path
     logger.info('register plugin: %s %s', plugin, path)
     PLUGIN_PATH[plugin] = path
 

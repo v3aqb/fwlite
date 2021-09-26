@@ -101,3 +101,18 @@ with zipfile.ZipFile('org.zip') as z:
             f.write(data)
 
 os.remove('org.zip')
+
+urllib.request.urlretrieve('https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt', './conf/gfwlist.txt')
+
+with open('./conf/gfwlist.txt') as f:
+    data = f.read()
+    if '!' not in data:
+        import base64
+        data = ''.join(data.split())
+        data = base64.b64decode(data).decode()
+with open('./conf/gfwlist.txt', 'w') as f:
+    f.write(data)
+
+urllib.request.urlretrieve('https://github.com/17mon/china_ip_list/raw/master/china_ip_list.txt', './conf/china_ip_list.txt')
+
+urllib.request.urlretrieve('https://cdn.jsdelivr.net/gh/neoFelhz/neohosts@gh-pages/basic/hosts', './conf/adblock.txt')

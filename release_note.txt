@@ -1,3 +1,11 @@
+2021.9.28 v5.1.1
+improve proxy chain
+improve hxsocks2
+update kcptun
+add xray-plugin
+update gfwlist
+update china-ip-list
+
 2021.4.10 v5.0
 fix gui start crash
 add hxsocks server
@@ -5,6 +13,122 @@ add socks5 udp associate support
 add random listening port (if port == 0)
 
 2020.12.31 v5-beta26
+support shadowsocks subscription (test pending)
+mark esni1 as gfwed
+improve hxsocks2 efficiency
+update plugins to date
+
+2020.5.9 v5-beta25
+add DNS cache
+increase thread pool size
+add start on startup option
+update to python 3.8.2
+
+2020.4.6 v5-beta24
+fix resolver
+
+2020.3.23 v5-beta23
+update hxcrypto: enable ofb and ctr mode
+update fwlite-cli
+update fwlite-gui
+update kcptun to 20200226
+update v2ray-plugin to v1.3.0
+update cloak to 2.1.3
+
+2020.2.9 v5-beta22
+fix http/1.0
+
+2019.12.20 v5-beta21
+update fwlite-cli
+update fwlite-gui
+
+2019.10.8 v5-beta20
+hxsocks2 multi connection
+increase bufsize
+other bug fix
+
+2019.8.3 v5-beta19
+fix big file upload
+
+2019.8.2 v5-beta18
+fix ip_in_china
+
+2019.7.24 v5-beta17
+fix hxsocks file upload problem
+
+2019.7.20 v5-beta16
+disable HOSTS on chnroute mode
+
+2019.6.8 v5-beta15
+fix http proxy basic auth
+add auto system proxy setting toggle
+update gfwlist
+
+2019.5.22 v5-beta14
+fix plugin support
+fix resolver
+adjust timeout
+
+2019.5.14 v5-beta13
+fix #67: ipv6 problem
+
+2019.5.13 v5-beta12
+update gfwlist.txt, adblock.txt and china_ip_list.txt
+download gfwlist.txt when missing
+update config sample
+update GUI
+
+2019.4.2 v5-beta11
+pack in gfwlist.txt, adblock.txt and china_ip_list.txt
+reduce sensitivity
+
+2019.2.27 v5-beta10
+support plugin over proxy(TCP only)
+update GUI: add resolver
+fix gfwlist toggle
+
+2019.2.21 v5-beta9
+update GUI
+update SIP003 support
+add v2ray-plugin
+
+2019.1.30 v5-beta8
+update to python 3.7.2 amd64
+trim pyqt5
+
+2019.1.29 v5-beta7
+ADD port forward
+use ipip china-ip-list instead of apnic-latest
+refine logging
+protect internal proxy from user setting
+reduce GUI CPU usage
+show proxy response time in GUI
+
+2019.1.24 v5-beta6
+add adblock
+fix LAN require proxy
+
+2019.1.19 v5-beta5
+adjust timeout, prevent unnecessary retry
+edit proxy with GUI, keeping proxy chain
+
+2019.1.16 v5-beta4
+update python
+update gfwlist
+fix crash on empty header request
+fix hxsocks2 big file download
+
+2019.1.15 v5-beta3
+edit proxy with GUI
+
+2019.1.9 v5-beta2
+fix GUI connection problem
+fix ZeroDivisionError
+fix socks5 support
+prevent frequent proxy change
+
+2018.12.30 v5-beta1
+init release2020.12.31 v5-beta26
 support shadowsocks subscription (test pending)
 mark esni1 as gfwed
 improve hxsocks2 efficiency

@@ -6,7 +6,7 @@ Portable package of fwlite-cli and fwlite-gui for windows.
 
 Executables of supported plugins included.
 
-2021.4.10 v5.0
+2021.9.28 v5.1.1
 
 #### Features
 
@@ -73,6 +73,7 @@ v2ray-plugin (MIT)     https://github.com/shadowsocks/v2ray-plugin
 kcptun (MIT)           https://github.com/xtaci/kcptun
 GoQuiet (GPLv3)        https://github.com/cbeuw/GoQuiet
 Cloak (GPLv3)          https://github.com/cbeuw/Cloak
+xray-plugin (MIT)      https://github.com/teddysun/xray-plugin
 ```
 
 [release page]: https://github.com/v3aqb/fwlite/releases

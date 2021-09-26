@@ -25,6 +25,7 @@ import base64
 import logging
 import logging.handlers
 import traceback
+import asyncio
 import urllib.request
 import urllib.parse
 from collections import defaultdict, deque
@@ -201,7 +202,6 @@ class Config:
         self.userconf = SConfigParser(interpolation=None)
 
         self.hello()
-        self.reload()
 
     def init(self):
         self.timeout = 4
@@ -239,9 +239,9 @@ class Config:
             self.logger.error('unsupported host: %s', ip)
             self.logger.error(traceback.format_exc())
 
-    def reload(self, conf_path=None):
+    def reload(self, plugin_dir=None):
         self.init()
-        self.conf_path = os.path.abspath(conf_path or self.conf_path)
+        self.conf_path = os.path.abspath(self.conf_path)
         self.conf_dir = os.path.dirname(self.conf_path)
         os.chdir(self.conf_dir)
         self.local_path = os.path.join(self.conf_dir, 'local.txt')
@@ -282,6 +282,8 @@ class Config:
         self.udp_proxy = self.userconf.dget('udp', 'proxy', '_D1R3CT_')
 
         for key, val in self.userconf.items('plugin'):
+            if plugin_dir:
+                val = os.path.join(plugin_dir, val)
             plugin_register(key, val)
 
         self.plugin_manager = PluginManager(self)
@@ -422,7 +424,7 @@ class Config:
         proxy = self.parentlist.get('FWLITE:' + self.profile[0])
 
         file_list = {self.gfwlist_path: self.userconf.dget('FWLite', 'gfwlist_url', 'https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt'),
-                     self.china_ip_path: 'https://github.com/17mon/china_ip_list/raw/master/china_ip_list.txt',
+                     self.china_ip_path: self.userconf.dget('FWLite', 'china_ip_list', 'https://github.com/17mon/china_ip_list/raw/master/china_ip_list.txt'),
                      self.adblock_path: self.userconf.dget('FWLite', 'adblock_url', 'https://cdn.jsdelivr.net/gh/neoFelhz/neohosts@gh-pages/basic/hosts')
                      }
 
@@ -434,9 +436,17 @@ class Config:
             except Exception:
                 self.logger.warning('download "%s" failed!', file_name)
                 open(path, 'a').close()
+            else:
+                if path == self.gfwlist_path:
+                    with open(self.gfwlist_path) as f:
+                        data = f.read()
+                        if '!' not in data:
+                            data = ''.join(data.split())
+                            data = base64.b64decode(data).decode()
+                    with open(self.gfwlist_path, 'w') as f:
+                        f.write(data)
 
         task_list = []
-        import asyncio
         loop = asyncio.get_event_loop()
 
         for path, url in file_list.items():
@@ -541,9 +551,17 @@ class Config:
     def del_forward(self, port):
         self.port_forward.stop(port)
 
-    def on_exit(self):
+    def stop(self):
         self.plugin_manager.cleanup()
-        self.loop.stop()
+        self.port_forward.stop_all()
+        self.stop_fwlite()
+
+    def stop_fwlite(self):
+        async def stop(server):
+            server.close()
+            await server.wait_closed()
+        for server in self.server_list:
+            asyncio.ensure_future(stop(server))
 
     def start_server(self):
         from .proxy_handler import handler_factory, http_handler
@@ -567,10 +585,12 @@ class Config:
         if not self.userconf.dget('FWLite', 'pac', ''):
             self.PAC = PAC.replace('__PROXY__', 'PROXY %s:%s' % (self.local_ip, self.listen[1])).encode()
 
+        self.server_list = []
         for i, profile in enumerate(self.profile):
             profile = int(profile)
             server = handler_factory(addr, port + i, http_handler, profile, self)
             server.start()
+            self.server_list.append(server)
 
         if os.path.exists(os.path.join(self.conf_dir, 'hxsocks.yaml')):
             try:
@@ -579,9 +599,15 @@ class Config:
             except Exception as err:
                 self.logger.error(repr(err))
                 self.logger.error(traceback.format_exc())
+        return server
 
     def set_loop(self):
         import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
         loop = asyncio.get_event_loop()
         if sys.platform == 'win32' and not isinstance(loop, asyncio.ProactorEventLoop):
             # since python 3.8, ProactorEventLoop is default loop
@@ -595,9 +621,11 @@ class Config:
 
     def start(self):
         self.set_loop()
-        self.start_server()
+        server = self.start_server()
         self.register_proxy_n_forward()
-        self.loop.run_until_complete(self.post_start())
+        asyncio.ensure_future(self.post_start())
+        import fwlite_cli.resolver
+        asyncio.ensure_future(fwlite_cli.resolver.DC._purge())
         self.loop.run_forever()
         self.logger.info('start() ended')
 

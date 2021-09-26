@@ -47,8 +47,6 @@ class DNSCache:
         self.timerwheel_iter = itertools.cycle(range(self.count))
         self.timerwheel_index = next(self.timerwheel_iter)
 
-        asyncio.ensure_future(self._purge())
-
     def put(self, domain, result):
         # soc: (reader, writer)
         if isinstance(result, Exception):

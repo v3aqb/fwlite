@@ -18,8 +18,16 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import re
 import asyncio
 import ipaddress
+
+
+def parse_hostport(host, default_port=80):
+    m = re.match(r'(.+):(\d+)$', host)
+    if m:
+        return m.group(1).strip('[]'), int(m.group(2))
+    return host.strip('[]'), default_port
 
 
 async def get_ip_address(host):

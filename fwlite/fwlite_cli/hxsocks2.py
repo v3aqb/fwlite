@@ -59,7 +59,7 @@ DEFAULT_METHOD = 'aes-128-cfb'
 DEFAULT_HASH = 'sha256'
 CTX = b'hxsocks2'
 MAX_STREAM_ID = 65530
-MAX_CONNECTION = 4
+MAX_CONNECTION = 2
 
 OPEN = 0
 EOF_SENT = 1   # SENT END_STREAM
@@ -412,7 +412,7 @@ class Hxs2Connection:
                     self._last_count = 0
                 self._last_count += 1
 
-                if self._last_count > 10 and random.random() < 0.01:
+                if self._last_count > 10 and random.random() < 0.1:
                     await self.send_frame(PING, PONG, 0, bytes(random.randint(64, 256)))
 
                 if frame_type == DATA:  # 0
@@ -468,6 +468,9 @@ class Hxs2Connection:
                 elif frame_type == RST_STREAM:  # 3
                     self._last_active_c = time.monotonic()
                     self._stream_status[stream_id] = CLOSED
+                    if stream_id in self._client_status:
+                        self._stream_status[stream_id] = CLOSED
+                        self._client_status[stream_id].set()
                     if stream_id in self._client_writer:
                         self._client_writer[stream_id].close()
                         del self._client_writer[stream_id]

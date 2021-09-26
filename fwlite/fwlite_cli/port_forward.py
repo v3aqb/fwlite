@@ -175,6 +175,10 @@ class ForwardManager:
     def stop(self, port):
         asyncio.ensure_future(self.stop_w(port))
 
+    def stop_all(self):
+        for port in self.server:
+            asyncio.ensure_future(self.stop_w(port))
+
     async def stop_w(self, port):
         import sys
         if sys.platform == 'win32':

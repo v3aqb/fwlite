@@ -37,6 +37,7 @@ def main():
 
     conf = Config(args.c, args.gui)
 
+    conf.reload()
     conf.start()
 
 
