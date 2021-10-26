@@ -1,9 +1,9 @@
 [AutoProxy 0.2.9]
-! Checksum: AIOwfHCXl/Qb/f5nuIFMRA
+! Checksum: ISk2fkXD07qs7d6N4AAg/g
 ! Expires: 6h
 ! Title: GFWList4LL
 ! GFWList with EVERYTHING included
-! Last Modified: Mon, 27 Sep 2021 08:26:24 -0400
+! Last Modified: Sun, 24 Oct 2021 20:03:30 -0400
 !
 ! HomePage: https://github.com/gfwlist/gfwlist
 ! License: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
@@ -455,6 +455,7 @@ share.dmhy.org
 ||btc98.com
 ||btcbank.bank
 ||btctrade.im
+||bybit.com
 ||c2cx.com
 ||chaoex.com
 ||cobinhood.com
@@ -464,7 +465,9 @@ share.dmhy.org
 ||coinegg.com
 ||coinex.com
 !--|https://www.coinexchange.io/
+||coingecko.com
 ||coingi.com
+||coinmarketcap.com
 ||coinrail.co.kr
 ||cointiger.com
 ||cointobe.com
@@ -478,6 +481,7 @@ share.dmhy.org
 ||exrates.me
 ||exx.com
 ||fatbtc.com
+||ftx.com
 ||gate.io
 ||gatecoin.com
 ||hbg.com
@@ -1916,6 +1920,7 @@ zhao.1984.city
 .2008xianzhang.info
 ||2008xianzhang.info
 ||2017.hk
+||2021hkcharter.com
 ||2047.name
 21andy.com/blog
 .21join.com
@@ -2456,6 +2461,7 @@ blinw.com
 ||blip.tv/
 .blockcn.com
 ||blockcn.com
+||blockedbyhk.com
 ||blockless.com
 ||blog.de
 .blog.jp
@@ -2498,6 +2504,7 @@ bonbonme.com
 .bongacams.com
 ||boobstagram.com
 ||book.com.tw
+||bookdepository.com
 bookepub.com
 ||books.com.tw
 ||botanwang.com
@@ -3904,6 +3911,7 @@ gigporno.ru
 .git.io
 ||git.io
 |http://softwaredownload.gitbooks.io
+||raw.githack.com
 
 !---GitHub---
 ||github.blog
@@ -3981,7 +3989,8 @@ gongminliliang.com
 |http://gongwt.com
 blog.goo.ne.jp/duck-tail_2009
 .gooday.xyz
-|http://gooday.xyz
+||gooday.xyz
+||goodhope.school
 .goodreads.com
 ||goodreads.com
 .goodreaders.com
@@ -4519,6 +4528,7 @@ hongmeimei.com
 .hornygamer.com
 .hornytrip.com
 |http://hornytrip.com
+||horrorporn.com
 ||hotair.com
 .hotav.tv
 .hotels.cn
@@ -5687,6 +5697,7 @@ noodlevpn.com
 .norbulingka.org
 nordvpn.com
 ||nordvpn.com
+||notepad-plus-plus.org
 ||novelasia.com
 .news.now.com
 |http://news.now.com
@@ -7221,7 +7232,7 @@ toytractorshow.com
 .tparents.org
 .tpi.org.tw
 ||tpi.org.tw
-traffichaus.com
+||tradingview.com
 ||transparency.org
 ||treemall.com.tw
 trendsmap.com
@@ -7230,8 +7241,9 @@ trendsmap.com
 ||trialofccp.org
 .trimondi.de/SDLE
 .trouw.nl
-|http://trouw.nl
+||trouw.nl
 .trt.net.tr
+||trt.net.tr
 trtc.com.tw
 .truebuddha-md.org
 |http://truebuddha-md.org
@@ -7277,6 +7289,7 @@ bbs.tuitui.info
 .tunein.com
 |http://tunein.com
 ||tunnelbear.com
+||tunnelblick.net
 .tunnelr.com
 ||tunnelr.com
 ||tunsafe.com
@@ -7752,6 +7765,7 @@ lists.w3.org/archives/public
 .waigaobu.com
 waikeung.org/php_wind
 .wailaike.net
+||wainao.me
 .waiwaier.com
 |http://waiwaier.com
 ||wallmama.com
@@ -8073,6 +8087,7 @@ xyy69.info
 
 !--------------------YY-------------------------
 ||y2mate.com
+||yadi.sk
 ||yakbutterblues.com
 ||yam.com
 ||yam.org.tw

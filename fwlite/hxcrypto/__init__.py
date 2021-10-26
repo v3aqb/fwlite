@@ -26,7 +26,8 @@ from cryptography.exceptions import InvalidSignature, InvalidTag
 
 from .encrypt import BufEmptyError, is_aead, Encryptor, AEncryptor, IVError
 from .encrypt import METHOD_SUPPORTED as method_supported
-from .ecc import ECC
+from .ecc import Ecc
+ECC = Ecc
 
 __all__ = ['BufEmptyError',
            'InvalidSignature',
@@ -36,6 +37,7 @@ __all__ = ['BufEmptyError',
            'AEncryptor',
            'IVError',
            'ECC',
+           'Ecc',
            'compare_digest',
            'method_supported',
            ]

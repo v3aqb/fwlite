@@ -115,6 +115,10 @@ class udp_relay_server:
             self.logger.error('%s %s', repr(err), repr(client_addr))
         else:
             self.logger.debug('on_server_recv, %r, %r', client_addr, remote_addr)
+            remote_ip = ipaddress.ip_address(remote_addr[0])
+            if remote_ip.is_private:
+                self.logger.warning('on_server_recv, %r, %r, is_private', client_addr, remote_addr)
+                return
             relay = self.get_relay(client_addr)
             await relay.send(dgram, remote_addr, data)
 

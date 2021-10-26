@@ -18,7 +18,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import os
 import socket
 import struct
 import logging
@@ -28,17 +27,16 @@ import traceback
 import urllib.parse
 import random
 import hashlib
-import hmac
 
 import asyncio
 import asyncio.streams
 
-from hxcrypto import BufEmptyError, InvalidTag, IVError, is_aead, Encryptor, ECC
+from hxcrypto import BufEmptyError, InvalidTag, IVError, is_aead, Encryptor
 from .hxs2_conn import Hxs2Connection
 from .util import open_connection, parse_hostport
 
 
-DEFAULT_METHOD = 'aes-128-cfb'
+DEFAULT_METHOD = 'chacha20-ietf-poly1305'
 DEFAULT_HASH = 'SHA256'
 MAC_LEN = 16
 CTX = b'hxsocks'
@@ -190,57 +188,39 @@ class HXsocksHandler:
                 await self.play_dead()
             return
         if cmd == 20:  # hxsocks2 client key exchange
-            rint = random.randint(64, 2048)
             req_len = await self.read(2)
             req_len, = struct.unpack('>H', req_len)
             data = await self.read(req_len)
             data = io.BytesIO(data)
-            ts_ = int(time.time()) // 30
 
             pklen = data.read(1)[0]
             client_pkey = data.read(pklen)
             client_auth = data.read(32)
 
-            def _send(data):
-                if self.encryptor._encryptor:
-                    data = struct.pack('>H', len(data)) + data
-                    ciphertext = self.encryptor.encrypt(data)
-                    client_writer.write(struct.pack('>H', len(ciphertext)) + ciphertext)
-                else:
-                    data = struct.pack('>H', len(data)) + data
-                    client_writer.write(self.encryptor.encrypt(data))
-
-            client = self.user_mgr.hxs2_auth(ts_, client_pkey, client_auth)
-            if not client:
-                self.logger.error('user not found. %s', self.client_address)
-                await self.play_dead()
-                return
             try:
-                pkey, passwd = self.user_mgr.key_xchange(client, client_pkey, self.encryptor._key_len)
+                client, reply, shared_secret = self.user_mgr.hxs2_auth(client_pkey, client_auth)
                 self.logger.info('new key exchange. client: %s %s', client, self.client_address)
-                hash_ = hmac.new(passwd.encode(), client_pkey + pkey + client.encode(), hashlib.sha256).digest()
-                scert = self.user_mgr.SERVER_CERT.get_pub_key()
-                signature = self.user_mgr.SERVER_CERT.sign(hash_, DEFAULT_HASH)
-                data = bytes((0, len(pkey), len(scert), len(signature))) + pkey + hash_ + scert + signature + os.urandom(rint)
-                _send(data)
-
-                client_pkey = hashlib.md5(client_pkey).digest()
-                conn = Hxs2Connection(client_reader,
-                                      client_writer,
-                                      client,
-                                      self.user_mgr.get_skey_by_pubkey(client_pkey),
-                                      self.server.method,
-                                      self.server.proxy,
-                                      self.user_mgr,
-                                      self.address[1],
-                                      self.logger)
-                await conn.wait_close()
-                self.user_mgr.del_key(client_pkey)
-                return
             except ValueError as err:
-                self.logger.error('key exchange failed. %s %s', self.client_address, err)
+                self.logger.error('key exchange failed. %s %s', err, self.client_address)
                 await self.play_dead()
                 return
+
+            reply = reply + bytes(random.randint(64, 2048))
+            reply = struct.pack('>H', len(reply)) + reply
+            client_writer.write(self.encryptor.encrypt(reply))
+
+            conn = Hxs2Connection(client_reader,
+                                  client_writer,
+                                  client,
+                                  shared_secret,
+                                  self.server.proxy,
+                                  self.user_mgr,
+                                  self.address[1],
+                                  self.logger)
+            await conn.wait_close()
+            client_pkey = hashlib.md5(client_pkey).digest()
+            self.user_mgr.del_key(client_pkey)
+            return
 
         # TODO: security log
         self.logger.error('bad cmd: %s, %s', cmd, self.client_address)

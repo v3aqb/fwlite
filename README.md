@@ -6,7 +6,7 @@ Portable package of fwlite-cli and fwlite-gui for windows.
 
 Executables of supported plugins included.
 
-2021.9.28 v5.1.1
+2021.10.28 v5.1.2
 
 #### Features
 
@@ -69,10 +69,10 @@ repoze.lru (BSD)       https://pypi.org/project/repoze.lru/
 six (MIT)              https://pypi.org/project/six/
 python (PSFL)          https://python.org/
 simple-obfs (GPLv3)    https://github.com/shadowsocks/simple-obfs
-v2ray-plugin (MIT)     https://github.com/shadowsocks/v2ray-plugin
 kcptun (MIT)           https://github.com/xtaci/kcptun
 GoQuiet (GPLv3)        https://github.com/cbeuw/GoQuiet
 Cloak (GPLv3)          https://github.com/cbeuw/Cloak
+v2ray-plugin (MIT)     https://github.com/teddysun/v2ray-plugin
 xray-plugin (MIT)      https://github.com/teddysun/xray-plugin
 ```
 

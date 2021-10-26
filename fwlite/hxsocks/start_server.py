@@ -7,18 +7,25 @@ from concurrent.futures import ThreadPoolExecutor
 
 import yaml
 
-from .server import HandlerFactory, HXsocksHandler, ECC
-from .user_manager import UserManager
-from .udp_relay import udp_relay_server
+from .server import HandlerFactory, HXsocksHandler
+from .user_manager import UserManager, ECC
+try:
+    from .udp_relay import udp_relay_server
+except ImportError:
+    udp_relay_server = None
 
 
 def start_hxs_server(confpath):
     with open(confpath, 'r') as ymlfile:
         cfg = yaml.safe_load(ymlfile)
     servers = cfg['servers']
+    conn_limit = cfg.get('limit', 20)
     log_level = cfg.get('log_level', 20)
 
     udp_enable = cfg.get('udp_enable', False)
+    if udp_enable and not udp_relay_server:
+        sys.stderr.write('asyncio_dgram not found? disable udp\n')
+        udp_enable = False
     # boolean, port_number, [list of ports]
     if isinstance(udp_enable, int) and udp_enable < 0:
         udp_enable = False
@@ -42,14 +49,15 @@ def start_hxs_server(confpath):
         sys.stderr.write('server cert not found, creating...\n')
         ECC(key_len=32).save(cert_path)
 
-    user_mgr = UserManager(cert_path)
+    user_mgr = UserManager(cert_path, conn_limit)
     cert = user_mgr.SERVER_CERT.get_pub_key()
     cert_hash = hashlib.sha256(cert).hexdigest()[:8]
     sys.stderr.write('load server cert %s\n' % cert_hash)
 
     # add user
-    for user, passwd in cfg['users'].items():
-        user_mgr.add_user(user, passwd)
+    if cfg['users']:
+        for user, passwd in cfg['users'].items():
+            user_mgr.add_user(user, passwd)
 
     loop = asyncio.get_event_loop()
     loop.set_default_executor(ThreadPoolExecutor(20))

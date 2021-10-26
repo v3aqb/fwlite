@@ -168,7 +168,11 @@
          </widget>
         </item>
         <item>
-         <widget class="QLineEdit" name="pskEdit"/>
+         <widget class="QLineEdit" name="pskEdit">
+          <property name="echoMode">
+           <enum>QLineEdit::PasswordEchoOnEdit</enum>
+          </property>
+         </widget>
         </item>
         <item>
          <widget class="QTextEdit" name="psktextEdit"/>

@@ -1,3 +1,10 @@
+2021.10.28 v5.1.2
+fix resolver
+update hxsocks2
+update plugins: xray-plugin, v2ray-plugin, cl-client
+update gfwlist
+update china-ip-list
+
 2021.9.28 v5.1.1
 improve proxy chain
 improve hxsocks2

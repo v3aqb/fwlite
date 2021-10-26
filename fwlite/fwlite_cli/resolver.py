@@ -78,7 +78,7 @@ DC = DNSCache()
 async def getaddrinfo(host, port):
     loop = asyncio.get_event_loop()
     fut = loop.getaddrinfo(host, port)
-    result = await asyncio.wait_for(fut, timeout=2)
+    result = await asyncio.wait_for(fut, timeout=4)
     return result
 
 
@@ -90,14 +90,13 @@ async def resolve(host, port=0):
         return result
 
     err = None
-    for _ in range(2):
-        try:
-            result = await getaddrinfo(host, port)
-            result = [(i[0], i[4][0]) for i in result]
-            DC.put(host, result)
-            return result
-        except (OSError, asyncio.TimeoutError, LookupError) as err_:
-            err = err_
+    try:
+        result = await getaddrinfo(host, port)
+        result = [(i[0], i[4][0]) for i in result]
+        DC.put(host, result)
+        return result
+    except (OSError, asyncio.TimeoutError, LookupError) as err_:
+        err = err_
     DC.put(host, err)
     raise err
 

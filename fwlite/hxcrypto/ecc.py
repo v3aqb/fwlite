@@ -31,7 +31,7 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key,\
     load_der_private_key, load_der_public_key, Encoding, PublicFormat, PrivateFormat, NoEncryption
 
 
-class ECC(object):
+class Ecc(object):
     curve = {256: ec.SECP521R1,
              192: ec.SECP384R1,
              128: ec.SECP256R1,

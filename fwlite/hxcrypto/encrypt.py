@@ -195,11 +195,7 @@ def get_cipher(key, method, op_, iv_):
     if method == 'rc4':
         cipher = Cipher(algorithms.ARC4(key), None, default_backend())
     elif method == 'chacha20-ietf':
-        try:
-            return Chacha20IETF(method, key, iv_)
-        except OSError:
-            from .ctypes_libsodium import SodiumCrypto
-            return SodiumCrypto(method, key, iv_)
+        return Chacha20IETF(method, key, iv_)
     elif method.startswith('aes'):
         cipher = Cipher(algorithms.AES(key), mode, default_backend())
     elif method.startswith('camellia'):
@@ -267,10 +263,10 @@ def Encryptor(password, method):
     return EncryptorStream(password, method)
 
 
-def AEncryptor(key, method, ctx):
+def AEncryptor(key, method, ctx, check_iv=True):
     if not is_aead(method):
         method = 'chacha20-ietf-poly1305'
-    return AEncryptorAEAD(key, method, ctx)
+    return AEncryptorAEAD(key, method, ctx, check_iv)
 
 
 if sys.version_info[0] == 3:
@@ -297,7 +293,7 @@ class AEncryptorAEAD(object):
     NONCE_LEN = 12
     TAG_LEN = 16
 
-    def __init__(self, key, method, ctx):
+    def __init__(self, key, method, ctx, check_iv=True):
         if method not in METHOD_SUPPORTED:
             raise ValueError('encryption method not supported')
 
@@ -310,8 +306,9 @@ class AEncryptorAEAD(object):
 
         self._ctx = ctx  # SUBKEY_INFO
         self.__key = key
+        self.check_iv = check_iv
 
-        if self._ctx == b"ss-subkey":
+        if self._ctx == SS_SUBKEY:
             self.encrypt = self.encrypt_ss
             if not isinstance(key, bytes):
                 key = key.encode('utf8')
@@ -327,7 +324,7 @@ class AEncryptorAEAD(object):
         self._decryptor_nonce = 0
 
     def key_expand(self, key, iv):
-        algo = hashlib.sha1 if self._ctx == b"ss-subkey" else hashlib.sha256
+        algo = hashlib.sha1 if self._ctx == SS_SUBKEY else hashlib.sha256
         prk = hmac.new(iv, key, algo).digest()
 
         hash_len = algo().digest_size
@@ -361,11 +358,11 @@ class AEncryptorAEAD(object):
 
         if not self._encryptor:
             _len = len(data) + self._iv_len + self.TAG_LEN - 2
-            if self._ctx == b"ss-subkey":
+            if self._ctx == SS_SUBKEY:
                 _len += self.TAG_LEN + data_len
 
             for _ in range(5):
-                if self._ctx == b"ss-subkey":
+                if self._ctx == SS_SUBKEY:
                     iv_ = struct.pack(">H", _len) + random_string(self._iv_len - 2)
                 else:
                     iv_ = random_string(self._iv_len)
@@ -396,7 +393,8 @@ class AEncryptorAEAD(object):
 
         if self._decryptor is None:
             iv_, data = data[:self._iv_len], data[self._iv_len:]
-            IV_CHECKER.check(self.__key, iv_)
+            if self.check_iv:
+                IV_CHECKER.check(self.__key, iv_)
             _decryptor_skey = self.key_expand(self.__key, iv_)
             self._decryptor = get_aead_cipher(_decryptor_skey, self.method)
 
