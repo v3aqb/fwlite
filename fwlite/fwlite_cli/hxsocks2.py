@@ -174,6 +174,7 @@ class Hxs2Connection:
         self._client_status = {}
         self._stream_status = {}
         self._stream_addr = {}
+        self._stream_task = {}
         self._last_active = {}
         self._last_active_c = time.monotonic()
         self._last_ping_log = 0
@@ -257,7 +258,7 @@ class Hxs2Connection:
             self._client_writer[stream_id] = writer
             self._last_active[stream_id] = time.monotonic()
             # start forwarding
-            asyncio.ensure_future(self.read_from_client(stream_id, reader))
+            self._stream_task[stream_id] = asyncio.ensure_future(self.read_from_client(stream_id, reader))
             return socketpair_a
         raise ConnectionResetError(0, 'remote connect to %s:%d failed.' % (addr, port))
 
@@ -321,8 +322,10 @@ class Hxs2Connection:
         if self.connection_lost:
             self.logger.error('send_frame: connection closed. %s', self.name)
             return
-        if type_ != 6:
+        if type_ != PING:
             self._last_active_c = time.monotonic()
+        elif flags == 0:
+            self._ping_time = time.monotonic()
 
         if self._last_direction == RECV:
             self._last_direction = SEND
@@ -345,7 +348,6 @@ class Hxs2Connection:
     def send_ping(self, test=True):
         if self._ping_time == 0:
             self._ping_test = test
-            self._ping_time = time.monotonic()
             self.send_frame(PING, 0, 0, bytes(random.randint(64, 256)))
 
     def send_one_data_frame(self, stream_id, data):
