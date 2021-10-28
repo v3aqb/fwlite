@@ -38,7 +38,7 @@ class socks5_udp:
         self.logger.addHandler(hdr)
 
         self._stop = False
-        asyncio.ensure_future(self.socks5_udp_client_recv())
+        self.client_recv_task = asyncio.ensure_future(self.socks5_udp_client_recv())
 
     async def socks5_udp_client_recv(self):
         self.logger.debug('start udp forward, %s', self.proxy)
@@ -130,6 +130,7 @@ class udp_relay_direct:
         self.remote_lastactive = {}
         self._last_active = time.time()
         self._stop = False
+        self.recv_from_remote_task = None
 
     async def send(self, dgram, remote_addr, data):
         async with self.write_lock:
@@ -165,7 +166,7 @@ class udp_relay_direct:
 
     async def udp_associate(self):
         self.remote_stream = await asyncio_dgram.bind(('0.0.0.0', 0))
-        asyncio.ensure_future(self.recv_from_remote())
+        self.recv_from_remote_task = asyncio.ensure_future(self.recv_from_remote())
 
     async def _send(self, dgram, remote_addr, data):
         self.firewall_register(remote_addr)
@@ -212,7 +213,7 @@ class udp_relay_ss(udp_relay_direct):
 
     async def udp_associate(self):
         self.remote_stream = await asyncio_dgram.connect((self.proxy.hostname, self.proxy.port))
-        asyncio.ensure_future(self.recv_from_remote())
+        self.recv_from_remote_task = asyncio.ensure_future(self.recv_from_remote())
 
     def get_cipher(self):
         cipher = Encryptor(self.sspassword, self.ssmethod)

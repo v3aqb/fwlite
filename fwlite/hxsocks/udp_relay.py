@@ -22,22 +22,21 @@ class udp_relay:
         self.client_addr = client_addr
         self.timeout = timeout
         self.mode = mode
-        self.write_lock = asyncio.Lock()
         self.remote_stream = None
         self.remote_lastactive = {}
         self._last_active = time.time()
         self._stop = False
+        self._recv_task = None
 
     async def send(self, dgram, remote_addr, data):
-        async with self.write_lock:
-            if not self.remote_stream:
-                self.remote_stream = await asyncio_dgram.bind((self.parent.server_addr[0], 0))
-                asyncio.ensure_future(self.recv_from_remote())
-            self._last_active = time.time()
-            if self.mode:
-                key = remote_addr[0] if self.mode == 1 else remote_addr
-                self.remote_lastactive[key] = time.time()
-            await self.remote_stream.send(dgram, remote_addr)
+        if not self.remote_stream:
+            self.remote_stream = await asyncio_dgram.bind((self.parent.server_addr[0], 0))
+            self._recv_task = asyncio.ensure_future(self.recv_from_remote())
+        self._last_active = time.time()
+        if self.mode:
+            key = remote_addr[0] if self.mode == 1 else remote_addr
+            self.remote_lastactive[key] = time.time()
+        await self.remote_stream.send(dgram, remote_addr)
 
     async def recv_from_remote(self):
         while not self._stop:
@@ -51,15 +50,14 @@ class udp_relay:
             except OSError:
                 break
 
-            async with self.write_lock:
-                if self.firewall(remote_addr):
-                    self.parent.logger.info('udp drop %r', remote_addr)
-                    continue
+            if self.firewall(remote_addr):
+                self.parent.logger.info('udp drop %r', remote_addr)
+                continue
 
-                self._last_active = time.time()
-                if self.mode:
-                    key = remote_addr[0] if self.mode == 1 else remote_addr
-                    self.remote_lastactive[key] = time.time()
+            self._last_active = time.time()
+            if self.mode:
+                key = remote_addr[0] if self.mode == 1 else remote_addr
+                self.remote_lastactive[key] = time.time()
             await self.parent.on_remote_recv(self.client_addr, remote_addr, data, None)
         self.remote_stream.close()
         self.parent.on_relay_timeout(self.client_addr)
@@ -87,6 +85,7 @@ class udp_relay_server:
     '''
     def __init__(self, server_addr, method, key, timeout, mode):
         self.server_addr = server_addr
+        self.task = None
         self.method = method
         self.__key = key
         self.timeout = timeout
@@ -107,6 +106,9 @@ class udp_relay_server:
         while True:
             data, client_addr = await self.server_stream.recv()
             asyncio.ensure_future(self.handle(client_addr, data))
+
+    def start(self):
+        self.task = asyncio.ensure_future(self.serve_forever())
 
     async def handle(self, client_addr, data):
         try:

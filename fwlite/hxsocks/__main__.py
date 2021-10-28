@@ -27,10 +27,6 @@ from .start_server import start_hxs_server
 
 
 def main():
-    if sys.platform == 'win32':
-        loop = asyncio.ProactorEventLoop()
-        asyncio.set_event_loop(loop)
-
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', required=True, help="config file")
     args = parser.parse_args()
@@ -38,7 +34,7 @@ def main():
     if not os.path.exists(args.c):
         sys.stderr.write('config file {} not exist!\n'.format(args.c))
         sys.exit()
-    start_hxs_server(args.c)
+    server_list = start_hxs_server(args.c)
 
     loop = asyncio.get_event_loop()
     loop.run_forever()

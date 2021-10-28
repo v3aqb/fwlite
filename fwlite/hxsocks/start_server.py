@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import yaml
 
-from .server import HandlerFactory, HXsocksHandler
+from .server import Server, HXsocksHandler
 from .user_manager import UserManager, ECC
 try:
     from .udp_relay import udp_relay_server
@@ -16,6 +16,10 @@ except ImportError:
 
 
 def start_hxs_server(confpath):
+    if sys.platform == 'win32':
+        loop = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(loop)
+
     with open(confpath, 'r') as ymlfile:
         cfg = yaml.safe_load(ymlfile)
     servers = cfg['servers']
@@ -62,14 +66,17 @@ def start_hxs_server(confpath):
     loop = asyncio.get_event_loop()
     loop.set_default_executor(ThreadPoolExecutor(20))
 
+    server_list = []
     for server in servers:
-        handler = HandlerFactory(HXsocksHandler, server, user_mgr, log_level)
-        coro = asyncio.start_server(handler.handle, handler.address[0], handler.address[1], loop=loop)
-        asyncio.ensure_future(coro)
+        server_ = Server(HXsocksHandler, server, user_mgr, log_level)
+        server_.start()
+        server_list.append(server_)
         if udp_enable:
-            if isinstance(udp_enable, list) and handler.address[1] not in udp_enable:
+            if isinstance(udp_enable, list) and server_.address[1] not in udp_enable:
                 continue
-            coro2 = udp_relay_server(handler.address, handler.method, handler.psk, udp_timeout, udp_mode).serve_forever()
-            asyncio.ensure_future(coro2)
+            udp_server = udp_relay_server(server_.address, server_.method, server_.psk, udp_timeout, udp_mode)
+            udp_server.start()
+            server_list.append(udp_server)
 
     # loop.run_forever()
+    return server_list

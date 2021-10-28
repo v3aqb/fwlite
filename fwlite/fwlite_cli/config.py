@@ -557,14 +557,11 @@ class Config:
         self.stop_fwlite()
 
     def stop_fwlite(self):
-        async def stop(server):
-            server.close()
-            await server.wait_closed()
         for server in self.server_list:
-            asyncio.ensure_future(stop(server))
+            asyncio.ensure_future(server.stop())
 
     def start_server(self):
-        from .proxy_handler import handler_factory, http_handler
+        from .proxy_handler import Server, http_handler
         loop = self.loop
         addr, port = self.listen
         while port == 0:
@@ -588,7 +585,7 @@ class Config:
         self.server_list = []
         for i, profile in enumerate(self.profile):
             profile = int(profile)
-            server = handler_factory(addr, port + i, http_handler, profile, self)
+            server = Server(addr, port + i, http_handler, profile, self)
             server.start()
             self.server_list.append(server)
 
@@ -624,8 +621,6 @@ class Config:
         server = self.start_server()
         self.register_proxy_n_forward()
         asyncio.ensure_future(self.post_start())
-        import fwlite_cli.resolver
-        asyncio.ensure_future(fwlite_cli.resolver.DC._purge())
         self.loop.run_forever()
         self.logger.info('start() ended')
 

@@ -73,7 +73,7 @@ class ForwardContext:
         self._sent_counter = 0
         self._sent_rate = 0
         # start monitor
-        asyncio.ensure_future(self.monitor())
+        self.monitor_task = asyncio.ensure_future(self.monitor())
 
     def data_sent(self, data_len):
         # sending data to hxs connection

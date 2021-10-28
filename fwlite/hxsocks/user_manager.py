@@ -1,9 +1,40 @@
 
+import sys
+import time
 import struct
 import hashlib
 import hmac
+from urllib.request import urlopen
 from collections import defaultdict, deque
 from hxcrypto import ECC, compare_digest
+from .apfilter import ap_filter
+
+
+class porn_filter:
+    def __init__(self):
+        self.porn_filter = None
+        self.last_load = 0
+        self.loaded = False
+
+    def load(self):
+        self.porn_filter = ap_filter()
+        hosts = urlopen('https://raw.githubusercontent.com/4skinSkywalker/Anti-Porn-HOSTS-File/master/HOSTS.txt').readlines()
+        for line in hosts:
+            try:
+                self.porn_filter.add('||' + line.decode().strip().split()[1])
+            except Exception:
+                pass
+        self.loaded = True
+
+    def is_porn(self, addr):
+        if not self.loaded and time.time() - self.last_load > 3600:
+            self.last_load = time.time()
+            try:
+                self.load()
+            except Exception as err:
+                sys.stderr.write('load porn_filter failed.\n')
+        if self.loaded:
+            return self.porn_filter.match(addr)
 
 
 class UserManager:
@@ -12,14 +43,20 @@ class UserManager:
         self.SERVER_CERT = ECC(from_file=server_cert)
         self._limit = limit
         self.user_pass = {}
+        self.user_tag = {}
         self.userpkeys = defaultdict(deque)  # user name: client key
         self.pkeyuser = {}  # user pubkey: user name
+        self.porn_filter = porn_filter()
 
     def add_user(self, user, password):
+        password, _, tags = password.partition(' ')
+        tags = tags.split()
         self.user_pass[user] = password
+        self.user_tag[user] = tags
 
     def remove_user(self, user):
         del self.user_pass[user]
+        del self.user_tag[user]
 
     def hxs2_auth(self, client_pkey, client_auth):
         ts_ = int(time.time()) // 30
@@ -78,7 +115,11 @@ class UserManager:
         # str host: requested hostname
         # str ipaddr: client ipaddress
         # raise ValueError if denied
-        pass
+        if user not in self.user_tag:
+            return
+        if 'noporn' in self.user_tag[user]:
+            if self.porn_filter.is_porn(host):
+                raise ValueError('porn block')
 
     def user_access_log(self, server_port, host, traffic, ipaddr, user):
         # log user access, called after each request

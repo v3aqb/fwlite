@@ -53,10 +53,11 @@ class ForwardContext:
         self.traffic_from_remote = 0
 
 
-class HandlerFactory:
-    def __init__(self, _class, serverinfo, user_mgr, log_level):
-        self._class = _class
+class Server:
+    def __init__(self, handler_class, serverinfo, user_mgr, log_level):
+        self._handler_class = handler_class
         self.user_mgr = user_mgr
+        self.server = None
 
         self.serverinfo = serverinfo
         parse = urllib.parse.urlparse(serverinfo)
@@ -89,8 +90,14 @@ class HandlerFactory:
         self.logger.warning('starting server: %s', serverinfo)
 
     async def handle(self, reader, writer):
-        _handler = self._class(self)
+        _handler = self._handler_class(self)
         await _handler.handle(reader, writer)
+
+    def start(self):
+        asyncio.ensure_future(self._start())
+
+    async def _start(self):
+        self.server = await asyncio.start_server(self.handle, self.address[0], self.address[1])
 
 
 class HXsocksHandler:

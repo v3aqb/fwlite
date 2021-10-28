@@ -87,7 +87,7 @@ class ForwardContext:
         return '%s fc: %s fr: %s leof: %s' % (self.target, self.fcc, self.frc, self.local_eof)
 
 
-class handler_factory:
+class Server:
 
     def __init__(self, addr, port, _class, profile, conf):
         self._class = _class
@@ -95,8 +95,8 @@ class handler_factory:
         self.addr = addr
         self.port = port
         self.conf = conf
-        self.server = None
         self.udp_enable = self.conf.udp_enable
+        self.server = None
 
         self.logger = logging.getLogger('fwlite_%d' % port)
         self.logger.setLevel(logging.INFO)
@@ -112,9 +112,11 @@ class handler_factory:
         _handler = self._class(self)
         await _handler.handle(reader, writer)
 
+    async def _start(self):
+        self.server = await asyncio.start_server(self.handle, self.addr, self.port)
+
     def start(self):
-        self.server = asyncio.start_server(self.handle, self.addr, self.port)
-        asyncio.ensure_future(self.server)
+        asyncio.ensure_future(self._start())
 
     def get_udp_proxy(self):
         proxy = self.conf.parentlist.get(self.conf.udp_proxy)
@@ -122,10 +124,8 @@ class handler_factory:
             self.logger.error('self.conf.udp_proxy %s is None', self.conf.udp_proxy)
         return proxy
 
-    def close(self):
+    async def stop(self):
         self.server.close()
-
-    async def wait_closed(self):
         await self.server.wait_closed()
 
 

@@ -166,8 +166,7 @@ class ForwardManager:
             soc.close()
         # start server on port
         handler = ForwardHandler(target, proxy, timeout=120)
-        loop = asyncio.get_event_loop()
-        server = await asyncio.start_server(handler.handle, '127.0.0.1', port, loop=loop)
+        server = await asyncio.start_server(handler.handle, '127.0.0.1', port)
         self.server[port] = server
         self.server_info[port] = (target, proxy.name)
         self.conf.stdout('forward')

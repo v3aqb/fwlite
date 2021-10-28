@@ -21,6 +21,7 @@
 from builtins import chr
 
 import sys
+import base64
 import struct
 import socket
 import time
@@ -64,9 +65,6 @@ async def ss_connect(proxy, timeout, addr, port):
     context = SSConn(proxy, sock_b)
     await context.connect(addr, port, timeout)
 
-    # start forward
-    asyncio.ensure_future(context.forward())
-
     # return reader, writer
     reader, writer = await asyncio.open_connection(sock=sock_a)
     writer.transport.set_write_buffer_limits(0, 0)
@@ -82,7 +80,6 @@ class SSConn:
         self.sock_b = sock_b
         ssmethod, sspassword = self.proxy.username, self.proxy.password
         if sspassword is None:
-            import base64
             ssmethod, sspassword = base64.b64decode(ssmethod).decode().split(':', 1)
         ssmethod = ssmethod.lower()
 
@@ -92,6 +89,7 @@ class SSConn:
         self.client_writer = None
         self.remote_reader = None
         self.remote_writer = None
+        self.task = None
 
         self.aead = is_aead(ssmethod)
         self.crypto = Encryptor(sspassword, ssmethod)
@@ -116,6 +114,9 @@ class SSConn:
             proxy=self.proxy.get_via(),
             timeout=timeout,
             tunnel=True)
+
+        # start forward
+        self.task = asyncio.ensure_future(self.forward())
 
     async def forward(self):
 

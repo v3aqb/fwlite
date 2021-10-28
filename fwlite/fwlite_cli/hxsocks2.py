@@ -178,6 +178,8 @@ class Hxs2Connection:
         self._last_active = {}
         self._last_active_c = time.monotonic()
         self._last_ping_log = 0
+        self._connection_task = None
+        self._connection_stat = None
 
         self._last_direction = SEND
         self._last_count = 0
@@ -638,8 +640,8 @@ class Hxs2Connection:
                     self.logger.debug('hxs key exchange success')
                     self.__cipher = AEncryptor(shared_secret, self.method, CTX)
                     # start reading from connection
-                    asyncio.ensure_future(self.read_from_connection())
-                    asyncio.ensure_future(self.stat())
+                    self._connection_task = asyncio.ensure_future(self.read_from_connection())
+                    self._connection_stat = asyncio.ensure_future(self.stat())
                     self.connected = True
                     return
                 except InvalidSignature:

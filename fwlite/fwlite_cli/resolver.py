@@ -46,6 +46,7 @@ class DNSCache:
         self.timerwheel = [set() for _ in range(self.count)]  # a list of socket object
         self.timerwheel_iter = itertools.cycle(range(self.count))
         self.timerwheel_index = next(self.timerwheel_iter)
+        self.purge_task = None
 
     def put(self, domain, result):
         # soc: (reader, writer)
@@ -54,6 +55,8 @@ class DNSCache:
         else:
             self.pool[domain] = result
             self.timerwheel[self.timerwheel_index].add(domain)
+        if not self.purge_task:
+            self.purge_task = asyncio.ensure_future(self._purge())
 
     def get(self, domain):
         result = self.pool.get(domain, None)

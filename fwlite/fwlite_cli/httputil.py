@@ -52,7 +52,7 @@ class ConnectionPool:
         self.timerwheel_index = next(self.timerwheel_iter)
         self.lock = Lock()
 
-        asyncio.ensure_future(self._purge())
+        self.purge_task = asyncio.ensure_future(self._purge())
 
     def put(self, upstream_name, soc, ppname):
         # soc: (reader, writer)
