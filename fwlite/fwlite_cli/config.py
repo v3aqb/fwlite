@@ -592,7 +592,9 @@ class Config:
         if os.path.exists(os.path.join(self.conf_dir, 'hxsocks.yaml')):
             try:
                 from hxsocks.start_server import start_hxs_server
-                start_hxs_server('hxsocks.yaml')
+                server_list = start_hxs_server('hxsocks.yaml')
+                if server_list:
+                    self.server_list.extend()
             except Exception as err:
                 self.logger.error(repr(err))
                 self.logger.error(traceback.format_exc())

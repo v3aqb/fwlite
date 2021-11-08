@@ -68,11 +68,13 @@ class Server:
         elif 'hxs' in parse.scheme:
             self.psk = query.get('PSK', [''])[0]
             self.method = query.get('method', [DEFAULT_METHOD])[0]
-            self.ss_enable = self.psk and query.get('ss', ['1'])[0] == '1'
+            self.ss_enable = self.psk and int(query.get('ss', ['0'])[0])
         else:
             raise ValueError('bad serverinfo: {}'.format(self.serverinfo))
 
         self.aead = is_aead(self.method)
+        if 'ss' not in query:
+            self.ss_enable = self.psk and not self.aead
 
         # HTTP proxy only
         proxy = query.get('proxy', [''])[0]
@@ -246,6 +248,8 @@ class HXsocksHandler:
     async def handle_ss(self, client_writer, addr_type):
         # if error, return 1
         # get header...
+        if not self.server.ss_enable:
+            return True
         try:
             assert addr_type in (1, 3, 4)
             if addr_type == 1:

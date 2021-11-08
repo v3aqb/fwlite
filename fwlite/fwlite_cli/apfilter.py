@@ -119,7 +119,7 @@ class ap_filter(object):
         if len(rule) < 3 or rule.startswith(('!', '[')) or '#' in rule:
             return
         if rule in self.rules:
-            logger.warning('%s already in filter', rule)
+            logger.debug('%s already in filter', rule)
             return
         if rule.startswith('||') and '*' not in rule:
             self._add_domain(rule)
@@ -128,14 +128,17 @@ class ap_filter(object):
         elif rule.startswith('@@|'):
             # strip and treat as domain rule
             rule = '@@||' + urllib.parse.urlparse(rule[3:]).hostname
-            self._add_exclude_domain(rule)
+            return self.add(rule)
         elif rule.startswith('|https://') and '*' not in rule:
             # strip and treat as domain rule
             rule = '||' + urllib.parse.urlparse(rule[1:]).hostname
-            self._add_domain(rule)
+            return self.add(rule)
         elif rule.startswith(('@', '/')):
             self._add_slow(rule)
         elif rule.startswith('|http://') and any(len(s) > (self.KEYLEN) for s in rule[1:].split('*')):
+            hostname = urllib.parse.urlparse(rule[1:]).hostname.strip('.*')
+            if '*' not in hostname:
+                return self.add('||' + hostname)
             self._add_fast(rule)
         elif any(len(s) > (self.KEYLEN) for s in rule.split('*')):
             self._add_fast(rule)
@@ -144,7 +147,7 @@ class ap_filter(object):
             if '*' in rule:
                 logger.warning('%s ignored', rule)
                 return
-            self._add_domain('||' + rule.strip('./'))
+            return self.add('||' + rule.strip('./'))
         self.rules.add(rule)
         self.expire[rule] = expire
         if expire:
@@ -164,11 +167,17 @@ class ap_filter(object):
 
     def _add_exclude_domain(self, rule):
         rule = rule.rstrip('/^')
-        self.exclude_domains.add(rule[4:])
+        domain = rule[4:]
+        if domain in self.exclude_domains:
+            raise ValueError('%s already in exclude_domains' % domain)
+        self.exclude_domains.add(domain)
 
     def _add_domain(self, rule):
         rule = rule.rstrip('/^')
-        self.domains.add(rule[2:])
+        domain = rule[2:]
+        if domain in self.exclude_domains:
+            raise ValueError('%s already in domain_list' % domain)
+        self.domains.add(domain)
 
     def match(self, url, host=None, domain_only=False):
         if host is None:

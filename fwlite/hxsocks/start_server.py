@@ -31,11 +31,14 @@ def start_hxs_server(confpath):
         sys.stderr.write('asyncio_dgram not found? disable udp\n')
         udp_enable = False
     # boolean, port_number, [list of ports]
-    if isinstance(udp_enable, int) and udp_enable < 0:
-        udp_enable = False
-    if isinstance(udp_enable, int) and udp_enable > 2:
-        # False == 0, True == 1
-        udp_enable = [udp_enable]
+    if isinstance(udp_enable, int):
+        if udp_enable <= 0:
+            udp_enable = False
+        elif udp_enable > 2:
+            # False == 0, True == 1
+            udp_enable = [udp_enable]
+        else:
+            udp_enable = True
 
     udp_timeout = cfg.get('udp_timeout', 60)
     if not isinstance(udp_timeout, int):

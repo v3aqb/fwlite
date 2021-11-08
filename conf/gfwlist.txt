@@ -1,9 +1,9 @@
 [AutoProxy 0.2.9]
-! Checksum: ISk2fkXD07qs7d6N4AAg/g
+! Checksum: NrVw4TheNYZ0Jc1ZA45R0Q
 ! Expires: 6h
 ! Title: GFWList4LL
 ! GFWList with EVERYTHING included
-! Last Modified: Sun, 24 Oct 2021 20:03:30 -0400
+! Last Modified: Mon, 01 Nov 2021 12:10:37 -0400
 !
 ! HomePage: https://github.com/gfwlist/gfwlist
 ! License: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
@@ -502,6 +502,7 @@ share.dmhy.org
 ||livecoin.net
 ||localbitcoins.com
 ||mercatox.com
+||oanda.com
 ||oex.com
 ||okex.com
 ||otcbtc.com
@@ -1654,7 +1655,6 @@ cn.nytstyle.com
 @@||matsu-nsa.gov.tw
 @@||matsucc.gov.tw
 @@||moe.gov.tw
-@@||mvdis.gov.tw
 @@||nankan.gov.tw
 @@||ncree.gov.tw
 @@||necoast-nsa.gov.tw
@@ -1830,16 +1830,16 @@ zh.uncyclopedia.wikia.com
 
 !!---Yahoo---
 ||data.flurry.com
-page.bid.yahoo.com
-tw.bid.yahoo.com
-|https://tw.bid.yahoo.com
-blogs.yahoo.co.jp
+||page.bid.yahoo.com
+||tw.bid.yahoo.com
+||auctions.yahoo.co.jp
+||blogs.yahoo.co.jp
 ||search.yahoo.co.jp
-buy.yahoo.com.tw/gdsale
-hk.yahoo.com
-hk.knowledge.yahoo.com
-tw.money.yahoo.com
-hk.myblog.yahoo.com
+||buy.yahoo.com.tw
+||hk.yahoo.com
+||hk.knowledge.yahoo.com
+||tw.money.yahoo.com
+||hk.myblog.yahoo.com
 news.yahoo.com/china-blocks-bbc
 ||hk.news.yahoo.com
 hk.rd.yahoo.com
@@ -7008,6 +7008,7 @@ thehousenews.com
 ||thehun.net
 .theinitium.com
 ||theinitium.com
+||themoviedb.org
 .thenewslens.com
 ||thenewslens.com
 .thepiratebay.org
@@ -7029,6 +7030,7 @@ thetibetconnection.org
 !--Tor
 ||thetinhat.com
 thetrotskymovie.com
+||thetvdb.com
 thevivekspot.com
 ||thewgo.org
 .theync.com
@@ -8191,6 +8193,7 @@ yx51.net
 ||yzzk.com
 
 !--------------------ZZ-------------------------
+||z-lib.org
 zacebook.com
 .zalmos.com
 ||zalmos.com

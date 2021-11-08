@@ -312,19 +312,12 @@ class http_handler(BaseProxyHandler):
                                           parse.path.split(':')[0],
                                           '?' if parse.query else '')
 
-        if 'Host' not in self.headers:
-            self.logger.warning('"Host" not in self.headers')
-            request_host = parse_hostport(parse.netloc, 80)
-        else:
-            host = parse_hostport(self.headers['Host'], 80)
-            netloc = parse_hostport(parse.netloc, 80)
-            if host != netloc:
-                self.logger.warning('Host and URI mismatch! %s %s', self.path, self.headers['Host'])
-                self.send_error(400, explain='Host and URI mismatch!')
-                return
-            request_host = parse_hostport(self.headers['Host'], 80)
+        self.request_host = parse_hostport(parse.netloc, 80)
 
-        self.request_host = request_host
+        # if self.request_host[1] == 80:
+        #     self.headers['Host'] = self.request_host[0]
+        # else:
+        #     self.headers['Host'] = '%s:%d' % (self.request_host)
 
         # redirector
         new_url = self.conf.GET_PROXY.redirect(self)
@@ -353,21 +346,6 @@ class http_handler(BaseProxyHandler):
                 self.logger.info('redirect %s %s', self.shortpath, new_url)
                 self.redirect(new_url)
                 return
-
-        parse = urlparse.urlparse(self.path)
-
-        # gather info (redirector may change this)
-        if 'Host' not in self.headers:
-            request_host = parse_hostport(parse.netloc, 80)
-        else:
-            host = parse_hostport(self.headers['Host'], 80)
-            netloc = parse_hostport(parse.netloc, 80)
-            if host != netloc:
-                self.send_error(400, explain='Host and URI mismatch! (post redirect)')
-                return
-            request_host = parse_hostport(self.headers['Host'], 80)
-
-        self.request_host = request_host
 
         self.shortpath = '%s://%s%s%s' % (parse.scheme,
                                           parse.netloc,
@@ -421,8 +399,10 @@ class http_handler(BaseProxyHandler):
                 self.failed_parents.append(self.ppname)
                 self.retry_count += 1
                 if self.retry_count > 10:
+                    self.retryable = False
                     self.logger.error('retry time exceeded 10, pls check!')
-                    return
+                if self.command not in ('GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS', 'TRACE'):
+                    self.retryable = False
             if not self.retryable:
                 self.close_connection = True
                 self.conf.GET_PROXY.notify(self.command, self.shortpath, self.request_host, False,
@@ -642,6 +622,7 @@ class http_handler(BaseProxyHandler):
                 # http/1.0 response, content_lenth not in header
                 #     read response body until connection closed
                 while True:
+                    self.close_connection = True
                     data = await self.remote_reader.read(self.bufsize)
                     if not data:
                         break
@@ -725,7 +706,7 @@ class http_handler(BaseProxyHandler):
                     esni7 = 0xff02 in tls_extensions
                     esni = esni1 or esni7
                     gfwed = esni1
-                    if not esni and server_name and server_name not in self.path:
+                    if server_name:
                         self.shortpath = server_name
                 except Exception:
                     self.logger.warning(traceback.format_exc())
@@ -766,9 +747,6 @@ class http_handler(BaseProxyHandler):
 
         self.request_ip = await self.conf.resolver.get_ip_address(self.request_host[0])
 
-        if int(self.request_ip) == 0 and self.shortpath:
-            self.path = self.shortpath
-
         if self.request_ip.is_loopback:
             if ip_address(self.client_address[0]).is_loopback:
                 if self.request_host[1] in range(self.conf.listen[1],
@@ -777,7 +755,7 @@ class http_handler(BaseProxyHandler):
                     return
             else:
                 return
-        await self._do_CONNECT(gfwed)
+        await self._do_CONNECT(gfwed=gfwed)
 
     async def _do_CONNECT(self, retry=False, gfwed=False):
         if retry:
@@ -804,7 +782,8 @@ class http_handler(BaseProxyHandler):
         try:
             self.logger.info('%s %s via %s. %s', self.command, self.shortpath or self.path,
                              self.pproxy.name, self.client_address[1])
-            addr, port = parse_hostport(self.path, 443)
+            path = self.path if self.pproxy.name == '_D1R3CT_' else self.shortpath or self.path
+            addr, port = parse_hostport(path, 443)
             self.remote_reader, self.remote_writer, self.ppname = \
                 await open_connection(addr, port, self.pproxy, self.timeout, iplist, True)
         except (asyncio.TimeoutError, asyncio.IncompleteReadError, OSError) as err:
@@ -829,7 +808,7 @@ class http_handler(BaseProxyHandler):
         if context.retryable and not context.local_eof:
             self.conf.GET_PROXY.notify(self.command, self.shortpath or self.path, self.request_host,
                                        False, self.failed_parents, self.ppname)
-            await self._do_CONNECT(True)
+            await self._do_CONNECT(retry=True)
             return
 
     async def forward(self, context):
