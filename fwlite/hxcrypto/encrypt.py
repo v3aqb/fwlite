@@ -231,7 +231,10 @@ class EncryptorStream(object):
         if not self._encryptor:
             for _ in range(5):
                 _len = len(data) + self._iv_len - 2
-                iv_ = struct.pack(">H", _len) + random_string(self._iv_len - 2)
+                if _len <= 65535:
+                    iv_ = struct.pack(">H", _len) + random_string(self._iv_len - 2)
+                else:
+                    iv_ = random_string(self._iv_len)
                 try:
                     IV_CHECKER.check(self.__key, iv_)
                 except IVError:
@@ -362,7 +365,7 @@ class AEncryptorAEAD(object):
                 _len += self.TAG_LEN + data_len
 
             for _ in range(5):
-                if self._ctx == SS_SUBKEY:
+                if self._ctx == SS_SUBKEY and _len <= 65535:
                     iv_ = struct.pack(">H", _len) + random_string(self._iv_len - 2)
                 else:
                     iv_ = random_string(self._iv_len)

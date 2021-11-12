@@ -63,7 +63,7 @@ async def read_headers(reader, timeout=1):
 
 
 class BaseHandler(BaseHTTPRequestHandler):
-    bufsize = 32768
+    bufsize = 65536
     server_version = "BaseHTTPServer/" + __version__
     default_request_version = "HTTP/1.1"
 
@@ -88,6 +88,10 @@ class BaseHandler(BaseHTTPRequestHandler):
     async def handle(self, client_reader, client_writer):  # pylint: disable=W0221,W0236
         self.client_reader = client_reader
         self.client_writer = client_writer
+        # self.client_writer.transport.set_write_buffer_limits(0, 0)
+        if self.server.conf.tcp_nodelay:
+            soc = self.client_writer.transport.get_extra_info('socket')
+            soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.client_address = client_writer.get_extra_info('peername')
         self.logger.debug('incoming connection %s', self.client_address)
 
@@ -106,8 +110,12 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.logger.error('base_handler')
             self.logger.error(repr(err))
             self.logger.error(traceback.format_exc())
-
-        self.client_writer.close()
+        if not self.client_writer.is_closing():
+            self.client_writer.close()
+        try:
+            await self.client_writer.wait_closed()
+        except OSError:
+            pass
 
     async def _handle(self):
         fut = self.client_reader.readexactly(1)
@@ -123,7 +131,12 @@ class BaseHandler(BaseHTTPRequestHandler):
             while not self.close_connection:
                 await self.handle_one_request()
         if self.remote_writer:
-            self.remote_writer.close()
+            if not self.remote_writer.is_closing():
+                self.remote_writer.close()
+            try:
+                await self.remote_writer.wait_closed()
+            except OSError:
+                pass
 
     def pre_request_init(self):
         self.req_count += 1
@@ -191,10 +204,6 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.path = '%s:%s' % (addr, port)
 
         await self.do_CONNECT(socks5=True)  # pylint: disable=E1101
-        try:
-            await self.client_writer.drain()
-        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
-            self.close_connection = True
 
     async def relay_udp(self):
         from .socks5udp import socks5_udp
@@ -205,12 +214,6 @@ class BaseHandler(BaseHTTPRequestHandler):
     def write_udp_reply(self, port):
         buf = self.socks5_udp_response + struct.pack(b'>H', port)
         self.client_writer.write(buf)
-
-    async def wait_close(self):
-        while True:
-            data = await self.client_reader.read()
-            if not data:
-                break
 
     async def handle_one_request(self, first_byte=b''):  # pylint: disable=W0221,W0236
         self.pre_request_init()
@@ -254,9 +257,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             return
         method = getattr(self, mname)
         await method()
-        try:
-            await self.client_writer.drain()
-        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+        if self.client_writer.is_closing():
             self.close_connection = True
 
     def log_message(self, _format, *args):

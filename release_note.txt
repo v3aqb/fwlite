@@ -1,3 +1,7 @@
+2021.11.13 v5.1.6 final
+performance issue fixed
+file upload issue fixed
+
 2021.11.9 v5.1.5 final
 bug fix
 

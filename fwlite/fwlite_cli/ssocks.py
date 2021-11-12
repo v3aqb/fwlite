@@ -51,28 +51,28 @@ class IncompleteChunk(Exception):
     pass
 
 
-async def ss_connect(proxy, timeout, addr, port):
+async def ss_connect(proxy, timeout, addr, port, limit, tcp_nodelay):
     if not isinstance(proxy, ParentProxy):
         proxy = ParentProxy(proxy, proxy)
     assert proxy.scheme == 'ss'
     # create socket_pair
     sock_a, sock_b = socket.socketpair()
     if sys.platform == 'win32':
-        sock_a.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
-        sock_b.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
+        sock_a.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        sock_a.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
     # connect to ss server
     context = SSConn(proxy, sock_b)
-    await context.connect(addr, port, timeout)
+    await context.connect(addr, port, timeout, tcp_nodelay)
 
     # return reader, writer
-    reader, writer = await asyncio.open_connection(sock=sock_a)
-    writer.transport.set_write_buffer_limits(0, 0)
+    reader, writer = await asyncio.open_connection(sock=sock_a, limit=limit)
+    # writer.transport.set_write_buffer_limits(0, 0)
     return reader, writer
 
 
 class SSConn:
-    bufsize = 32768
+    bufsize = 65535
 
     def __init__(self, proxy, sock_b):
         self.logger = logging.getLogger('ss')
@@ -101,11 +101,11 @@ class SSConn:
         self.data_recved = False
         self._buf = b''
 
-    async def connect(self, addr, port, timeout):
+    async def connect(self, addr, port, timeout, tcp_nodelay):
         self._address = addr
         self._port = port
         self.client_reader, self.client_writer = await asyncio.open_connection(sock=self.sock_b)
-        self.client_writer.transport.set_write_buffer_limits(0, 0)
+        self.client_writer.transport.set_write_buffer_limits(262144, 131072)
 
         from .connection import open_connection
         self.remote_reader, self.remote_writer, _ = await open_connection(
@@ -113,8 +113,10 @@ class SSConn:
             self.proxy.port,
             proxy=self.proxy.get_via(),
             timeout=timeout,
-            tunnel=True)
-
+            tunnel=True,
+            limit=131072,
+            tcp_nodelay=tcp_nodelay)
+        self.remote_writer.transport.set_write_buffer_limits(262144, 131072)
         # start forward
         self.task = asyncio.ensure_future(self.forward())
 
@@ -134,23 +136,23 @@ class SSConn:
         for writer in (self.remote_writer, self.client_writer):
             try:
                 writer.close()
-            except ConnectionResetError:
+                await writer.wait_closed()
+            except OSError:
                 pass
 
     async def forward_from_client(self):
         # read from client, encrypt, sent to server
         while True:
-            intv = 5 if self.data_recved else 1
             fut = self.client_reader.read(self.bufsize)
             try:
-                data = await asyncio.wait_for(fut, timeout=intv)
+                data = await asyncio.wait_for(fut, timeout=12)
                 self.last_active = time.time()
             except asyncio.TimeoutError:
-                if time.time() - self.last_active > 60 or self.remote_eof:
+                if time.time() - self.last_active > 120 or self.remote_eof:
                     data = b''
                 else:
                     continue
-            except (ConnectionResetError, OSError, AttributeError):
+            except (OSError, AttributeError):
                 data = b''
 
             if not data:
@@ -164,10 +166,14 @@ class SSConn:
                 self.connected = True
 
             self.remote_writer.write(self.crypto.encrypt(data))
+            try:
+                await self.remote_writer.drain()
+            except OSError:
+                break
         self.client_eof = True
         try:
             self.remote_writer.write_eof()
-        except (ConnectionResetError, OSError, AttributeError):
+        except (OSError, AttributeError):
             pass
 
     async def _read(self, size=None):
@@ -199,18 +205,18 @@ class SSConn:
             self.remote_eof = True
             try:
                 self.client_writer.write_eof()
-            except (ConnectionResetError, OSError, AttributeError):
+            except (OSError, AttributeError):
                 pass
             return
 
         while True:
             try:
                 fut = self._read()
-                data = await asyncio.wait_for(fut, timeout=5)
+                data = await asyncio.wait_for(fut, timeout=12)
                 self.last_active = time.time()
                 self.data_recved = True
-            except asyncio.TimeoutError:
-                if time.time() - self.last_active > 60 or self.client_eof:
+            except (asyncio.TimeoutError, OSError):
+                if time.time() - self.last_active > 120 or self.client_eof:
                     data = b''
                 else:
                     continue
@@ -222,10 +228,10 @@ class SSConn:
             try:
                 self.client_writer.write(data)
                 await self.client_writer.drain()
-            except ConnectionResetError:
+            except OSError:
                 break
         self.remote_eof = True
         try:
             self.client_writer.write_eof()
-        except (ConnectionResetError, OSError, AttributeError):
+        except (OSError, AttributeError):
             pass

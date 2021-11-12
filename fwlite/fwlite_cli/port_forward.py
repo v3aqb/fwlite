@@ -20,7 +20,7 @@ def set_logger():
 set_logger()
 
 
-BUFSIZE = 8196
+BUFSIZE = 65536
 
 
 class ForwardContext:
@@ -106,11 +106,12 @@ async def forward_from_remote(read_from, write_to, context, timeout=60):
 
 
 class ForwardHandler:
-    def __init__(self, target, proxy, ctimeout=3, timeout=120):
+    def __init__(self, target, proxy, ctimeout=3, timeout=120, tcp_nodelay=False):
         self.addr, self.port = target
         self.proxy = proxy
         self.timeout = timeout
         self.ctimeout = ctimeout
+        self.tcp_nodelay = tcp_nodelay
 
     async def handle(self, client_reader, client_writer):
         remote_writer = None
@@ -122,7 +123,11 @@ class ForwardHandler:
                                                                     proxy=self.proxy,
                                                                     timeout=self.ctimeout,
                                                                     tunnel=True)
-
+            if self.tcp_nodelay:
+                soc = remote_writer.transport.get_extra_info('socket')
+                soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                soc = client_writer.transport.get_extra_info('socket')
+                soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             # forward
             context = ForwardContext()
 
@@ -136,8 +141,10 @@ class ForwardHandler:
             logger.error(repr(err))
             logger.error(traceback.format_exc())
         for writer in (remote_writer, client_writer):
-            try:
+            if not writer.is_closing():
                 writer.close()
+            try:
+                await writer.wait_closed()
             except (OSError, AttributeError):
                 pass
 
@@ -147,6 +154,7 @@ class ForwardManager:
         self.conf = conf
         self.server = {}
         self.server_info = {}
+        self.tcp_nodelay = self.conf.tcp_nodelay
 
     def add(self, target, proxy, port=0):
         soc = None
@@ -165,7 +173,7 @@ class ForwardManager:
         if soc:
             soc.close()
         # start server on port
-        handler = ForwardHandler(target, proxy, timeout=120)
+        handler = ForwardHandler(target, proxy, timeout=120, tcp_nodelay=self.tcp_nodelay)
         server = await asyncio.start_server(handler.handle, '127.0.0.1', port)
         self.server[port] = server
         self.server_info[port] = (target, proxy.name)

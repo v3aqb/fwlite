@@ -23,14 +23,14 @@ from asyncio import Lock
 from collections import defaultdict, deque
 
 
-def is_connection_dropped(conn_lst):
+def is_connection_dropped(item):
     """
     Returns sockets that is dropped and should be closed.
 
     conn_list: [(reader, writer), ...]
 
     """
-    return [item for item in conn_lst if item[0].at_eof()]
+    return item[0].at_eof or item[1].is_closing() or item[0].transport.get_write_buffer_size()
 
 
 class ConnectionPool:
@@ -56,6 +56,9 @@ class ConnectionPool:
 
     def put(self, upstream_name, soc, ppname):
         # soc: (reader, writer)
+        if is_connection_dropped(soc):
+            soc[1].close()
+            return
         self.logger.debug('adding')
         self.logger.debug('  upstream_name: %r %r', *upstream_name)
         self.logger.debug('  soc: %r %r', *soc)
@@ -69,7 +72,7 @@ class ConnectionPool:
         lst = self.pool.get(upstream_name)
         while lst:
             sock, pproxy = lst.popleft()
-            if is_connection_dropped([sock]):
+            if is_connection_dropped(sock):
                 sock[1].close()
                 self._remove(sock)
                 continue

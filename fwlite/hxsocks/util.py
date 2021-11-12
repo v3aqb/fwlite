@@ -20,6 +20,7 @@
 
 import re
 import asyncio
+import socket
 import ipaddress
 
 
@@ -47,7 +48,7 @@ async def request_is_loopback(addr):
     return None
 
 
-async def open_connection(addr, port, proxy):
+async def open_connection(addr, port, proxy, nodelay=False):
     # do security check here
     data = await request_is_loopback(addr)
     if data:
@@ -55,7 +56,7 @@ async def open_connection(addr, port, proxy):
 
     # create connection
     if proxy:
-        fut = asyncio.open_connection(proxy[0], proxy[1])
+        fut = asyncio.open_connection(proxy[0], proxy[1], limit=131072)
         remote_reader, remote_writer = await asyncio.wait_for(fut, timeout=2)
         s = 'CONNECT {0}:{1} HTTP/1.1\r\nHost: {0}:{1}\r\n\r\n'.format(addr, port)
         remote_writer.write(s.encode())
@@ -63,8 +64,10 @@ async def open_connection(addr, port, proxy):
         data = await asyncio.wait_for(fut, timeout=2)
         if b'200' not in data:
             raise IOError(0, 'create tunnel via %s failed!' % proxy)
-        return remote_reader, remote_writer
-
-    fut = asyncio.open_connection(addr, port)
-    remote_reader, remote_writer = await asyncio.wait_for(fut, timeout=6)
+    else:
+        fut = asyncio.open_connection(addr, port, limit=262144)
+        remote_reader, remote_writer = await asyncio.wait_for(fut, timeout=6)
+    if nodelay:
+        soc = remote_writer.transport.get_extra_info('socket')
+        soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
     return remote_reader, remote_writer

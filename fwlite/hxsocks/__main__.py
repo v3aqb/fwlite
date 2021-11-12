@@ -34,6 +34,10 @@ def main():
     if not os.path.exists(args.c):
         sys.stderr.write('config file {} not exist!\n'.format(args.c))
         sys.exit()
+    if sys.platform == 'win32':
+        loop = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(loop)
+
     server_list = start_hxs_server(args.c)
 
     loop = asyncio.get_event_loop()

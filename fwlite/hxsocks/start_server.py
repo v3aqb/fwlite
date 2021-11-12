@@ -16,15 +16,13 @@ except ImportError:
 
 
 def start_hxs_server(confpath):
-    if sys.platform == 'win32':
-        loop = asyncio.ProactorEventLoop()
-        asyncio.set_event_loop(loop)
-
     with open(confpath, 'r') as ymlfile:
         cfg = yaml.safe_load(ymlfile)
     servers = cfg['servers']
     conn_limit = cfg.get('limit', 20)
     log_level = cfg.get('log_level', 20)
+
+    tcp_nodelay = cfg.get('tcp_nodelay', False)
 
     udp_enable = cfg.get('udp_enable', False)
     if udp_enable and not udp_relay_server:
@@ -71,7 +69,7 @@ def start_hxs_server(confpath):
 
     server_list = []
     for server in servers:
-        server_ = Server(HXsocksHandler, server, user_mgr, log_level)
+        server_ = Server(HXsocksHandler, server, user_mgr, log_level, tcp_nodelay)
         server_.start()
         server_list.append(server_)
         if udp_enable:

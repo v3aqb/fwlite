@@ -54,10 +54,11 @@ class ForwardContext:
 
 
 class Server:
-    def __init__(self, handler_class, serverinfo, user_mgr, log_level):
+    def __init__(self, handler_class, serverinfo, user_mgr, log_level, tcp_nodelay):
         self._handler_class = handler_class
         self.user_mgr = user_mgr
         self.server = None
+        self.tcp_nodelay = tcp_nodelay
 
         self.serverinfo = serverinfo
         parse = urllib.parse.urlparse(serverinfo)
@@ -99,11 +100,14 @@ class Server:
         asyncio.ensure_future(self._start())
 
     async def _start(self):
-        self.server = await asyncio.start_server(self.handle, self.address[0], self.address[1])
+        self.server = await asyncio.start_server(self.handle,
+                                                 self.address[0],
+                                                 self.address[1],
+                                                 limit=262144)
 
 
 class HXsocksHandler:
-    bufsize = 32768
+    bufsize = 65535
 
     def __init__(self, server):
         self.server = server
@@ -147,13 +151,22 @@ class HXsocksHandler:
         return _buf
 
     async def handle(self, client_reader, client_writer):
+        client_writer.transport.set_write_buffer_limits(262144, 131072)
+        if self.server.tcp_nodelay:
+            soc = client_writer.transport.get_extra_info('socket')
+            soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         try:
             await self._handle(client_reader, client_writer)
         except Exception as err:
             self.logger.error('HXsocksHandler.handle')
             self.logger.error(repr(err))
             self.logger.error(traceback.format_exc())
-        client_writer.close()
+        if not client_writer.is_closing():
+            client_writer.close()
+        try:
+            await client_writer.wait_closed()
+        except (ConnectionResetError, OSError):
+            pass
 
     async def _handle(self, client_reader, client_writer):
         self.client_address = client_writer.get_extra_info('peername')
@@ -225,8 +238,9 @@ class HXsocksHandler:
                                   self.server.proxy,
                                   self.user_mgr,
                                   self.address[1],
-                                  self.logger)
-            await conn.wait_close()
+                                  self.logger,
+                                  self.server.tcp_nodelay)
+            await conn.handle_connection()
             client_pkey = hashlib.md5(client_pkey).digest()
             self.user_mgr.del_key(client_pkey)
             return
@@ -242,7 +256,7 @@ class HXsocksHandler:
             fut = self.client_reader.read(self.bufsize)
             try:
                 await asyncio.wait_for(fut, timeout)
-            except (asyncio.TimeoutError, ConnectionResetError):
+            except (asyncio.TimeoutError, OSError):
                 return
 
     async def handle_ss(self, client_writer, addr_type):
@@ -280,7 +294,11 @@ class HXsocksHandler:
         self.logger.info('connect to %s:%d %r', addr, port, self.client_address)
 
         try:
-            remote_reader, remote_writer = await open_connection(addr, port, self.server.proxy)
+            remote_reader, remote_writer = await open_connection(addr,
+                                                                 port,
+                                                                 self.server.proxy,
+                                                                 self.server.tcp_nodelay)
+            remote_writer.transport.set_write_buffer_limits(262144, 131072)
         except Exception as err:
             self.logger.error('connect to %s:%s failed! %r', addr, port, err)
             return
@@ -296,11 +314,16 @@ class HXsocksHandler:
         except Exception as err:
             self.logger.error(repr(err))
             self.logger.error(traceback.format_exc())
-        remote_writer.close()
 
         # access log
         traffic = (context.traffic_from_client, context.traffic_from_remote)
         self.user_mgr.user_access_log(self.address[1], addr, traffic, self.client_address, self.__key)
+        if not remote_writer.is_closing():
+            remote_writer.close()
+        try:
+            await remote_writer.wait_closed()
+        except OSError:
+            pass
 
     async def ss_forward_a(self, write_to, context, timeout=60):
         # data from ss client, decrypt, sent to remote
@@ -323,13 +346,13 @@ class HXsocksHandler:
             try:
                 write_to.write(data)
                 await write_to.drain()
-            except ConnectionResetError:
+            except OSError:
                 context.local_eof = True
                 return
         context.local_eof = True
         try:
             write_to.write_eof()
-        except (ConnectionResetError, OSError):
+        except OSError:
             pass
 
     async def ss_forward_b(self, read_from, write_to, cipher, context, timeout=60):
@@ -344,7 +367,7 @@ class HXsocksHandler:
                     data = b''
                 else:
                     continue
-            except (ConnectionResetError, OSError):
+            except OSError:
                 data = b''
 
             if not data:
@@ -356,7 +379,7 @@ class HXsocksHandler:
             try:
                 write_to.write(data)
                 await write_to.drain()
-            except ConnectionResetError:
+            except OSError:
                 context.remote_eof = True
                 return
         context.remote_eof = True

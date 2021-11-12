@@ -210,6 +210,7 @@ class Config:
         self.rproxy = False
         self.remoteapi = False
         self.remotepass = ''
+        self.tcp_nodelay = False
 
         self.listen = ('127.0.0.1', 8118)
 
@@ -263,6 +264,7 @@ class Config:
         self.remotepass = self.userconf.dget('FWLite', 'remotepass', '')
         if self.remoteapi and not self.remotepass:
             self.logger.warning('Remote API Enabled WITHOUT password protection!')
+        self.tcp_nodelay = self.userconf.dgetbool('FWLite', 'tcp_nodelay', False)
 
         listen = self.userconf.dget('FWLite', 'listen', '8118')
         if listen.isdigit():
