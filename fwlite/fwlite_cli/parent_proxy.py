@@ -51,7 +51,7 @@ class DefaultDict(dict):
 class ParentProxy:
     DIRECT = None
     DEFAULT_TIMEOUT = 8
-    GATE = 0
+    GATE = 5
     via = None
     conf = None
 
@@ -149,11 +149,15 @@ class ParentProxy:
             if time.time() - self.avg_resp_time_ts > 360:
                 if self.avg_resp_time > self.gate:
                     self.avg_resp_time *= 0.93
+                    if self.avg_resp_time < self.gate:
+                        self.avg_resp_time = self.gate
                 self.avg_resp_time_ts = time.time()
             return self.avg_resp_time
         if time.time() - self.avg_resp_time_by_host_ts[host] > 360:
             if self.avg_resp_time_by_host[host] > self.gate:
                 self.avg_resp_time_by_host[host] *= 0.93
+                if self.avg_resp_time_by_host[host] < self.gate:
+                    self.avg_resp_time_by_host[host] = self.gate
             self.avg_resp_time_by_host_ts[host] = time.time()
         return self.avg_resp_time_by_host[host] or self.avg_resp_time
 

@@ -25,7 +25,6 @@ import base64
 import struct
 import socket
 import time
-import traceback
 import logging
 import asyncio
 
@@ -55,18 +54,11 @@ async def ss_connect(proxy, timeout, addr, port, limit, tcp_nodelay):
     if not isinstance(proxy, ParentProxy):
         proxy = ParentProxy(proxy, proxy)
     assert proxy.scheme == 'ss'
-    # create socket_pair
-    sock_a, sock_b = socket.socketpair()
-    if sys.platform == 'win32':
-        sock_a.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        sock_a.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
     # connect to ss server
-    context = SSConn(proxy, sock_b)
-    await context.connect(addr, port, timeout, tcp_nodelay)
+    context = SSConn(proxy)
+    reader, writer = await context.connect(addr, port, timeout, limit, tcp_nodelay)
 
-    # return reader, writer
-    reader, writer = await asyncio.open_connection(sock=sock_a, limit=limit)
     # writer.transport.set_write_buffer_limits(0, 0)
     return reader, writer
 
@@ -74,10 +66,9 @@ async def ss_connect(proxy, timeout, addr, port, limit, tcp_nodelay):
 class SSConn:
     bufsize = 65535
 
-    def __init__(self, proxy, sock_b):
+    def __init__(self, proxy):
         self.logger = logging.getLogger('ss')
         self.proxy = proxy
-        self.sock_b = sock_b
         ssmethod, sspassword = self.proxy.username, self.proxy.password
         if sspassword is None:
             ssmethod, sspassword = base64.b64decode(ssmethod).decode().split(':', 1)
@@ -101,11 +92,9 @@ class SSConn:
         self.data_recved = False
         self._buf = b''
 
-    async def connect(self, addr, port, timeout, tcp_nodelay):
+    async def connect(self, addr, port, timeout, limit, tcp_nodelay):
         self._address = addr
         self._port = port
-        self.client_reader, self.client_writer = await asyncio.open_connection(sock=self.sock_b)
-        self.client_writer.transport.set_write_buffer_limits(262144, 131072)
 
         from .connection import open_connection
         self.remote_reader, self.remote_writer, _ = await open_connection(
@@ -117,27 +106,33 @@ class SSConn:
             limit=131072,
             tcp_nodelay=tcp_nodelay)
         self.remote_writer.transport.set_write_buffer_limits(262144, 131072)
+
+        # create socket_pair
+        sock_a, sock_b = socket.socketpair()
+        if sys.platform == 'win32':
+            sock_a.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            sock_a.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.client_reader, self.client_writer = await asyncio.open_connection(sock=sock_b)
+        self.client_writer.transport.set_write_buffer_limits(262144, 131072)
+
         # start forward
         self.task = asyncio.ensure_future(self.forward())
 
+        # return reader, writer
+        reader, writer = await asyncio.open_connection(sock=sock_a, limit=limit)
+        return reader, writer
+
     async def forward(self):
 
-        tasks = [self.forward_from_client(),
-                 self.forward_from_remote(),
+        tasks = [asyncio.create_task(self.forward_from_client()),
+                 asyncio.create_task(self.forward_from_remote()),
                  ]
-        try:
-            await asyncio.wait(tasks)
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            self.logger.error('SSConn.forward')
-            self.logger.error(repr(e))
-            self.logger.error(traceback.format_exc())
+        await asyncio.wait(tasks)
         for writer in (self.remote_writer, self.client_writer):
             try:
                 writer.close()
                 await writer.wait_closed()
-            except OSError:
+            except ConnectionError:
                 pass
 
     async def forward_from_client(self):
@@ -152,7 +147,7 @@ class SSConn:
                     data = b''
                 else:
                     continue
-            except (OSError, AttributeError):
+            except ConnectionError:
                 data = b''
 
             if not data:
@@ -168,12 +163,12 @@ class SSConn:
             self.remote_writer.write(self.crypto.encrypt(data))
             try:
                 await self.remote_writer.drain()
-            except OSError:
+            except ConnectionError:
                 break
         self.client_eof = True
         try:
             self.remote_writer.write_eof()
-        except (OSError, AttributeError):
+        except ConnectionError:
             pass
 
     async def _read(self, size=None):
@@ -199,13 +194,13 @@ class SSConn:
         # read from remote, decrypt, sent to client
         try:
             fut = self.remote_reader.readexactly(self.crypto._iv_len)
-            iv = await asyncio.wait_for(fut, timeout=60)
+            iv = await asyncio.wait_for(fut, timeout=12)
             self.crypto.decrypt(iv)
         except (asyncio.TimeoutError, asyncio.IncompleteReadError):
             self.remote_eof = True
             try:
                 self.client_writer.write_eof()
-            except (OSError, AttributeError):
+            except ConnectionError:
                 pass
             return
 
@@ -215,7 +210,7 @@ class SSConn:
                 data = await asyncio.wait_for(fut, timeout=12)
                 self.last_active = time.time()
                 self.data_recved = True
-            except (asyncio.TimeoutError, OSError):
+            except asyncio.TimeoutError:
                 if time.time() - self.last_active > 120 or self.client_eof:
                     data = b''
                 else:
@@ -228,10 +223,10 @@ class SSConn:
             try:
                 self.client_writer.write(data)
                 await self.client_writer.drain()
-            except OSError:
+            except ConnectionError:
                 break
         self.remote_eof = True
         try:
             self.client_writer.write_eof()
-        except (OSError, AttributeError):
+        except ConnectionError:
             pass

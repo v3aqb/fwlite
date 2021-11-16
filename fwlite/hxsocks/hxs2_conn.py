@@ -23,6 +23,7 @@ import struct
 import io
 import time
 import random
+import socket
 import traceback
 
 from hxcrypto import InvalidTag, AEncryptor
@@ -134,8 +135,7 @@ class Hxs2Connection():
                 if self._gone and not self._stream_writer:
                     break
 
-                time_ = time.monotonic()
-                if time_ - self._last_active > 300:
+                if time.monotonic() - self._last_active > 300:
                     break
 
                 # read frame_len
@@ -145,19 +145,16 @@ class Hxs2Connection():
                     frame_len, = struct.unpack('>H', frame_len)
                     timeout_count = 0
                 except (asyncio.IncompleteReadError, ValueError, InvalidTag,
-                        OSError) as err:
+                        ConnectionError) as err:
                     self._logger.debug('read frame_len error: %r', err)
                     break
                 except asyncio.TimeoutError:
                     timeout_count += 1
                     if timeout_count > 10:
-                        # client should sent ping to keep_alive, destroy connection
+                        # client should sent ping to keep_alive
                         self._logger.debug('read frame_len timed out.')
                         break
                     continue
-                except OSError as err:
-                    self._logger.debug('read frame_len error: %r', err)
-                    break
 
                 # read chunk_data
                 try:
@@ -180,7 +177,7 @@ class Hxs2Connection():
                                 continue
                         else:
                             raise error
-                except (OSError, InvalidTag, asyncio.TimeoutError,
+                except (ConnectionError, InvalidTag, asyncio.TimeoutError,
                         asyncio.IncompleteReadError) as err:
                     # something went wrong...
                     self._logger.debug('read frame error: %r', err)
@@ -196,7 +193,7 @@ class Hxs2Connection():
                 header = frame_data.read(4)
                 frame_type, frame_flags, stream_id = struct.unpack('>BBH', header)
 
-                if frame_type != PING:
+                if frame_type in (DATA, HEADERS):
                     self._last_active = time.monotonic()
 
                 self._logger.debug('recv frame_type: %d, stream_id: %d', frame_type, stream_id)
@@ -217,7 +214,7 @@ class Hxs2Connection():
                         self._stream_writer[stream_id].write(data)
                         self._stream_context[stream_id].data_recv(len(data))
                         await self._stream_writer[stream_id].drain()
-                    except OSError:
+                    except ConnectionError:
                         # remote closed, reset stream
                         asyncio.ensure_future(self.close_stream(stream_id))
                 elif frame_type == HEADERS:  # 1
@@ -238,7 +235,10 @@ class Hxs2Connection():
                         if frame_flags & END_STREAM_FLAG:
                             self._stream_context[stream_id].stream_status |= EOF_RECV
                             if stream_id in self._stream_writer:
-                                self._stream_writer[stream_id].write_eof()
+                                try:
+                                    self._stream_writer[stream_id].write_eof()
+                                except OSError:
+                                    self._stream_context[stream_id].stream_status = CLOSED
                             if self._stream_context[stream_id].stream_status == CLOSED:
                                 asyncio.ensure_future(self.close_stream(stream_id))
                     else:
@@ -256,18 +256,22 @@ class Hxs2Connection():
             except Exception as err:
                 self._logger.error('read from connection error: %r', err)
                 self._logger.error(traceback.format_exc())
+                break
         self._connection_lost = True
         # exit loop, close all streams...
         self._logger.info('recv from hxs2 connect ended')
 
+        task_list = []
         for stream_id in self._stream_writer:
-            try:
-                self._stream_context[stream_id].stream_status = CLOSED
-                if not self._stream_writer[stream_id].is_closing():
-                    self._stream_writer[stream_id].close()
-            except OSError:
-                pass
+            self._stream_context[stream_id].stream_status = CLOSED
+            if not self._stream_writer[stream_id].is_closing():
+                self._stream_writer[stream_id].close()
+                task_list.append(self._stream_writer[stream_id])
+
         self._stream_writer = {}
+        task_list = [asyncio.create_task(w.wait_closed()) for w in task_list]
+        if task_list:
+            await asyncio.wait(task_list)
 
     async def create_connection(self, stream_id, host, port):
         self._logger.info('connecting %s:%s %s %s', host, port, self.user, self._client_address)
@@ -277,7 +281,7 @@ class Hxs2Connection():
             self.user_mgr.user_access_ctrl(self._s_port, host, self._client_address, self.user)
             reader, writer = await open_connection(host, port, self._proxy, self._tcp_nodelay)
             writer.transport.set_write_buffer_limits(524288, 262144)
-        except (OSError, asyncio.TimeoutError) as err:
+        except (ConnectionError, asyncio.TimeoutError, socket.gaierror) as err:
             # tell client request failed.
             self._logger.error('connect %s:%s failed: %r', host, port, err)
             data = b'\x01' * random.randint(64, 256)
@@ -306,7 +310,7 @@ class Hxs2Connection():
         self._logger.debug('send frame_type: %d, stream_id: %d', type_, stream_id)
         if self._connection_lost:
             return
-        if type_ != PING:
+        if type_ in (DATA, HEADERS):
             self._last_active = time.monotonic()
 
         header = struct.pack('>BBH', type_, flags, stream_id)
@@ -336,7 +340,7 @@ class Hxs2Connection():
         async with self._client_writer_lock:
             try:
                 await self._client_writer.drain()
-            except OSError:
+            except ConnectionError:
                 self._connection_lost = True
 
     async def read_from_remote(self, stream_id, remote_reader):
@@ -345,14 +349,17 @@ class Hxs2Connection():
             fut = remote_reader.read(self.bufsize)
             try:
                 data = await asyncio.wait_for(fut, timeout=12)
-            except asyncio.TimeoutError:
+            except ConnectionError:
+                await self.close_stream(stream_id)
+                break
+            except (asyncio.TimeoutError, OSError) as err:
+                # OSError: [WinError 121]
+                if isinstance(err, OSError) and err.args[0] != 121:
+                    raise
                 if time.monotonic() - self._stream_context[stream_id].last_active < 120 and \
                         self._stream_context[stream_id].stream_status == OPEN:
                     continue
                 data = b''
-            except OSError:
-                await self.close_stream(stream_id)
-                break
 
             if not data:
                 self.send_frame(HEADERS, END_STREAM_FLAG, stream_id,
@@ -393,7 +400,7 @@ class Hxs2Connection():
                 self._stream_writer[stream_id].close()
             try:
                 await self._stream_writer[stream_id].wait_closed()
-            except OSError:
+            except ConnectionError:
                 pass
             del self._stream_writer[stream_id]
             self.log_access(stream_id)

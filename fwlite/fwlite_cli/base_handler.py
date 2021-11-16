@@ -102,26 +102,20 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.close_connection = True
         self.request_host = None
 
-        try:
-            await self._handle()
-        except asyncio.CancelledError:
-            raise
-        except Exception as err:
-            self.logger.error('base_handler')
-            self.logger.error(repr(err))
-            self.logger.error(traceback.format_exc())
-        if not self.client_writer.is_closing():
+        await self._handle()
+
+        if self.client_writer:
             self.client_writer.close()
-        try:
-            await self.client_writer.wait_closed()
-        except OSError:
-            pass
+            try:
+                await self.client_writer.wait_closed()
+            except ConnectionError:
+                pass
 
     async def _handle(self):
         fut = self.client_reader.readexactly(1)
         try:
             first_byte = await asyncio.wait_for(fut, timeout=10)
-        except (asyncio.TimeoutError, asyncio.IncompleteReadError):
+        except (asyncio.TimeoutError, asyncio.IncompleteReadError, ConnectionError):
             return
         if first_byte == b'\x05':
             self.close_connection = True
@@ -131,12 +125,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             while not self.close_connection:
                 await self.handle_one_request()
         if self.remote_writer:
-            if not self.remote_writer.is_closing():
-                self.remote_writer.close()
-            try:
-                await self.remote_writer.wait_closed()
-            except OSError:
-                pass
+            self.logger.error('BaseHandler: remote_writer in handler.')
 
     def pre_request_init(self):
         self.req_count += 1
@@ -225,7 +214,7 @@ class BaseHandler(BaseHTTPRequestHandler):
 
             # read headers
             _, self.headers = await read_headers(self.client_reader)
-        except (asyncio.TimeoutError, ConnectionResetError) as err:
+        except (asyncio.TimeoutError, ConnectionError) as err:
             self.logger.debug('base_handler read request failed! %r', err)
             self.close_connection = True
             return
@@ -250,6 +239,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         # call method function
         mname = 'do_' + self.command
         if not hasattr(self, mname):
+            self.logger.error('%s NOT_IMPLEMENTED', mname)
             self.send_error(
                 HTTPStatus.NOT_IMPLEMENTED,
                 "Unsupported method (%r)" % self.command)
@@ -257,8 +247,6 @@ class BaseHandler(BaseHTTPRequestHandler):
             return
         method = getattr(self, mname)
         await method()
-        if self.client_writer.is_closing():
-            self.close_connection = True
 
     def log_message(self, _format, *args):
         pass

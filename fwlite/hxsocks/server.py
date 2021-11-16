@@ -155,17 +155,14 @@ class HXsocksHandler:
         if self.server.tcp_nodelay:
             soc = client_writer.transport.get_extra_info('socket')
             soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        try:
-            await self._handle(client_reader, client_writer)
-        except Exception as err:
-            self.logger.error('HXsocksHandler.handle')
-            self.logger.error(repr(err))
-            self.logger.error(traceback.format_exc())
+
+        await self._handle(client_reader, client_writer)
+
         if not client_writer.is_closing():
             client_writer.close()
         try:
             await client_writer.wait_closed()
-        except (ConnectionResetError, OSError):
+        except ConnectionError:
             pass
 
     async def _handle(self, client_reader, client_writer):
@@ -182,7 +179,7 @@ class HXsocksHandler:
             self.logger.error('iv reused, %s', self.client_address)
             await self.play_dead()
             return
-        except (asyncio.TimeoutError, asyncio.IncompleteReadError, ConnectionResetError):
+        except (asyncio.TimeoutError, asyncio.IncompleteReadError, ConnectionError):
             self.logger.warning('iv read failed, %s', self.client_address)
             return
 
@@ -193,7 +190,7 @@ class HXsocksHandler:
         except asyncio.TimeoutError:
             self.logger.debug('read cmd timed out. %s', self.client_address)
             return
-        except (ConnectionResetError, asyncio.IncompleteReadError):
+        except (ConnectionError, asyncio.IncompleteReadError):
             self.logger.debug('read cmd reset. %s', self.client_address)
             return
         except InvalidTag:
@@ -256,7 +253,7 @@ class HXsocksHandler:
             fut = self.client_reader.read(self.bufsize)
             try:
                 await asyncio.wait_for(fut, timeout)
-            except (asyncio.TimeoutError, OSError):
+            except (asyncio.TimeoutError, ConnectionError):
                 return
 
     async def handle_ss(self, client_writer, addr_type):
@@ -299,21 +296,20 @@ class HXsocksHandler:
                                                                  self.server.proxy,
                                                                  self.server.tcp_nodelay)
             remote_writer.transport.set_write_buffer_limits(262144, 131072)
-        except Exception as err:
+        except (ConnectionError, asyncio.TimeoutError, socket.gaierror) as err:
             self.logger.error('connect to %s:%s failed! %r', addr, port, err)
             return
 
         # forward
         context = ForwardContext()
 
-        tasks = [self.ss_forward_a(remote_writer, context),
-                 self.ss_forward_b(remote_reader, client_writer, self.encryptor.encrypt, context),
+        tasks = [asyncio.create_task(self.ss_forward_a(remote_writer, context)),
+                 asyncio.create_task(self.ss_forward_b(remote_reader,
+                                                       client_writer,
+                                                       self.encryptor.encrypt,
+                                                       context)),
                  ]
-        try:
-            await asyncio.wait(tasks)
-        except Exception as err:
-            self.logger.error(repr(err))
-            self.logger.error(traceback.format_exc())
+        await asyncio.wait(tasks)
 
         # access log
         traffic = (context.traffic_from_client, context.traffic_from_remote)
@@ -322,7 +318,7 @@ class HXsocksHandler:
             remote_writer.close()
         try:
             await remote_writer.wait_closed()
-        except OSError:
+        except ConnectionError:
             pass
 
     async def ss_forward_a(self, write_to, context, timeout=60):
@@ -337,7 +333,7 @@ class HXsocksHandler:
                     data = b''
                 else:
                     continue
-            except (BufEmptyError, asyncio.IncompleteReadError, InvalidTag, ConnectionResetError, OSError):
+            except (BufEmptyError, asyncio.IncompleteReadError, InvalidTag, ConnectionError):
                 data = b''
 
             if not data:
@@ -346,13 +342,13 @@ class HXsocksHandler:
             try:
                 write_to.write(data)
                 await write_to.drain()
-            except OSError:
+            except ConnectionError:
                 context.local_eof = True
                 return
         context.local_eof = True
         try:
             write_to.write_eof()
-        except OSError:
+        except ConnectionError:
             pass
 
     async def ss_forward_b(self, read_from, write_to, cipher, context, timeout=60):
@@ -367,7 +363,7 @@ class HXsocksHandler:
                     data = b''
                 else:
                     continue
-            except OSError:
+            except ConnectionError:
                 data = b''
 
             if not data:
@@ -379,8 +375,11 @@ class HXsocksHandler:
             try:
                 write_to.write(data)
                 await write_to.drain()
-            except OSError:
+            except ConnectionError:
                 context.remote_eof = True
                 return
         context.remote_eof = True
-        # write_to.write_eof()
+        try:
+            write_to.write_eof()
+        except OSError:
+            pass

@@ -3,7 +3,6 @@ import asyncio
 import socket
 import time
 import logging
-import traceback
 
 logger = logging.getLogger('tunnel')
 
@@ -48,7 +47,7 @@ async def forward_from_client(read_from, write_to, context, timeout=60):
                 data = b''
             else:
                 continue
-        except (asyncio.IncompleteReadError, ConnectionResetError, ConnectionAbortedError):
+        except ConnectionError:
             data = b''
 
         if not data:
@@ -57,14 +56,14 @@ async def forward_from_client(read_from, write_to, context, timeout=60):
             context.last_active = time.time()
             write_to.write(data)
             await write_to.drain()
-        except ConnectionResetError:
+        except ConnectionError:
             context.local_eof = True
             return
     context.local_eof = True
     # client closed, tell remote
     try:
         write_to.write_eof()
-    except ConnectionResetError:
+    except ConnectionError:
         pass
 
 
@@ -81,7 +80,7 @@ async def forward_from_remote(read_from, write_to, context, timeout=60):
                 data = b''
             else:
                 continue
-        except ConnectionResetError:
+        except ConnectionError:
             data = b''
 
         if not data:
@@ -91,7 +90,7 @@ async def forward_from_remote(read_from, write_to, context, timeout=60):
             context.retryable = False
             write_to.write(data)
             await write_to.drain()
-        except (ConnectionResetError, ConnectionAbortedError):
+        except ConnectionError:
             # client closed
             context.remote_eof = True
             context.retryable = False
@@ -101,7 +100,7 @@ async def forward_from_remote(read_from, write_to, context, timeout=60):
 
     try:
         write_to.write_eof()
-    except (ConnectionResetError, OSError):
+    except ConnectionError:
         pass
 
 
@@ -123,29 +122,38 @@ class ForwardHandler:
                                                                     proxy=self.proxy,
                                                                     timeout=self.ctimeout,
                                                                     tunnel=True)
-            if self.tcp_nodelay:
-                soc = remote_writer.transport.get_extra_info('socket')
-                soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                soc = client_writer.transport.get_extra_info('socket')
-                soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            # forward
-            context = ForwardContext()
+        except ConnectionError:
+            logger.error('open_connection failed: %s:%s, via %s', self.addr, self.port, self.proxy)
+            client_writer.close()
+            await client_writer.wait_closed()
+            return
 
-            tasks = [forward_from_client(client_reader, remote_writer, context, self.timeout),
-                     forward_from_remote(remote_reader, client_writer, context, self.timeout),
-                     ]
-            await asyncio.wait(tasks)
-        except asyncio.CancelledError:
-            raise
-        except Exception as err:
-            logger.error(repr(err))
-            logger.error(traceback.format_exc())
+        if self.tcp_nodelay:
+            soc = remote_writer.transport.get_extra_info('socket')
+            soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            soc = client_writer.transport.get_extra_info('socket')
+            soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
+        # forward
+        context = ForwardContext()
+
+        tasks = [asyncio.create_task(forward_from_client(client_reader,
+                                                         remote_writer,
+                                                         context,
+                                                         self.timeout)),
+                 asyncio.create_task(forward_from_remote(remote_reader,
+                                                         client_writer,
+                                                         context,
+                                                         self.timeout)),
+                 ]
+        await asyncio.wait(tasks)
+
         for writer in (remote_writer, client_writer):
             if not writer.is_closing():
                 writer.close()
             try:
                 await writer.wait_closed()
-            except (OSError, AttributeError):
+            except ConnectionError:
                 pass
 
 

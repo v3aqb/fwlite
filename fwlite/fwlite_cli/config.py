@@ -214,7 +214,7 @@ class Config:
 
         self.listen = ('127.0.0.1', 8118)
 
-        self.gate = 2
+        self.gate = 5
 
         self.plugin_manager = None  # PluginManager(self)
         self.port_forward = None  # ForwardManager(self)
@@ -274,7 +274,7 @@ class Config:
 
         ParentProxy.DEFAULT_TIMEOUT = self.timeout
 
-        self.gate = self.userconf.dgetint('FWLite', 'gate', 2)
+        self.gate = self.userconf.dgetint('FWLite', 'gate', 5)
         if self.gate < 0:
             self.logger.warning('gate < 0, set to 0')
             self.gate = 0
