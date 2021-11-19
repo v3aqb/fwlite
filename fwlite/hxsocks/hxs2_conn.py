@@ -106,7 +106,7 @@ class Hxs2Connection():
         self._client_reader = reader
         self._client_writer = writer
         self._client_address = writer.get_extra_info('peername')
-        self._client_writer.transport.set_write_buffer_limits(524288, 262144)
+        self._client_writer.transport.set_write_buffer_limits(524288)
         self._proxy = proxy
         self._s_port = s_port
         self._logger = logger
@@ -280,7 +280,7 @@ class Hxs2Connection():
         try:
             self.user_mgr.user_access_ctrl(self._s_port, host, self._client_address, self.user)
             reader, writer = await open_connection(host, port, self._proxy, self._tcp_nodelay)
-            writer.transport.set_write_buffer_limits(524288, 262144)
+            writer.transport.set_write_buffer_limits(524288)
         except (ConnectionError, asyncio.TimeoutError, socket.gaierror) as err:
             # tell client request failed.
             self._logger.error('connect %s:%s failed: %r', host, port, err)
@@ -352,10 +352,7 @@ class Hxs2Connection():
             except ConnectionError:
                 await self.close_stream(stream_id)
                 break
-            except (asyncio.TimeoutError, OSError) as err:
-                # OSError: [WinError 121]
-                if isinstance(err, OSError) and err.args[0] != 121:
-                    raise
+            except asyncio.TimeoutError:
                 if time.monotonic() - self._stream_context[stream_id].last_active < 120 and \
                         self._stream_context[stream_id].stream_status == OPEN:
                     continue
@@ -400,7 +397,7 @@ class Hxs2Connection():
                 self._stream_writer[stream_id].close()
             try:
                 await self._stream_writer[stream_id].wait_closed()
-            except ConnectionError:
+            except OSError:
                 pass
             del self._stream_writer[stream_id]
             self.log_access(stream_id)

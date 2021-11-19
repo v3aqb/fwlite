@@ -58,8 +58,6 @@ async def ss_connect(proxy, timeout, addr, port, limit, tcp_nodelay):
     # connect to ss server
     context = SSConn(proxy)
     reader, writer = await context.connect(addr, port, timeout, limit, tcp_nodelay)
-
-    # writer.transport.set_write_buffer_limits(0, 0)
     return reader, writer
 
 
@@ -105,7 +103,7 @@ class SSConn:
             tunnel=True,
             limit=131072,
             tcp_nodelay=tcp_nodelay)
-        self.remote_writer.transport.set_write_buffer_limits(262144, 131072)
+        # self.remote_writer.transport.set_write_buffer_limits(262144)
 
         # create socket_pair
         sock_a, sock_b = socket.socketpair()
@@ -113,7 +111,7 @@ class SSConn:
             sock_a.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             sock_a.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.client_reader, self.client_writer = await asyncio.open_connection(sock=sock_b)
-        self.client_writer.transport.set_write_buffer_limits(262144, 131072)
+        self.client_writer.transport.set_write_buffer_limits(262144)
 
         # start forward
         self.task = asyncio.ensure_future(self.forward())

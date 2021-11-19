@@ -88,7 +88,7 @@ class BaseHandler(BaseHTTPRequestHandler):
     async def handle(self, client_reader, client_writer):  # pylint: disable=W0221,W0236
         self.client_reader = client_reader
         self.client_writer = client_writer
-        # self.client_writer.transport.set_write_buffer_limits(0, 0)
+        self.client_writer.transport.set_write_buffer_limits(262144)
         if self.server.conf.tcp_nodelay:
             soc = self.client_writer.transport.get_extra_info('socket')
             soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)

@@ -647,7 +647,6 @@ class http_handler(BaseProxyHandler):
                 while True:
                     data = await self.remote_reader.read(self.bufsize)
                     if not data:
-                        self.client_writer.write_eof()
                         break
                     await self.client_writer_write(data)
             else:
@@ -682,8 +681,7 @@ class http_handler(BaseProxyHandler):
             self.remote_writer = None
             return
         except (asyncio.TimeoutError,
-                ConnectionError, ValueError,
-                asyncio.IncompleteReadError, socket.gaierror) as err:
+                OSError, ValueError, asyncio.IncompleteReadError) as err:
             if self.remote_writer:
                 self.remote_writer.close()
                 try:
@@ -819,7 +817,7 @@ class http_handler(BaseProxyHandler):
             addr, port = parse_hostport(path, 443)
             self.remote_reader, self.remote_writer, self.ppname = \
                 await open_connection(addr, port, self.pproxy, self.timeout, iplist, True)
-        except (asyncio.TimeoutError, asyncio.IncompleteReadError, ConnectionError, socket.gaierror) as err:
+        except (asyncio.TimeoutError, asyncio.IncompleteReadError, OSError) as err:
             self.logger.warning('%s %s via %s failed on connect! %r',
                                 self.command, self.shortpath or self.path, self.ppname, err)
             self.conf.GET_PROXY.notify(self.command, self.shortpath or self.path, self.request_host,
@@ -863,7 +861,7 @@ class http_handler(BaseProxyHandler):
         self.remote_writer.close()
         try:
             await self.remote_writer.wait_closed()
-        except ConnectionError:
+        except OSError:
             pass
         self.remote_writer = None
 
@@ -896,13 +894,13 @@ class http_handler(BaseProxyHandler):
                 context.from_client()
                 write_to.write(data)
                 await write_to.drain()
-            except ConnectionError:
+            except OSError:
                 context.local_eof = True
                 return
         # client closed, tell remote
         try:
             write_to.write_eof()
-        except ConnectionError:
+        except OSError:
             pass
 
     async def forward_from_remote(self, read_from, write_to, context, timeout=120):
@@ -912,12 +910,9 @@ class http_handler(BaseProxyHandler):
             try:
                 fut = read_from.read(self.bufsize)
                 data = await asyncio.wait_for(fut, intv)
-            except ConnectionError:
+            except OSError:
                 data = b''
-            except (asyncio.TimeoutError, OSError) as err:
-                # OSError: [WinError 121]
-                if isinstance(err, OSError) and err.args[0] != 121:
-                    raise
+            except asyncio.TimeoutError:
                 if time.monotonic() - context.last_active > timeout or context.local_eof:
                     data = b''
                 elif context.retryable and time.monotonic() - context.last_active > self.timeout:

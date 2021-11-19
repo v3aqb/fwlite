@@ -261,7 +261,7 @@ class Hxs2Connection:
                 socketpair_a.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 socketpair_b.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             reader, writer = await asyncio.open_connection(sock=socketpair_b, limit=131072)
-            writer.transport.set_write_buffer_limits(524288, 262144)
+            writer.transport.set_write_buffer_limits(524288)
 
             self._client_writer[stream_id] = writer
             self._last_active[stream_id] = time.monotonic()
@@ -568,7 +568,7 @@ class Hxs2Connection:
             tunnel=True,
             limit=262144,
             tcp_nodelay=tcp_nodelay)
-        # self.remote_writer.transport.set_write_buffer_limits(524288, 262144)
+        self.remote_writer.transport.set_write_buffer_limits(262144)
 
         # prep key exchange request
         self.__pskcipher = Encryptor(self._psk, self.method)
@@ -681,7 +681,7 @@ class Hxs2Connection:
     def is_busy(self):
         return self._buffer_size_ewma > 2048 or \
             (self._recv_tp_max > 524288 and self._recv_tp_ewma > self._recv_tp_max * 0.3) or \
-            (self._recv_tp_max > 262144 and self._sent_tp_ewma > self._sent_tp_max * 0.3)
+            (self._sent_tp_max > 262144 and self._sent_tp_ewma > self._sent_tp_max * 0.3)
 
     def print_status(self):
         if not self.connected:

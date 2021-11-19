@@ -151,7 +151,7 @@ class HXsocksHandler:
         return _buf
 
     async def handle(self, client_reader, client_writer):
-        client_writer.transport.set_write_buffer_limits(262144, 131072)
+        client_writer.transport.set_write_buffer_limits(262144)
         if self.server.tcp_nodelay:
             soc = client_writer.transport.get_extra_info('socket')
             soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -295,7 +295,6 @@ class HXsocksHandler:
                                                                  port,
                                                                  self.server.proxy,
                                                                  self.server.tcp_nodelay)
-            remote_writer.transport.set_write_buffer_limits(262144, 131072)
         except (ConnectionError, asyncio.TimeoutError, socket.gaierror) as err:
             self.logger.error('connect to %s:%s failed! %r', addr, port, err)
             return
@@ -348,7 +347,7 @@ class HXsocksHandler:
         context.local_eof = True
         try:
             write_to.write_eof()
-        except ConnectionError:
+        except OSError:
             pass
 
     async def ss_forward_b(self, read_from, write_to, cipher, context, timeout=60):

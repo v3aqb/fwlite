@@ -38,6 +38,10 @@ class BloomFilter(_BloomFilter):
     def __len__(self):
         return self.count
 
+    def clear(self):
+        self.filter.zero()
+        self.count = 0
+
 
 class IVError(ValueError):
     pass
@@ -48,16 +52,14 @@ class IVStore(object):
     def __init__(self, maxlen):
         self.maxlen = maxlen
         self.store_0 = BloomFilter(self.maxlen, 0.001)
-        self.store_1 = BloomFilter(10, 0.001)
-        self.last_time_used = 0
+        self.store_1 = BloomFilter(self.maxlen, 0.001)
 
     def add(self, item):
-        self.last_time_used = time.time()
         if item in self:
             raise IVError
-        if len(self.store_0) > self.maxlen:
-            self.store_1 = self.store_0
-            self.store_0 = BloomFilter(self.maxlen, 0.001)
+        if len(self.store_0) >= self.maxlen:
+            self.store_0, self.store_1 = self.store_1, self.store_0
+            self.store_0.clear()
         self.store_0.add(item)
 
     def __contains__(self, item):
@@ -77,14 +79,4 @@ class IVChecker(object):
         self.store = defaultdict(lambda: IVStore(maxlen))
 
     def check(self, key, iv):
-        if random.random() < 0.01:
-            self._clean()
         self.store[key].add(iv)
-
-    def _clean(self):
-        garbage = []
-        for key, store in self.store.items():
-            if store.last_time_used < time.time() - self.timeout:
-                garbage.append(key)
-        for key in garbage:
-            del self.store[key]

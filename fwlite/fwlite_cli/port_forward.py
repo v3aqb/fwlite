@@ -114,6 +114,7 @@ class ForwardHandler:
 
     async def handle(self, client_reader, client_writer):
         remote_writer = None
+        client_writer.transport.set_write_buffer_limits(262144)
         try:
             # connect to target
             from .connection import open_connection

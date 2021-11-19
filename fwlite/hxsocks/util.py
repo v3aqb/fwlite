@@ -67,6 +67,7 @@ async def open_connection(addr, port, proxy, nodelay=False):
     else:
         fut = asyncio.open_connection(addr, port, limit=262144)
         remote_reader, remote_writer = await asyncio.wait_for(fut, timeout=6)
+    remote_writer.transport.set_write_buffer_limits(262144)
     if nodelay:
         soc = remote_writer.transport.get_extra_info('socket')
         soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)

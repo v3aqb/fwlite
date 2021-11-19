@@ -52,6 +52,7 @@ async def _open_connection(addr, port, timeout, iplist, limit=65536, tcp_nodelay
             try:
                 fut = asyncio.open_connection(addr, port, limit=limit)
                 remote_reader, remote_writer = await asyncio.wait_for(fut, timeout=timeout)
+                remote_writer.transport.set_write_buffer_limits(262144)
                 if tcp_nodelay:
                     soc = remote_writer.transport.get_extra_info('socket')
                     soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -62,6 +63,7 @@ async def _open_connection(addr, port, timeout, iplist, limit=65536, tcp_nodelay
 
     fut = asyncio.open_connection(addr, port)
     remote_reader, remote_writer = await asyncio.wait_for(fut, timeout=timeout)
+    remote_writer.transport.set_write_buffer_limits(262144)
     if tcp_nodelay:
         soc = remote_writer.transport.get_extra_info('socket')
         soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -136,9 +138,11 @@ async def open_connection(addr, port, proxy=None, timeout=3, iplist=None, tunnel
     if proxy.scheme == 'ss':
         from .ssocks import ss_connect
         remote_reader, remote_writer = await ss_connect(proxy, timeout, addr, port, limit, tcp_nodelay)
+        remote_writer.transport.set_write_buffer_limits(262144)
         return remote_reader, remote_writer, proxy.name
     if proxy.scheme == 'hxs2':
         from .hxsocks2 import hxs2_connect
         remote_reader, remote_writer, name = await hxs2_connect(proxy, timeout, addr, port, limit, tcp_nodelay)
+        remote_writer.transport.set_write_buffer_limits(262144)
         return remote_reader, remote_writer, name
     raise ValueError(0, 'parentproxy %s not supported!' % proxy.name)
