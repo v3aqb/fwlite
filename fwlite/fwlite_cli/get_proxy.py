@@ -167,12 +167,14 @@ class get_proxy:
         if self.ignore.match(uri, host):
             return None
 
-        if self.conf.gfwlist_enable and self.gfwlist.match(uri, host):
-            return True
+        if self.conf.gfwlist_enable:
+            result = self.gfwlist.match(uri, host)
+            if result is not None:
+                return result
         return None
 
-    def isgfwed(self, uri, host, port, ip, level=1):
-        if level == 0:
+    def isgfwed(self, uri, host, port, ip, mode=1):
+        if mode == 0:
             return False
 
         if int(ip) == 0:
@@ -181,13 +183,13 @@ class get_proxy:
         if ip.is_loopback:
             return False
 
-        if level == 5:
+        if mode == 5:
             return True
 
         if int(ip) and ip.is_private:
             return False
 
-        if level == 4:
+        if mode == 4:
             return True
 
         result = self.local.match(uri, host)
@@ -197,18 +199,15 @@ class get_proxy:
         if self.ignore.match(uri, host):
             return None
 
-        if self.conf.gfwlist_enable and\
-                uri.startswith('http://') and\
-                self.gfwlist.match('http://%s/' % host, host):
-            return True
+        if self.conf.gfwlist_enable:
+            result = self.gfwlist.match(uri, host)
+            if result is not None:
+                return result
 
         if self.ip_in_china(host, ip):
-            return None
+            return False
 
-        if level == 2 and uri.startswith('http://'):
-            return True
-
-        if level == 3:
+        if mode == 3:
             return True
 
         if self.conf.HOSTS.get(host):
@@ -218,22 +217,23 @@ class get_proxy:
             return True
         return None
 
-    def get_proxy(self, uri, host, command, ip, level=1):
+    def get_proxy(self, uri, host, command, ip, mode=1):
         '''
             decide which parentproxy to use.
             url:  'www.google.com:443'
                   'http://www.inxian.com'
             host: ('www.google.com', 443)
-            level: 0 -- direct
+            mode: 0 -- direct
                    1 -- auto:        proxy if local_rule, direct if ip in china or override, proxy if gfwlist
-                   2 -- encrypt all: proxy if local_rule, direct if ip in china or override, proxy if gfwlist or not https
                    3 -- chnroute:    proxy if local_rule, direct if ip in china or override, proxy for all
                    4 -- global:      proxy if not local
                    5 -- global:      proxy if not localhost
         '''
         host, port = host
+        if mode == 2:
+            mode = 1
 
-        gfwed = self.isgfwed(uri, host, port, ip, level)
+        gfwed = self.isgfwed(uri, host, port, ip, mode)
 
         if gfwed is False:
             if ip and ip.is_private:

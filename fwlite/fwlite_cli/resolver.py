@@ -80,12 +80,12 @@ DC = DNSCache()
 
 async def getaddrinfo(host, port):
     loop = asyncio.get_event_loop()
-    fut = loop.getaddrinfo(host, port)
+    fut = loop.getaddrinfo(host, port, family=socket.AF_INET)
     result = await asyncio.wait_for(fut, timeout=4)
     return result
 
 
-async def resolve(host, port=0):
+async def resolve(host, port=None):
     result = DC.get(host)
     if result:
         if isinstance(result, Exception):
@@ -137,15 +137,16 @@ class Resolver:
             logger.warning('resolving %s failed: %r', host, err)
             return []
 
-    async def get_ip_address(self, host):
-        logger.debug('entering %s.get_ip_address(%s)', self.__class__.__name__, host)
+    async def get_ip_address(self, addr):
+        logger.debug('entering %s.get_ip_address(%s)', self.__class__.__name__, addr)
+        host, port = addr
         try:
             return ip_address(host)
         except ValueError:
             pass
 
         try:
-            result = await self.resolve(host, 0, dirty=True)
+            result = await self.resolve(host, port, dirty=True)
             result = [ip for ip in result if ip[0] == socket.AF_INET]
             return ip_address(result[0][1])
         except IndexError:

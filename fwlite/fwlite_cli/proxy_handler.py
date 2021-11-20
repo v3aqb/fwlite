@@ -100,9 +100,9 @@ class ForwardContext:
 
 class Server:
 
-    def __init__(self, addr, port, _class, profile, conf):
+    def __init__(self, addr, port, _class, mode, conf):
         self._class = _class
-        self.profile = profile
+        self.mode = mode
         self.addr = addr
         self.port = port
         self.conf = conf
@@ -117,7 +117,7 @@ class Server:
         hdr.setFormatter(formatter)
         self.logger.addHandler(hdr)
 
-        self.logger.warning('starting server: %s %s', port, profile)
+        self.logger.warning('starting server: %s %s', port, mode)
 
     async def handle(self, reader, writer):
         _handler = self._class(self)
@@ -355,7 +355,7 @@ class http_handler(BaseProxyHandler):
                                           parse.path.split(':')[0],
                                           '?' if parse.query else '')
 
-        self.request_ip = await self.conf.resolver.get_ip_address(self.request_host[0])
+        self.request_ip = await self.conf.resolver.get_ip_address(self.request_host)
 
         if self.request_ip.is_loopback:
             if ip_address(self.client_address[0]).is_loopback:
@@ -776,7 +776,7 @@ class http_handler(BaseProxyHandler):
                 self._proxylist = [self.conf.parentlist.get(u) for u in new_url.split()]
                 # random.shuffle(self._proxylist)
 
-        self.request_ip = await self.conf.resolver.get_ip_address(self.request_host[0])
+        self.request_ip = await self.conf.resolver.get_ip_address(self.request_host)
 
         if self.request_ip.is_loopback:
             if ip_address(self.client_address[0]).is_loopback:
@@ -951,10 +951,10 @@ class http_handler(BaseProxyHandler):
 
     def getparent(self, gfwed=False):
         if self._proxylist is None:
-            profile = max(3, self.server.profile) if gfwed else self.server.profile
+            mode = max(3, self.server.mode) if gfwed else self.server.mode
             self._proxylist = self.conf.GET_PROXY.get_proxy(
                 self.shortpath or self.path, self.request_host, self.command,
-                self.request_ip, profile)
+                self.request_ip, mode)
         if not self._proxylist:
             self.ppname = ''
             self.pproxy = None

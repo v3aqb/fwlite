@@ -696,10 +696,11 @@ class Hxs2Connection:
             self.send_frame(RST_STREAM, 0, stream_id, bytes(random.randint(8, 256)))
             self._stream_status[stream_id] = CLOSED
         if stream_id in self._client_writer:
-            if not self._client_writer[stream_id].is_closing():
-                self._client_writer[stream_id].close()
+            writer = self._client_writer[stream_id]
+            del self._client_writer[stream_id]
+            if not writer.is_closing():
+                writer.close()
             try:
-                await self._client_writer[stream_id].wait_closed()
-                del self._client_writer[stream_id]
+                await writer.wait_closed()
             except ConnectionError:
                 pass
