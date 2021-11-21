@@ -1,3 +1,7 @@
+2021.11.21 v5.1.9.1
+fix connect retry
+update gui
+
 2021.11.21 v5.1.9
 fix resolver
 

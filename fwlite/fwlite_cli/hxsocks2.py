@@ -274,38 +274,30 @@ class Hxs2Connection:
         self.logger.debug('start read from client')
 
         while not self.connection_lost:
+            fut = client_reader.read(self.bufsize)
             try:
-                fut = client_reader.read(self.bufsize)
-                try:
-                    data = await asyncio.wait_for(fut, timeout=12)
-                    self._last_active[stream_id] = time.monotonic()
-                except asyncio.TimeoutError:
-                    if time.monotonic() - self._last_active[stream_id] < 120 and\
-                            self._stream_status[stream_id] == OPEN:
-                        continue
-                    data = b''
-                except ConnectionError:
-                    await self.close_stream(stream_id)
-                    return
-
-                if not data:
-                    # close stream(LOCAL)
-                    self._stream_status[stream_id] |= EOF_SENT
-                    self.send_frame(HEADERS, END_STREAM_FLAG, stream_id, bytes(random.randint(8, 256)))
-                    break
-
-                if self._stream_status[stream_id] & EOF_SENT:
-                    self.logger.error('data recv from client, while stream is closed!')
-                    await self.close_stream(stream_id)
-                    return
-                await self.send_data_frame(stream_id, data)
-            except asyncio.CancelledError:
-                raise
-            except Exception as err:
-                self.logger.error('CLIENT_SIDE BOOM! %r', err)
-                self.logger.error(traceback.format_exc())
+                data = await asyncio.wait_for(fut, timeout=12)
+                self._last_active[stream_id] = time.monotonic()
+            except asyncio.TimeoutError:
+                if time.monotonic() - self._last_active[stream_id] < 120 and\
+                        self._stream_status[stream_id] == OPEN:
+                    continue
+                data = b''
+            except ConnectionError:
                 await self.close_stream(stream_id)
                 return
+
+            if not data:
+                # close stream(LOCAL)
+                self._stream_status[stream_id] |= EOF_SENT
+                self.send_frame(HEADERS, END_STREAM_FLAG, stream_id, bytes(random.randint(8, 256)))
+                break
+
+            if self._stream_status[stream_id] & EOF_SENT:
+                self.logger.error('data recv from client, while stream is closed!')
+                await self.close_stream(stream_id)
+                return
+            await self.send_data_frame(stream_id, data)
         while time.monotonic() - self._last_active[stream_id] < 12:
             await asyncio.sleep(6)
         await self.close_stream(stream_id)

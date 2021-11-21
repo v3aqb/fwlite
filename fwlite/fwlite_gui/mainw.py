@@ -83,7 +83,9 @@ class MainWindow(QMainWindow):
         self.ui.proxyRemoveButton.clicked.connect(self.delProxy)
         self.ui.protocolBox.currentIndexChanged.connect(self.protocolChanged)
         self.ui.proxyDisableButton.clicked.connect(self.disableProxy)
-        self.ui.proxyActivateButton.clicked.connect(self.activateProxy)
+        self.ui.proxyHighButton.clicked.connect(self.activateProxyHigh)
+        self.ui.proxyMidButton.clicked.connect(self.activateProxyMid)
+        self.ui.proxyLowButton.clicked.connect(self.activateProxyLow)
         self.ui.exclusiveProxyAddButton.clicked.connect(self.exclusiveProxyAdd)
         self.ui.hostnameEdit.textChanged.connect(self.proxy_hostname_changed)
         header = [_tr("MainWindow", "name"),
@@ -337,11 +339,17 @@ class MainWindow(QMainWindow):
         self.ui.encryptionBox.setEnabled(ps in ('shadowsocks', 'hxsocks2'))
         self.ui.pskEdit.setEnabled(ps in ('shadowsocks', 'hxsocks2'))
 
-    def activateProxy(self):
-        index = self.ui.proxyListView.currentIndex().row()
-        piority = self.PL_table_model.mylist[index][2]
-        if 0 <= piority <= 100:
-            return
+    def activateProxyHigh(self):
+        self.on_proxy_select()
+        self.ui.priorityEdit.setText(str(80))
+        self.addProxy()
+
+    def activateProxyMid(self):
+        self.on_proxy_select()
+        self.ui.priorityEdit.setText(str(90))
+        self.addProxy()
+
+    def activateProxyLow(self):
         self.on_proxy_select()
         self.ui.priorityEdit.setText(str(99))
         self.addProxy()

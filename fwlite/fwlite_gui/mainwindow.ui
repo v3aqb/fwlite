@@ -281,9 +281,23 @@
           <item>
            <layout class="QHBoxLayout" name="horizontalLayout_4">
             <item>
-             <widget class="QPushButton" name="proxyActivateButton">
+             <widget class="QPushButton" name="proxyHighButton">
               <property name="text">
-               <string>Activate</string>
+               <string>High</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="proxyMidButton">
+              <property name="text">
+               <string>Medium</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="proxyLowButton">
+              <property name="text">
+               <string>Low</string>
               </property>
              </widget>
             </item>
