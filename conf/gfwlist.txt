@@ -1,9 +1,9 @@
 [AutoProxy 0.2.9]
-! Checksum: NrVw4TheNYZ0Jc1ZA45R0Q
+! Checksum: 6niK5CWdv9qNTDfeMd0mTw
 ! Expires: 6h
 ! Title: GFWList4LL
 ! GFWList with EVERYTHING included
-! Last Modified: Mon, 01 Nov 2021 12:10:37 -0400
+! Last Modified: Fri, 17 Dec 2021 09:11:48 -0500
 !
 ! HomePage: https://github.com/gfwlist/gfwlist
 ! License: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
@@ -231,6 +231,7 @@ share.dmhy.org
 ||terabox.com
 ||thinkgeek.com
 ||thebodyshop-usa.com
+||tiktok.com
 ||tma.co.jp
 ||tracfone.com
 ||tryheart.jp
@@ -2913,6 +2914,7 @@ clearwisdom.net
 .clipfish.de
 cloakpoint.com
 ||app.cloudcone.com
+||cloudflare-ipfs.com
 ||club1069.com
 ||clubhouseapi.com
 cmi.org.tw
@@ -3187,6 +3189,7 @@ djangosnippets.org
 ||dlive.tv
 ||dlsite.com
 ||dlyoutube.com
+||dmc.nico
 ||dmcdn.net
 .dnscrypt.org
 ||dnscrypt.org
@@ -3894,6 +3897,7 @@ gfbv.de
 gfw.org.ua
 .gfw.press
 ||gfw.press
+||gfw.report
 .ggssl.com
 ||ggssl.com
 !--||ghost.org
@@ -6133,6 +6137,7 @@ privatepaste.com
 privatetunnel.com
 ||privatetunnel.com
 ||privatevpn.com
+||privoxy.org
 ||procopytips.com
 ||project-syndicate.org
 provideocoalition.com
@@ -6965,7 +6970,7 @@ tcnynj.org
 .tcsovi.org
 .tdm.com.mo
 teamamericany.com
-||static.techspot.com
+||techspot.com
 !--OVH
 ||techviz.net
 ||teck.in
@@ -7484,10 +7489,7 @@ twurl.nl
 ||blogs.tampabay.com
 ||contests.twilio.com
 !-lawprofessors.typepad.com/china_law_prof
-
-!-------------Twitese-----
-.embr.in
-||embr.in
+||typora.io
 
 !--------------------UU-------------------------
 .u9un.com

@@ -1,3 +1,12 @@
+2021.12.18 v5.1.10
+hxs2: async drain
+hxs2: udp over tcp
+update gfwlist
+update china-ip-list
+update xray-plugin
+update v2ray-plugin
+other improvements
+
 2021.11.21 v5.1.9.1
 fix connect retry
 update gui
