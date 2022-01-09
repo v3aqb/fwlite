@@ -1,3 +1,7 @@
+2022.1.9 v5.1.10.1
+limit connect retry
+update gfwlist
+
 2021.12.18 v5.1.10
 hxs2: async drain
 hxs2: udp over tcp
