@@ -1,9 +1,9 @@
 [AutoProxy 0.2.9]
-! Checksum: KFK1M3IXNfRUnsUBLRzRVg
+! Checksum: sWpMrw7HNcTKxF+GYabZ8A
 ! Expires: 6h
 ! Title: GFWList4LL
 ! GFWList with EVERYTHING included
-! Last Modified: Sat, 08 Jan 2022 13:30:03 -0500
+! Last Modified: Fri, 28 Jan 2022 21:25:08 -0500
 !
 ! HomePage: https://github.com/gfwlist/gfwlist
 ! License: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
@@ -141,6 +141,7 @@ share.dmhy.org
 |http://www.m-sport.co.uk
 ||macgamestore.com
 ||madonna-av.com
+||mandiant.com
 ||mangafox.com
 ||mangafox.me
 ||manta.com
@@ -195,6 +196,7 @@ share.dmhy.org
 ||parkansky.com
 ||phmsociety.org
 |http://*.pimg.tw/
+||podcast.co
 ||pure18.com
 ||pytorch.org
 ||qq.co.za
@@ -273,6 +275,7 @@ share.dmhy.org
 ||xn--i2ru8q2qg.com
 ||xn--oiq.cc
 ||xn--p8j9a0d9c9a.xn--q9jyb4c
+||xn--9pr62r24a.com
 
 !-----------------DNS Poisoning-----------------
 !---Amazon---
@@ -355,7 +358,7 @@ share.dmhy.org
 ||mohu.ml
 ||motiyun.com
 ||msa-it.org
-||dictionary.goo.ne.jp
+||goo.ne.jp
 ||go.nesnode.com
 ||international-news.newsmagazine.asia
 ||nikkei.com
@@ -1960,7 +1963,7 @@ taiwannation.50webs.com
 ||51jav.org
 .51luoben.com
 ||51luoben.com
-.5278.cc
+||5278.cc
 .5299.tv
 5aimiku.com
 5i01.com
@@ -2381,6 +2384,7 @@ bdsmvideos.net
 ||beevpn.com
 .behindkink.com
 ||beijing1989.com
+||beijing2022.art
 beijingspring.com
 ||beijingspring.com
 .beijingzx.org
@@ -3118,10 +3122,9 @@ dalianmeng.org
 ||daliulian.org
 .danke4china.net
 ||danke4china.net
-.danwei.org
 daolan.net
-.daozhongxing.org
 darktoy.net
+||darrenliuwei.com
 ||dastrassi.org
 ||daum.net
 .david-kilgour.com
@@ -5448,6 +5451,7 @@ molihua.org
 .money-link.com.tw
 |http://money-link.com.tw
 |http://www.monlamit.org
+||moon.fm
 .moonbbs.com
 ||moonbbs.com
 ||moptt.tw
@@ -5797,6 +5801,7 @@ old-cat.net
 ||olevod.com
 ||olumpo.com
 .olympicwatch.org
+||omct.org
 omgili.com
 ||omnitalk.com
 ||omnitalk.org
@@ -6416,6 +6421,7 @@ sacom.hk
 ||sacom.hk
 ||sadpanda.us
 ||safechat.com
+||safeguarddefenders.com
 .safervpn.com
 ||safervpn.com
 .saintyculture.com
@@ -6718,6 +6724,7 @@ sokamonline.com
 .sonidodelaesperanza.org
 .sopcast.com
 .sopcast.org
+||nakedsecurity.sophos.com
 .sorazone.net
 ||sos.org
 bbs.sou-tong.org
@@ -6910,6 +6917,7 @@ tagwalk.com
 tahr.org.tw
 .taipeisociety.org
 ||taipeisociety.org
+||taipeitimes.com
 .taiwanbible.com
 .taiwancon.com
 .taiwandaily.net
@@ -7600,9 +7608,6 @@ dalailama.usc.edu
 ||ustibetcommittee.org
 .ustream.tv
 ||ustream.tv
-!--||ustwrap.info
-.usunitednews.com
-|http://usunitednews.com
 usus.cc
 .utopianpal.com
 ||utopianpal.com
@@ -7610,20 +7615,19 @@ usus.cc
 .uvwxyz.xyz
 ||uvwxyz.xyz
 .uwants.com
+||uwants.com
 .uwants.net
 uyghur.co.uk
 |http://uyghur-j.org
 ||uyghuraa.org
 ||uyghuramerican.org
 ||uyghurbiz.org
-.uyghurcanadiansociety.org
-.uyghurensemble.co.uk
+||uyghurcanadian.ca
 ||uyghurcongress.org
-.uyghurpen.org
-.uyghurpress.com
-|https://uyghurpress.com
-.uyghurstudies.org
-|http://uyghurstudies.org
+||uyghurpen.org
+||uyghurpress.com
+||uyghurstudies.org
+||uyghurtribunal.com
 uygur.org
 |http://uymaarip.com/
 
@@ -8143,6 +8147,7 @@ yegle.net
 .yibaochina.com
 .yidio.com
 ||yidio.com
+||yigeni.com
 yilubbs.com
 xa.yimg.com
 .yingsuoss.com

@@ -1,3 +1,9 @@
+2022.2.2 v5.2
+add stunnel
+some bugfixes
+update gfwlist
+update xray-plugin
+
 2022.1.9 v5.1.10.1
 limit connect retry
 update gfwlist

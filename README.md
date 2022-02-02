@@ -6,7 +6,7 @@ Portable package of fwlite-cli and fwlite-gui for windows.
 
 Executables of supported plugins included.
 
-2022.1.9 v5.1.10.1
+2022.2.2 v5.2
 
 #### Features
 
