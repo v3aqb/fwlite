@@ -1,3 +1,11 @@
+2022.4.20 v5.3
+fix async-drain
+add rc4-md5 as encryption method for hxsocks
+new hxsocks3 protocol
+update xray-plugin
+update gfwlist
+update china_ip_list
+
 2022.2.2 v5.2
 add stunnel
 some bugfixes

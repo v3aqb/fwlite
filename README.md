@@ -1,12 +1,14 @@
 ## fwlite for windows
 
+### 🇺🇦 Смерть загарбнику!
+
 A anti-censorship HTTP proxy with builtin shadowsocks support.
 
 Portable package of fwlite-cli and fwlite-gui for windows.
 
 Executables of supported plugins included.
 
-2022.2.2 v5.2
+2022.4.20 v5.3
 
 #### Features
 
@@ -26,9 +28,10 @@ Executables of supported plugins included.
 - Support Network require a proxy ([fwlite #39](https://github.com/v3aqb/fwlite/issues/39))
 - Supported proxy protocol
   - HTTP Proxy
-  - Socks5 Proxy
-  - [hxsocks2]
-  - [Shadowsocks] by @clowwindy
+  - Socks5
+  - hxsocks2
+  - hxsocks3
+  - Shadowsocks by @clowwindy
 - SIP003 plugin ([fwlite-cli #1](https://github.com/v3aqb/fwlite-cli/issues/1))
 - Support Shadowsocks Subscription (test pending)
 - Supprot proxy chain

@@ -1,9 +1,9 @@
 [AutoProxy 0.2.9]
-! Checksum: sWpMrw7HNcTKxF+GYabZ8A
+! Checksum: 5hVdDLRr85I9zgds72KmpQ
 ! Expires: 6h
 ! Title: GFWList4LL
 ! GFWList with EVERYTHING included
-! Last Modified: Fri, 28 Jan 2022 21:25:08 -0500
+! Last Modified: Sat, 26 Mar 2022 17:08:52 -0400
 !
 ! HomePage: https://github.com/gfwlist/gfwlist
 ! License: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
@@ -39,6 +39,7 @@
 ||booktopia.com.au
 ||boysmaster.com
 ||bynet.co.il
+||byrut.org
 ||carfax.com
 .casinobellini.com
 ||casinobellini.com
@@ -102,6 +103,7 @@ share.dmhy.org
 ||wego.here.com
 ||gamer-cds.cdn.hinet.net
 ||gamer2-cds.cdn.hinet.net
+||hmoegirl.com
 ||hmvdigital.ca
 ||hmvdigital.com
 ||homedepot.com
@@ -510,6 +512,7 @@ share.dmhy.org
 ||oanda.com
 ||oex.com
 ||okex.com
+||okx.com
 ||otcbtc.com
 ||paxful.com
 ||poolin.com
@@ -754,6 +757,9 @@ bloomberg.de
 .yourtrap.com
 .zyns.com
 .zzux.com
+
+!!--Cloudflare--
+||pages.dev
 
 !!---CloudFront---
 d1b183sg0nvnuh.cloudfront.net
@@ -1983,6 +1989,7 @@ taiwannation.50webs.com
 ||6parknews.com
 ||7capture.com
 .7cow.com
+||7-zip.org
 .8-d.com
 |http://8-d.com
 85cc.net
@@ -2556,6 +2563,7 @@ breaking911.com
 ||breakwall.net
 briian.com/6511/freegate
 .briefdream.com/%E7%B4%A0%E6%A3%BA
+||brill.com
 brizzly.com
 ||brizzly.com
 ||brkmd.com
@@ -4838,8 +4846,9 @@ ithelp.ithome.com.tw
 !--||ivpn.net
 ||ixquick.com
 .ixxx.com
-iyouport.com
+.iyouport.com
 ||iyouport.com
+||iyouport.org
 .izaobao.us
 ||gmozomg.izihost.org
 .izles.net
@@ -4847,6 +4856,7 @@ iyouport.com
 
 !--------------------JJ-------------------------
 ||j.mp
+||jable.tv
 blog.jackjia.com
 jamaat.org
 ||jamestown.org
@@ -5150,6 +5160,7 @@ abitno.linpie.com/use-ipv6-to-fuck-gfw
 ||lingvodics.com
 .link-o-rama.com
 |http://link-o-rama.com
+||linkedin.com
 .linkideo.com
 ||api.linksalpha.com
 ||apidocs.linksalpha.com
@@ -5439,6 +5450,7 @@ mnewstv.com
 ||mobileways.de
 .mobypicture.com
 |http://moby.to
+||mod.io
 ||modernchinastudies.org
 ||moeerolibrary.com
 wiki.moegirl.org
@@ -6403,6 +6415,7 @@ rukor.org
 ||rusvpn.com
 .ruten.com.tw
 ||ruten.com.tw
+||rutracker.net
 rutube.ru
 .ruyiseek.com
 .rxhj.net
@@ -7276,12 +7289,13 @@ trendsmap.com
 ||trt.net.tr
 trtc.com.tw
 .truebuddha-md.org
-|http://truebuddha-md.org
+||truebuddha-md.org
 trulyergonomic.com
 .truth101.co.tv
-|http://truth101.co.tv
+||truth101.co.tv
 .truthontour.org
-|http://truthontour.org
+||truthontour.org
+||truthsocial.com
 .truveo.com
 .tsctv.net
 .tsemtulku.com
