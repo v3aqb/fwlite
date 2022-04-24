@@ -1,3 +1,6 @@
+2022.4.24 v5.3.1
+update hxsocks client
+
 2022.4.20 v5.3
 fix async-drain
 add rc4-md5 as encryption method for hxsocks
