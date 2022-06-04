@@ -1,9 +1,9 @@
 [AutoProxy 0.2.9]
-! Checksum: 5hVdDLRr85I9zgds72KmpQ
+! Checksum: l+uEgVDfH3L7nRTvP8Gjug
 ! Expires: 6h
 ! Title: GFWList4LL
 ! GFWList with EVERYTHING included
-! Last Modified: Sat, 26 Mar 2022 17:08:52 -0400
+! Last Modified: Sat, 28 May 2022 00:50:06 -0400
 !
 ! HomePage: https://github.com/gfwlist/gfwlist
 ! License: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
@@ -513,6 +513,7 @@ share.dmhy.org
 ||oex.com
 ||okex.com
 ||okx.com
+||opensea.io
 ||otcbtc.com
 ||paxful.com
 ||poolin.com
@@ -1371,6 +1372,7 @@ blogspot.com
 ||godoc.org
 ||golang.org
 ||goo.gl
+||goo.gle
 .google.ae
 .google.as
 .google.am
@@ -3400,7 +3402,7 @@ englishpen.org
 ||app.evozi.com
 .episcopalchurch.org
 .epochhk.com
-|http://epochhk.com
+||epochhk.com
 epochtimes-bg.com
 ||epochtimes-bg.com
 epochtimes-romania.com
@@ -3412,14 +3414,14 @@ epochtimes.co.kr
 epochtimes.com
 ||epochtimes.com
 .epochtimes.cz
-epochtimes.de
-epochtimes.fr
-.epochtimes.ie
-.epochtimes.it
-epochtimes.jp
-epochtimes.ru
-epochtimes.se
-epochtimestr.com
+||epochtimes.de
+||epochtimes.fr
+||epochtimes.ie
+||epochtimes.it
+||epochtimes.jp
+||epochtimes.ru
+||epochtimes.se
+||epochtimestr.com
 .epochweek.com
 ||epochweek.com
 ||epochweekly.com
@@ -4929,11 +4931,13 @@ weiboscope.jmsc.hku.hk
 ||jobso.tv
 .sunwinism.joinbbs.net
 ||joinclubhouse.com
+||jornaldacidadeonline.com.br
 .journalchretien.net
 ||journalofdemocracy.org
 .joymiihub.com
 .joyourself.com
 jpopforum.net
+||jsdelivr.net
 ||fiddle.jshell.net
 .jubushoushen.com
 ||jubushoushen.com
@@ -5336,7 +5340,8 @@ jihadintel.meforum.org
 ||megarotic.com
 megavideo.com
 ||megurineluka.com
-meirixiaochao.com
+||meizhong.blog
+||meizhong.report
 .meltoday.com
 .memehk.com
 ||memehk.com
@@ -5345,21 +5350,21 @@ memorybbs.com
 .memrijttm.org
 ||mercdn.net
 .mercyprophet.org
-|http://mercyprophet.org
+||mercyprophet.org
 ||mergersandinquisitions.org
 .meridian-trust.org
-|http://meridian-trust.org
+||meridian-trust.org
 .meripet.biz
-|http://meripet.biz
+||meripet.biz
 .meripet.com
-|http://meripet.com
-merit-times.com.tw
+||meripet.com
+||merit-times.com.tw
 meshrep.com
 .mesotw.com/bbs
 metacafe.com/watch
 ||metafilter.com
 ||meteorshowersonline.com
-|http://www.metro.taipei/
+||metro.taipei
 .metrohk.com.hk/?cmd=detail&categoryID=2
 ||metrolife.ca
 .metroradio.com.hk
@@ -5625,6 +5630,7 @@ netcolony.com
 bolin.netfirms.com
 ||netflav.com
 ||netme.cc
+||netsarang.com
 netsneak.com
 .network54.com
 networkedblogs.com
@@ -5825,6 +5831,7 @@ showbiz.omy.sg
 ||on.cc
 ||onedrive.live.com
 ||onion.city
+||onion.ly
 .onlinecha.com
 ||onlineyoutube.com
 ||onlygayvideo.com
@@ -5859,6 +5866,7 @@ www.orchidbbs.com
 organharvestinvestigation.net
 .orgasm.com
 .orgfree.com
+||oricon.co.jp
 ||orient-doll.com
 orientaldaily.com.my
 ||orientaldaily.com.my
@@ -5879,6 +5887,7 @@ oursogo.com
 .oursweb.net
 ||ourtv.hk
 xinqimeng.over-blog.com
+||overcast.fm
 ||overdaily.org
 ||overplay.net
 share.ovi.com/media
@@ -6512,6 +6521,7 @@ forum.setty.com.tw
 .sevenload.com
 ||sevenload.com
 .sex.com
+||sex.com
 .sex-11.com
 ||sex3.com
 ||sex8.cc
@@ -6728,6 +6738,7 @@ sohfrance.org
 ||sohfrance.org
 chinese.soifind.com
 sokamonline.com
+||solana.com
 .solidaritetibet.org
 .solidfiles.com
 ||somee.com
@@ -7037,6 +7048,7 @@ theblemish.com
 |http://thedalailamamovie.com
 ||thediplomat.com
 ||thedw.us
+||theepochtimes.com
 !--||thefreeland.club
 thefrontier.hk/tf
 ||theguardian.com
@@ -7617,6 +7629,7 @@ us.to
 .usaip.eu
 ||usaip.eu
 dalailama.usc.edu
+||uscnpm.org
 ||usma.edu
 .usocctn.com
 ||ustibetcommittee.org
@@ -7838,6 +7851,7 @@ washeng.net
 ||watchmygf.net
 ||wav.tv
 .wdf5.com
+||wealth.com.tw
 .wearehairy.com
 .wearn.com
 ||wearn.com
@@ -7965,6 +7979,7 @@ woopie.tv
 ||workatruna.com
 .workerdemo.org.hk
 .workerempowerment.org
+||workers.dev
 ||workersthebig.net
 .worldcat.org
 worldjournal.com
@@ -8070,6 +8085,7 @@ xiezhua.com
 forum.xinbao.de/forum
 .xing.com
 |http://xing.com
+||xinjiangpolicefiles.org
 .xinmiao.com.hk
 ||xinmiao.com.hk
 xinsheng.net

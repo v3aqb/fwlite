@@ -1,3 +1,9 @@
+2022.6.4 v5.3.2
+fix socks5 udp associate
+treat keyword rules as domain rules
+improve hxsocks stability under interference
+update gfwlist
+
 2022.4.24 v5.3.1
 update hxsocks client
 

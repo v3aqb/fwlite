@@ -1,6 +1,6 @@
 ## fwlite for windows
 
-### 🇺🇦 Смерть загарбнику!
+### 🇺🇦 Слава Україні! Смерть загарбнику!
 
 A anti-censorship HTTP proxy with builtin shadowsocks support.
 
@@ -8,7 +8,7 @@ Portable package of fwlite-cli and fwlite-gui for windows.
 
 Executables of supported plugins included.
 
-2022.4.24 v5.3.1
+2022.6.4 v5.3.2
 
 #### Features
 
