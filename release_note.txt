@@ -1,3 +1,9 @@
+2022.9.3 v5.4.1
+Happy V-J Day
+WARNING: Before update to this version, make sure server-side is updated.
+ipv6 support
+update gfwlist, china-ip-list
+
 2022.8.15 v5.4
 Happy V-J Day
 WARNING: Before update to this version, make sure server-side is updated.

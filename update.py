@@ -115,4 +115,6 @@ with open('./conf/gfwlist.txt', 'w') as f:
 
 urllib.request.urlretrieve('https://github.com/17mon/china_ip_list/raw/master/china_ip_list.txt', './conf/china_ip_list.txt')
 
+urllib.request.urlretrieve('https://github.com/QiuSimons/Chnroute/raw/master/dist/chnroute/chnroute-v6.txt', './conf/china_ip_list_v6.txt')
+
 urllib.request.urlretrieve('https://cdn.jsdelivr.net/gh/neoFelhz/neohosts@gh-pages/basic/hosts', './conf/adblock.txt')
