@@ -8,7 +8,7 @@ Portable package of fwlite-cli and fwlite-gui for windows.
 
 Executables of supported plugins included.
 
-2022.9.3 v5.4.1
+2022.9.12 v5.4.2
 
 Happy V-J Day.
 

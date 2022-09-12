@@ -1,3 +1,8 @@
+2022.9.12 v5.4.2
+fix udp
+add chinalist
+update gfwlist, china-ip-list-v6
+
 2022.9.3 v5.4.1
 Happy V-J Day
 WARNING: Before update to this version, make sure server-side is updated.
