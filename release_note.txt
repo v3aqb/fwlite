@@ -1,3 +1,11 @@
+2022.9.21 v5.5
+detect and use faster encryption method
+remove less supported encryption method
+enable happy_eyeball_delay for ipv6
+improve fwlite-cli stability
+update python-cryptography
+update china_ip_list, chinalist
+
 2022.9.12 v5.4.2
 fix udp
 add chinalist

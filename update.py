@@ -102,6 +102,7 @@ with zipfile.ZipFile('org.zip') as z:
 
 os.remove('org.zip')
 
+print('download gfwlist.txt')
 urllib.request.urlretrieve('https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt', './conf/gfwlist.txt')
 
 with open('./conf/gfwlist.txt') as f:
@@ -113,10 +114,14 @@ with open('./conf/gfwlist.txt') as f:
 with open('./conf/gfwlist.txt', 'w') as f:
     f.write(data)
 
-urllib.request.urlretrieve('https://github.com/17mon/china_ip_list/raw/master/china_ip_list.txt', './conf/china_ip_list.txt')
+print('download china_ip_list.txt')
+urllib.request.urlretrieve('https://github.com/QiuSimons/Chnroute/raw/master/dist/chnroute/chnroute.txt', './conf/china_ip_list.txt')
 
+print('download china_ip_list_v6.txt')
 urllib.request.urlretrieve('https://github.com/QiuSimons/Chnroute/raw/master/dist/chnroute/chnroute-v6.txt', './conf/china_ip_list_v6.txt')
 
-urllib.request.urlretrieve('https://cdn.jsdelivr.net/gh/neoFelhz/neohosts@gh-pages/basic/hosts', './conf/adblock.txt')
+print('download adblock.txt')
+urllib.request.urlretrieve('https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts', './conf/adblock.txt')
 
+print('download chinalist.txt')
 urllib.request.urlretrieve('https://github.com/QiuSimons/Chnroute/raw/master/dist/chnroute/chinalist.txt', './conf/chinalist.txt')
