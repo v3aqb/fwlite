@@ -1,3 +1,7 @@
+2022.9.24 v5.5.1
+fix hxsocks2
+update chinalist
+
 2022.9.21 v5.5
 detect and use faster encryption method
 remove less supported encryption method

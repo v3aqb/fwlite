@@ -125,3 +125,7 @@ urllib.request.urlretrieve('https://raw.githubusercontent.com/StevenBlack/hosts/
 
 print('download chinalist.txt')
 urllib.request.urlretrieve('https://github.com/QiuSimons/Chnroute/raw/master/dist/chnroute/chinalist.txt', './conf/chinalist.txt')
+
+print('completed.')
+
+input()
