@@ -1,9 +1,9 @@
 [AutoProxy 0.2.9]
-! Checksum: qTMWGT6FPw/EbdKu0QDDsg
+! Checksum: OUH82AudXxbNt8oKqrEVEw
 ! Expires: 6h
 ! Title: GFWList4LL
 ! GFWList with EVERYTHING included
-! Last Modified: Sun, 11 Sep 2022 12:01:04 -0400
+! Last Modified: Sun, 25 Sep 2022 21:40:14 -0400
 !
 ! HomePage: https://github.com/gfwlist/gfwlist
 ! License: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
@@ -4769,6 +4769,7 @@ website.informer.com
 .inote.tw
 .insecam.org
 |http://insecam.org
+||inside.com.tw
 ||insidevoa.com
 .institut-tibetain.org
 |http://internet.org/
@@ -4902,6 +4903,7 @@ jeanyim.com
 .jiangweiping.com
 ||jiangweiping.com
 ||jiaoyou8.com
+||jichangtj.com
 .jiehua.cz
 ||hk.jiepang.com
 ||tw.jiepang.com
@@ -5796,6 +5798,7 @@ nylonstockingsonline.com
 ||nzchinese.net.nz
 
 !--------------------OO-------------------------
+||oann.com
 observechina.net
 .obutu.com
 ocaspro.com
@@ -6005,10 +6008,9 @@ penisbot.com
 ||peopo.org
 .percy.in
 .perfectgirls.net
-perfectvpn.net
+||perfect-privacy.com
 .persecutionblog.com
 .persiankitty.com
-pfd.org.hk
 phapluan.org
 .phayul.com
 ||phayul.com
@@ -7692,6 +7694,7 @@ vansky.com
 .venetianmacao.com
 ||venetianmacao.com
 veoh.com
+||vercel.app
 mysite.verizon.net
 vermonttibet.org
 .versavpn.com
@@ -7702,7 +7705,7 @@ vermonttibet.org
 ||viber.com
 .vica.info
 .victimsofcommunism.org
-|http://victimsofcommunism.org
+||victimsofcommunism.org
 ||vid.me
 ||vidble.com
 videobam.com
