@@ -10,6 +10,10 @@ Executables of supported plugins included.
 
 2022.10.4 v5.6
 
+**If you are experiencing chash after update, delete /lib directory and update again.**
+
+**This problem is caused by python-cryptography , they do not support update by overwrite.**
+
 Before update to this version, recommend server-side update.
 
 #### Features
