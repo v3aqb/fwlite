@@ -1,3 +1,8 @@
+2023.1.11 v5.6.2
+fix hxsocks3 ipv6 support
+update kcptun, xray-plugin
+update gfwlist, chinalist etc.
+
 2022.10.10 v5.6.1
 optimize logging and exception handling
 update kcptun, v2ray-plugin, xray-plugin, cloak-client
