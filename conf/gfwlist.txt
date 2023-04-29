@@ -1,9 +1,9 @@
 [AutoProxy 0.2.9]
-! Checksum: LgKbI4GbZPcVwOtij4XnjA
+! Checksum: m8EjIvfukxZjwL3rPNYs6Q
 ! Expires: 6h
 ! Title: GFWList4LL
 ! GFWList with EVERYTHING included
-! Last Modified: Sun, 08 Jan 2023 23:07:58 -0500
+! Last Modified: Sun, 26 Mar 2023 09:35:48 -0400
 !
 ! HomePage: https://github.com/gfwlist/gfwlist
 ! License: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
@@ -93,7 +93,7 @@ share.dmhy.org
 ||getuploader.com
 ||ghidra-sre.org
 !--|https://github.com/programthink/zhao
-|https://raw.githubusercontent.com/programthink/zhao
+!--|https://raw.githubusercontent.com/programthink/zhao
 ||glass8.eu
 ||glype.com
 ||go141.com
@@ -188,11 +188,13 @@ share.dmhy.org
 ||s1.nudezz.com
 ||nusatrip.com
 ||nuuvem.com
+||olehdtv.com
 ||omni7.jp
 ||onapp.com
 !--We are confused as well
 ||ontrac.com
 @@|http://blog.ontrac.com
+||openai.com
 ||pandora.com
 .pandora.tv
 ||parkansky.com
@@ -1345,6 +1347,7 @@ blogspot.com
 ||chromercise.com
 ||chromestatus.com
 ||chromium.org
+||cloudfunctions.net
 ||com.google
 ||crbug.com
 ||creativelab5.com
@@ -2077,6 +2080,7 @@ adultkeep.net/peepshow/members/main.htm
 ||advanscene.com
 ||advertfan.com
 .ae.org
+||aei.org
 ||aenhancers.com
 ||af.mil
 .afantibbs.com
@@ -2193,6 +2197,7 @@ animecrazy.net
 aniscartujo.com
 ||aniscartujo.com
 ||anobii.com
+||anonfiles.com
 .anonymitynetwork.com
 .anonymizer.com
 .anonymouse.org
@@ -4773,21 +4778,22 @@ in-disguise.com
 ||timesofindia.indiatimes.com
 .indiemerch.com
 ||indiemerch.com
-info-graf.fr
+||info-graf.fr
 website.informer.com
 ||initiativesforchina.org
-.inkui.com
-.inmediahk.net
+||inkui.com
+||inmediahk.net
 ||inmediahk.net
 ||innermongolia.org
 ||inoreader.com
-.inote.tw
-.insecam.org
+||inote.tw
+||insecam.org
 |http://insecam.org
 ||inside.com.tw
 ||insidevoa.com
-.institut-tibetain.org
-|http://internet.org/
+||institut-tibetain.org
+||interactivebrokers.com
+||internet.org
 internetdefenseleague.org
 internetfreedom.org
 !--||interpol.int
@@ -4853,8 +4859,8 @@ isuntv.com
 ||isupportuyghurs.org
 itaboo.info
 ||itaboo.info
-.italiatibet.org
-download.ithome.com.tw
+||italiatibet.org
+||itemfix.com
 ithelp.ithome.com.tw
 ||itshidden.com
 .itsky.it
@@ -4868,7 +4874,7 @@ ithelp.ithome.com.tw
 ||ivacy.com
 .iverycd.com
 .ivpn.net
-!--||ivpn.net
+||ivpn.net
 ||ixquick.com
 .ixxx.com
 .iyouport.com
@@ -5142,6 +5148,7 @@ latelinenews.com
 ||le-vpn.com
 .leafyvpn.net
 ||leafyvpn.net
+||ledger.com
 leeao.com.cn/bbs/forum.php
 !--||leecheukyan.org
 lefora.com
@@ -6821,7 +6828,8 @@ spem.at
 .spotflux.com
 ||spotflux.com
 .spring4u.info
-|http://spring4u.info
+||spring4u.info
+||springwood.me
 ||sproutcore.com
 ||sproxy.info
 ||squirrelvpn.com
@@ -7105,6 +7113,7 @@ thehousenews.com
 ||theporndude.com
 ||theportalwiki.com
 ||theprint.in
+||threadreaderapp.com
 thereallove.kr
 therock.net.nz
 ||thesaturdaypaper.com.au
@@ -8232,6 +8241,7 @@ yinlei.org/mt
 .yomiuri.co.jp
 yong.hu
 .yorkbbs.ca
+||you.com
 ||youxu.info
 .youjizz.com
 ||youjizz.com
@@ -8437,6 +8447,7 @@ ultrasurf
 @@|http://www.google.cn/maps
 @@||http2.golang.org
 @@||gov.cn
+@@||ocsp.pki.goog
 @@||qq.com
 @@||sina.cn
 @@||sina.com.cn

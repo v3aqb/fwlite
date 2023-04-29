@@ -1,3 +1,9 @@
+2023.4.29 v5.7
+fix client iv
+fix bad proxy penalty
+update ck-client, kcptun, v2ray-plugin, xray-plugin
+update gfwlist, chinalist etc.
+
 2023.1.11 v5.6.2
 fix hxsocks3 ipv6 support
 update kcptun, xray-plugin

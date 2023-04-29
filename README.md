@@ -8,7 +8,7 @@ Portable package of fwlite-cli and fwlite-gui for windows.
 
 Executables of supported plugins included.
 
-2023.1.11 v5.6.2
+2023.4.29 v5.7
 
 **If you are experiencing chash after update, delete /lib directory and update again.**
 
