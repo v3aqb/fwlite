@@ -8,7 +8,7 @@ Portable package of fwlite-cli and fwlite-gui for windows.
 
 Executables of supported plugins included.
 
-2023.4.29 v5.7
+2023.6.9 v5.8
 
 **If you are experiencing chash after update, delete /lib directory and update again.**
 
@@ -37,6 +37,7 @@ Before update to this version, recommend server-side update.
   - Socks5
   - hxsocks2
   - hxsocks3
+  - hxsocks4
   - Shadowsocks by @clowwindy
 - SIP003 plugin ([fwlite-cli #1](https://github.com/v3aqb/fwlite-cli/issues/1))
 - Support Shadowsocks Subscription (test pending)

@@ -1,3 +1,9 @@
+2023.6.9 v5.8
+fix connection reset detection
+new protorol: hxsocks4
+update v2ray-plugin
+update gfwlist, chinalist etc.
+
 2023.4.29 v5.7
 fix client iv
 fix bad proxy penalty
