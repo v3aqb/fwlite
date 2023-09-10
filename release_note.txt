@@ -1,3 +1,12 @@
+2023.9.11 v5.8.1
+fix udp on python 3.10
+fix routing rule priority
+ip(range) rules made simple
+remove outdated plugins
+update xray-plugin
+update gfwlist, chinalist etc.
+other improvements
+
 2023.6.9 v5.8
 fix connection reset detection
 new protorol: hxsocks4

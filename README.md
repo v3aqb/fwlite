@@ -1,20 +1,21 @@
+
 ## fwlite for windows
 
-### 🇺🇦 Слава Україні! Смерть загарбнику!
+### 🇺🇦 Слава Україні! Смерть диктатору!
 
-A anti-censorship HTTP proxy with builtin shadowsocks support.
+FWLite across the GreatFireWall, we can reach every corner of the world.
 
-Portable package of fwlite-cli and fwlite-gui for windows.
+A intelligent HTTP/Socks5 proxy, detect and circumvent censorship automatically.
+
+Portable package of `fwlite-cli` and `fwlite-gui` for windows.
 
 Executables of supported plugins included.
 
-2023.6.9 v5.8
+2023.9.11 v5.8.1
 
 **If you are experiencing chash after update, delete /lib directory and update again.**
 
 **This problem is caused by python-cryptography , they do not support update by overwrite.**
-
-Before update to this version, recommend server-side update.
 
 #### Features
 
@@ -29,8 +30,8 @@ Before update to this version, recommend server-side update.
   - 0: direct
   - 1: auto (gfwlist)
   - 3: bypass ip in china
-  - 4: bypass ip in LAN
-  - 5: bypass localhost
+  - 4: bypass ip in china and LAN
+  - 5: bypass localhost only
 - Support Network require a proxy ([fwlite #39](https://github.com/v3aqb/fwlite/issues/39))
 - Supported proxy protocol
   - HTTP Proxy
@@ -49,14 +50,35 @@ Before update to this version, recommend server-side update.
 - Simple PAC for WPAD
 
 #### Requirements
+x86 release
 
-Windows 7 or higher.
+    Windows 7 or higher.
 
-[Microsoft Visual C++ 2015 Redistributable] (x86) installed.
+x86-64 release
+
+    Windows 8 or higher.
+
+[Microsoft Visual C++ 2015 Redistributable] installed.
+
+You may want to turn on *tcp timestamps*.
+
+For Windows, start PowerShell with Administrator Privilege, run this command:
+
+    `netsh interface tcp set global timestamps=enabled`
 
 #### Download
 
 Download the latest release from [release page].
+
+#### Quickstart
+
+run `FWLite.exe`
+
+set parent proxy in `ProxyList` page.
+
+set system proxy setting to `127.0.0.1:8118`.
+
+enjoy.
 
 #### License
 
@@ -78,9 +100,7 @@ PyQt5 (GPLv3)          https://pypi.org/project/PyQt5/
 repoze.lru (BSD)       https://pypi.org/project/repoze.lru/
 six (MIT)              https://pypi.org/project/six/
 python (PSFL)          https://python.org/
-simple-obfs (GPLv3)    https://github.com/shadowsocks/simple-obfs
 kcptun (MIT)           https://github.com/xtaci/kcptun
-GoQuiet (GPLv3)        https://github.com/cbeuw/GoQuiet
 Cloak (GPLv3)          https://github.com/cbeuw/Cloak
 v2ray-plugin (MIT)     https://github.com/teddysun/v2ray-plugin
 xray-plugin (MIT)      https://github.com/teddysun/xray-plugin
