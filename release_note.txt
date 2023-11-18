@@ -1,3 +1,12 @@
+2023.11.18 v5.9
+add hxsocks flow control
+update hxsocks4 protocol
+fix udp on python 3.10
+upgrade tp python3.12
+upgrade to pyqt6
+update v2ray-plugin, kcptun
+update gfwlist
+
 2023.9.11 v5.8.1
 fix udp on python 3.10
 fix routing rule priority
