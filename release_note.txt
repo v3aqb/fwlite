@@ -1,3 +1,12 @@
+2024.2.18 v5.10
+fix fwlite-cli crash on startup
+update hxcrypto, hxsocks mode-1 encryption key changed, update server side required
+    (mode-1 is default enabled on hxsocks4 only)
+remove v2ray-plugin
+update xray-plugin, kcptun
+update gfwlist
+other minor improvements
+
 2023.11.18 v5.9
 add hxsocks flow control
 update hxsocks4 protocol
